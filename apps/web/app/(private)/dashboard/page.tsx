@@ -466,6 +466,7 @@ export default function DashboardPage() {
   const [savingAccounts, setSavingAccounts] = useState<string | null>(null);
   const [createdToken, setCreatedToken] = useState("");
   const [tokenName, setTokenName] = useState("");
+  const [tokenAccessMode, setTokenAccessMode] = useState("read_only");
   const [editingTokenId, setEditingTokenId] = useState<string | null>(null);
   const [tokenNameDraft, setTokenNameDraft] = useState("");
   const [tokenActionId, setTokenActionId] = useState<string | null>(null);
@@ -1058,9 +1059,10 @@ export default function DashboardPage() {
           },
           body: JSON.stringify({
             name: String(form.get("name") ?? "").trim(),
-            scopes: form.get("write")
-              ? ["adforge:mcp:read", "adforge:mcp:write"]
-              : ["adforge:mcp:read"],
+            scopes:
+              form.get("access_mode") === "controlled_write"
+                ? ["adforge:mcp:read", "adforge:mcp:write"]
+                : ["adforge:mcp:read"],
             expiresInDays: Number(form.get("expires_in_days") || 90),
           }),
         },
@@ -1070,6 +1072,7 @@ export default function DashboardPage() {
       setCreatedToken(data.token);
       formElement.reset();
       setTokenName("");
+      setTokenAccessMode("read_only");
       await loadTokens(active);
       notify("Ключ создан. Сохраните его сейчас.");
     } catch {
@@ -1905,17 +1908,42 @@ export default function DashboardPage() {
                             Ключ получит доступ ко всем подключённым кабинетам
                             из раздела «Подключения» текущей компании.
                           </p>
-                          <details className="advanced-settings">
-                            <summary>Дополнительные настройки</summary>
-                            <label className="check-row">
-                              <input type="checkbox" name="write" />
-                              <span>Разрешить подтверждённые изменения</span>
-                              <small>
-                                Любое изменение потребует предварительного
-                                просмотра и подтверждения.
-                              </small>
-                            </label>
-                          </details>
+                          <label>
+                            {language === "ru"
+                              ? "Режим доступа"
+                              : "Access mode"}
+                            <ProjectSelect
+                              ariaLabel={
+                                language === "ru"
+                                  ? "Режим доступа"
+                                  : "Access mode"
+                              }
+                              name="access_mode"
+                              value={tokenAccessMode}
+                              onChange={setTokenAccessMode}
+                              options={[
+                                {
+                                  value: "read_only",
+                                  label:
+                                    language === "ru"
+                                      ? "Только чтение"
+                                      : "Read-only",
+                                },
+                                {
+                                  value: "controlled_write",
+                                  label:
+                                    language === "ru"
+                                      ? "Контролируемая запись"
+                                      : "Controlled write",
+                                },
+                              ]}
+                            />
+                          </label>
+                          <p className="controlled-write-note">
+                            {language === "ru"
+                              ? "Контролируемая запись разрешает только операции из серверной политики после вашего явного запроса. Произвольные изменения запрещены."
+                              : "Controlled write allows only server-policy-approved operations after your explicit request. Arbitrary changes are blocked."}
+                          </p>
                           <button
                             className="primary-button"
                             type="submit"

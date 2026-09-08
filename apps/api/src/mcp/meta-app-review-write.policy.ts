@@ -6,7 +6,14 @@ export type MetaAppReviewPolicyResult =
   | { kind: "blocked"; reason: string; message: string }
   | { kind: "allowed"; requestedName: string };
 
-/** Narrow server-side policy for one Meta App Review demonstration. */
+/** Separate, removable exception. It never changes the original exact-name policy. */
+export const SECOND_META_APP_REVIEW = Object.freeze({
+  workspaceId: "ed88172a-fe04-58e3-a66d-cd0c2d911292",
+  accountId: "act_832949381388598",
+  campaignId: "120254614255020709",
+});
+
+/** Narrow server-side policies; global confirmed writes are not required. */
 export function evaluateMetaAppReviewRenamePolicy(
   config: AppConfig,
   preview: {
@@ -16,7 +23,27 @@ export function evaluateMetaAppReviewRenamePolicy(
     payload: unknown;
   },
   account: { externalAccountId: string },
+  workspaceId?: string,
 ): MetaAppReviewPolicyResult {
+  if (
+    config.metaAppReviewSecondRenameEnabled &&
+    preview.provider === "META_ADS" &&
+    account.externalAccountId === SECOND_META_APP_REVIEW.accountId &&
+    preview.externalObjectId === SECOND_META_APP_REVIEW.campaignId
+  ) {
+    if (workspaceId !== SECOND_META_APP_REVIEW.workspaceId)
+      return blocked(
+        "workspace_not_allowed",
+        "Изменение этой кампании не разрешено текущей политикой.",
+      );
+    const name = onlyRequestedName(preview.payload);
+    if (preview.operation !== "change_name" || !name || name.length > 255)
+      return blocked(
+        "payload_not_name_only",
+        "Разрешено изменить только название подготовленной кампании (от 1 до 255 символов).",
+      );
+    return { kind: "allowed", requestedName: name };
+  }
   if (!config.metaAppReviewRenameEnabled) return { kind: "not_configured" };
   const requestedName = onlyRequestedName(preview.payload);
   if (preview.provider !== "META_ADS")
@@ -65,12 +92,26 @@ export function evaluateMetaAppReviewRenamePolicy(
 export function evaluateMetaAppReviewPrecondition(
   config: AppConfig,
   state: MetaControlledCampaignState,
+  requestedName?: string,
 ): MetaAppReviewPolicyResult {
   if (state.status !== "PAUSED")
     return blocked(
       "campaign_not_paused",
       "Переименование разрешено только для подготовленной кампании в статусе PAUSED.",
     );
+  if (
+    config.metaAppReviewSecondRenameEnabled &&
+    state.id === SECOND_META_APP_REVIEW.campaignId &&
+    state.accountId === SECOND_META_APP_REVIEW.accountId
+  ) {
+    const name = requestedName?.trim();
+    if (!name || name.length > 255)
+      return blocked(
+        "target_name_required",
+        "Укажите новое название кампании (от 1 до 255 символов).",
+      );
+    return { kind: "allowed", requestedName: name };
+  }
   if (state.name === config.metaAppReviewRenameTargetName)
     return { kind: "allowed", requestedName: state.name };
   if (state.name !== config.metaAppReviewRenameExpectedName)

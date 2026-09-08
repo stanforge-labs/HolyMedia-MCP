@@ -482,9 +482,9 @@ test.describe("restored HolyMedia client UX", () => {
         request.url().includes("/service-tokens"),
     );
     await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
-    expect((await tokenRequest).postDataJSON()).not.toHaveProperty(
-      "accountIds",
-    );
+    const readOnlyRequest = (await tokenRequest).postDataJSON();
+    expect(readOnlyRequest.scopes).toEqual(["adforge:mcp:read"]);
+    expect(readOnlyRequest).not.toHaveProperty("accountIds");
     await expect(page.locator(".one-time-secret")).toBeVisible();
     await expect(page.locator(".account-picker")).toHaveCount(0);
     await expect(page.locator(".scope-note")).toContainText(
@@ -492,6 +492,27 @@ test.describe("restored HolyMedia client UX", () => {
     );
     await expect(tokenForm.locator('input[name="name"]')).toHaveValue("");
     await expect(page.locator(".notice--error")).toHaveCount(0);
+    await page.getByRole("button", { name: "Скрыть" }).click();
+    await tokenForm.locator('input[name="name"]').fill("Controlled review");
+    await tokenForm
+      .getByRole("button", { name: "Режим доступа", exact: true })
+      .click();
+    await tokenForm
+      .getByRole("option", { name: "Контролируемая запись", exact: true })
+      .click();
+    const controlledRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        request.url().includes("/service-tokens"),
+    );
+    await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
+    expect((await controlledRequest).postDataJSON().scopes).toEqual([
+      "adforge:mcp:read",
+      "adforge:mcp:write",
+    ]);
+    await expect(tokenForm.locator('input[name="access_mode"]')).toHaveValue(
+      "read_only",
+    );
     await page.getByRole("button", { name: "Скрыть" }).click();
     await page.screenshot({
       path: testInfo.outputPath("mcp.png"),

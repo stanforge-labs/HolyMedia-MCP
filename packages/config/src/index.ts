@@ -75,6 +75,7 @@ const rawConfigSchema = z.object({
   // Deliberately narrower than the legacy confirmed-write allowlists. This is
   // an opt-in, one-resource policy used solely for a Meta App Review demo.
   V2_META_APP_REVIEW_RENAME_ENABLED: booleanFromEnv.default(false),
+  V2_META_APP_REVIEW_SECOND_RENAME_ENABLED: booleanFromEnv.default(false),
   V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: z.string().default(""),
   V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: z.string().default(""),
   V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: z.string().default(""),
@@ -199,6 +200,7 @@ export type AppConfig = {
   writeObjectAllowlist: string[];
   writeOperationAllowlist: string[];
   metaAppReviewRenameEnabled: boolean;
+  metaAppReviewSecondRenameEnabled: boolean;
   metaAppReviewRenameAccountId: string;
   metaAppReviewRenameCampaignId: string;
   metaAppReviewRenameExpectedName: string;
@@ -448,6 +450,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((item) => item.trim())
       .filter(Boolean),
     metaAppReviewRenameEnabled: value.V2_META_APP_REVIEW_RENAME_ENABLED,
+    metaAppReviewSecondRenameEnabled:
+      value.V2_META_APP_REVIEW_SECOND_RENAME_ENABLED,
     metaAppReviewRenameAccountId:
       value.V2_META_APP_REVIEW_RENAME_ACCOUNT_ID.trim(),
     metaAppReviewRenameCampaignId:

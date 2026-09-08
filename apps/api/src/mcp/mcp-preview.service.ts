@@ -104,6 +104,7 @@ export class McpPreviewService {
       this.config,
       preview,
       account,
+      principal.workspaceId,
     );
     const policyReason =
       appReviewPolicy.kind === "allowed"
@@ -167,6 +168,31 @@ export class McpPreviewService {
   }
 
   public async commit(principal: ServiceTokenPrincipal, previewToken: string) {
+    try {
+      return await this.commitAuthorized(principal, previewToken);
+    } catch (error) {
+      await this.audit.record({
+        eventType: "mcp_commit_attempt_failed",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "service_token",
+        targetId: principal.tokenId,
+        success: false,
+        metadata: {
+          serviceTokenId: principal.tokenId,
+          serviceIdentityId: principal.serviceIdentityId,
+          errorType:
+            error instanceof Error ? error.constructor.name : "Unknown",
+        },
+      });
+      throw error;
+    }
+  }
+
+  private async commitAuthorized(
+    principal: ServiceTokenPrincipal,
+    previewToken: string,
+  ) {
     if (!principal.scopes.includes(WRITE_SCOPE))
       throw new ForbiddenException("Write scope is required for commit.");
     const preview = await this.find(principal, previewToken);
@@ -185,6 +211,7 @@ export class McpPreviewService {
       this.config,
       preview,
       account,
+      principal.workspaceId,
     );
     const policyReason =
       appReviewPolicy.kind === "allowed"
@@ -232,11 +259,12 @@ export class McpPreviewService {
     }
     try {
       if (appReviewPolicy.kind === "allowed")
-        return this.commitMetaAppReviewRename(
+        return await this.commitMetaAppReviewRename(
           principal,
           preview,
           account,
           payload,
+          appReviewPolicy.requestedName,
         );
       const committed = await this.providers.mutateCampaign(
         principal.workspaceId,
@@ -309,6 +337,7 @@ export class McpPreviewService {
     },
     account: { id: string; connectionId: string; externalAccountId: string },
     payload: Record<string, unknown>,
+    requestedName: string,
   ) {
     const before = await this.providers.readMetaControlledCampaign(
       principal.workspaceId,
@@ -316,7 +345,11 @@ export class McpPreviewService {
       account.id,
       preview.externalObjectId,
     );
-    const precondition = evaluateMetaAppReviewPrecondition(this.config, before);
+    const precondition = evaluateMetaAppReviewPrecondition(
+      this.config,
+      before,
+      requestedName,
+    );
     const metadata = {
       provider: "META_ADS",
       accountId: account.externalAccountId,
@@ -345,7 +378,7 @@ export class McpPreviewService {
         message: precondition.message,
       };
     }
-    if (before.name === this.config.metaAppReviewRenameTargetName) {
+    if (before.name === requestedName) {
       await this.audit.record({
         eventType: "meta_app_review_rename_already_applied",
         actorType: "SERVICE",
@@ -377,7 +410,7 @@ export class McpPreviewService {
       account.id,
       preview.externalObjectId,
       "change_name",
-      { new_name: this.config.metaAppReviewRenameTargetName },
+      { new_name: requestedName },
     );
     const after = await this.providers.readMetaControlledCampaign(
       principal.workspaceId,
@@ -387,7 +420,7 @@ export class McpPreviewService {
     );
     const changedFields = invariantChanges(before, after);
     const verified =
-      after.name === this.config.metaAppReviewRenameTargetName &&
+      after.name === requestedName &&
       after.status === "PAUSED" &&
       changedFields.length === 0;
     await this.audit.record({

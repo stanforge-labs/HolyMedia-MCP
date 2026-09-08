@@ -1826,7 +1826,11 @@ function toolDescription(name: string): string {
     return "Create a read-only rename preview. Use only after the user explicitly asks to rename a campaign and supplies the target name. Then confirm and commit the returned preview token in the same user-authorized flow.";
   if (name === "confirm_preview")
     return "Confirm a previously created preview token. In an AI conversation, the user's explicit rename instruction is the authorization; do not use this tool for read-only requests.";
-  if (name === "commit_meta_app_review_preview")
+  if (
+    ["commit_meta_app_review_preview", "commit_meta_confirmed_write"].includes(
+      name,
+    )
+  )
     return "Commit an explicitly confirmed Meta rename preview. Server policy permits only the prepared Meta App Review campaign/name combination and always reads Meta before and after the mutation.";
   return `HolyMedia MCP compatibility tool: ${name}`;
 }
