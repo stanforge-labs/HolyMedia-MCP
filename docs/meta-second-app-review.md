@@ -2,10 +2,13 @@
 
 The independent policy is `SECOND_META_APP_REVIEW` in
 `apps/api/src/mcp/meta-app-review-write.policy.ts`.
-It is limited to workspace `ed88172a-fe04-58e3-a66d-cd0c2d911292`,
+It is limited to the owner-confirmed `mcpclient@holymedia.kz` workspace
+`acbf0667-2a34-4ee8-b720-f63581f12eed` and permanent service token
+`ae452fdf-788e-44c7-a2dc-5351fdba0681`,
 account `act_832949381388598`, campaign `120254614255020709`.
-Only `change_name` with exactly `{new_name: string}` is accepted (trimmed,
-1–255 characters). Commit re-reads Meta and requires `PAUSED`. No status,
+Only `change_name` with exactly `{new_name: string}` is accepted, trimmed to
+`New Awareness Campaign - ads_management demo`. The required source name is
+`New Awareness Campaign`. Commit re-reads Meta and requires `PAUSED`. No status,
 budget or other fields are requested. Post-read verifies business invariants.
 The original environment-configured exact-target policy is unchanged.
 
@@ -28,12 +31,16 @@ new-key default. Never put an `act_*` identifier into UUID restrictions.
 
 ## AI flow
 
-The user must explicitly request a rename and supply the desired name.
+The user must explicitly request the exact authorized rename.
 `preview_change_campaign_name` → `confirm_preview` →
 `commit_meta_confirmed_write`. Tool descriptions permit the AI to execute these
 steps within that one explicit request; read/query intent does not authorize it.
 Each preview is bound to the service token and workspace, expires in ten minutes,
-and is atomically consumed. No-op names return `already_applied` without mutation.
+and is atomically consumed. This second policy rejects a changed source name,
+including an already-applied target. Generic `preview_meta_update_campaign`
+is not a rename substitute and remains blocked. Use the dedicated name tool.
+No reverse exception is enabled by this patch. Reverse preparation requires a
+separate narrowly authorized execution after confirmed forward delivery.
 Never run a live rename as a deployment smoke test without an authorized name.
 
 ## Deployment safety

@@ -105,6 +105,7 @@ export class McpPreviewService {
       preview,
       account,
       principal.workspaceId,
+      principal.tokenId,
     );
     const policyReason =
       appReviewPolicy.kind === "allowed"
@@ -212,6 +213,7 @@ export class McpPreviewService {
       preview,
       account,
       principal.workspaceId,
+      principal.tokenId,
     );
     const policyReason =
       appReviewPolicy.kind === "allowed"

@@ -8,9 +8,12 @@ export type MetaAppReviewPolicyResult =
 
 /** Separate, removable exception. It never changes the original exact-name policy. */
 export const SECOND_META_APP_REVIEW = Object.freeze({
-  workspaceId: "ed88172a-fe04-58e3-a66d-cd0c2d911292",
+  workspaceId: "acbf0667-2a34-4ee8-b720-f63581f12eed",
+  serviceTokenId: "ae452fdf-788e-44c7-a2dc-5351fdba0681",
   accountId: "act_832949381388598",
   campaignId: "120254614255020709",
+  sourceName: "New Awareness Campaign",
+  targetName: "New Awareness Campaign - ads_management demo",
 });
 
 /** Narrow server-side policies; global confirmed writes are not required. */
@@ -24,6 +27,7 @@ export function evaluateMetaAppReviewRenamePolicy(
   },
   account: { externalAccountId: string },
   workspaceId?: string,
+  serviceTokenId?: string,
 ): MetaAppReviewPolicyResult {
   if (
     config.metaAppReviewSecondRenameEnabled &&
@@ -36,11 +40,21 @@ export function evaluateMetaAppReviewRenamePolicy(
         "workspace_not_allowed",
         "Изменение этой кампании не разрешено текущей политикой.",
       );
+    if (serviceTokenId !== SECOND_META_APP_REVIEW.serviceTokenId)
+      return blocked(
+        "service_token_not_allowed",
+        "Этот ключ не разрешён для подготовленного переименования.",
+      );
     const name = onlyRequestedName(preview.payload);
     if (preview.operation !== "change_name" || !name || name.length > 255)
       return blocked(
         "payload_not_name_only",
-        "Разрешено изменить только название подготовленной кампании (от 1 до 255 символов).",
+        "Используйте preview_change_campaign_name: разрешено изменить только название подготовленной кампании.",
+      );
+    if (name !== SECOND_META_APP_REVIEW.targetName)
+      return blocked(
+        "target_name_not_allowed",
+        "Новое название не соответствует разрешённому переименованию.",
       );
     return { kind: "allowed", requestedName: name };
   }
@@ -105,10 +119,15 @@ export function evaluateMetaAppReviewPrecondition(
     state.accountId === SECOND_META_APP_REVIEW.accountId
   ) {
     const name = requestedName?.trim();
-    if (!name || name.length > 255)
+    if (name !== SECOND_META_APP_REVIEW.targetName)
       return blocked(
-        "target_name_required",
-        "Укажите новое название кампании (от 1 до 255 символов).",
+        "target_name_not_allowed",
+        "Новое название не соответствует разрешённому переименованию.",
+      );
+    if (state.name !== SECOND_META_APP_REVIEW.sourceName)
+      return blocked(
+        "current_name_not_expected",
+        "Название кампании не соответствует подготовленному состоянию для переименования.",
       );
     return { kind: "allowed", requestedName: name };
   }

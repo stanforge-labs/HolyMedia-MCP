@@ -8,14 +8,14 @@ import {
 
 afterEach(() => vi.unstubAllEnvs());
 
-function fixture(status = "PAUSED", newName = " Video name ") {
+function fixture(status = "PAUSED", newName = ` ${policy.targetName} `) {
   vi.stubEnv("V2_META_APP_REVIEW_SECOND_RENAME_ENABLED", "true");
   vi.stubEnv("V2_PREVIEW_ONLY", "true");
   vi.stubEnv("V2_CONFIRMED_WRITE_ENABLED", "false");
   const principal = {
     kind: "service" as const,
     workspaceId: String(policy.workspaceId),
-    tokenId: "ppc-token",
+    tokenId: String(policy.serviceTokenId),
     serviceIdentityId: "ppc-identity",
     scopes: ["adforge:mcp:read", "adforge:mcp:write"],
     accountIds: ["account-id"],
@@ -94,7 +94,7 @@ describe("second controlled Meta campaign", () => {
       f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
     ).resolves.toMatchObject({
       status: "committed",
-      reread: { name: "Video name", status: "PAUSED" },
+      reread: { name: policy.targetName, status: "PAUSED" },
     });
     expect(f.providers.mutateCampaign).toHaveBeenCalledExactlyOnceWith(
       policy.workspaceId,
@@ -102,14 +102,14 @@ describe("second controlled Meta campaign", () => {
       "account-id",
       policy.campaignId,
       "change_name",
-      { new_name: "Video name" },
+      { new_name: policy.targetName },
     );
     expect(f.providers.readMetaControlledCampaign).toHaveBeenCalledTimes(2);
     expect(f.audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "meta_app_review_rename_completed",
         metadata: expect.objectContaining({
-          serviceTokenId: "ppc-token",
+          serviceTokenId: policy.serviceTokenId,
           postWriteVerified: true,
           invariantChangedFields: "",
         }),
@@ -142,15 +142,16 @@ describe("second controlled Meta campaign", () => {
       }),
     );
   });
-  it("reports already applied without no-op mutation", async () => {
+  it("blocks reverse/no-op target without mutation", async () => {
     const f = fixture("PAUSED", "New Awareness Campaign");
     await expect(
       f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
-    ).resolves.toMatchObject({ status: "already_applied" });
+    ).resolves.toMatchObject({ status: "blocked" });
     expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
   });
   it.each([
     { operation: "pause" },
+    { operation: "update_campaign" },
     { externalObjectId: "wrong" },
     { payload: { new_name: "name", status: "PAUSED" } },
     { payload: { budget: 5 } },
@@ -164,6 +165,7 @@ describe("second controlled Meta campaign", () => {
         { ...f.preview, ...change },
         f.account,
         policy.workspaceId,
+        policy.serviceTokenId,
       ).kind,
     ).not.toBe("allowed");
   });
@@ -171,8 +173,13 @@ describe("second controlled Meta campaign", () => {
     const f = fixture();
     const config = loadConfig();
     expect(
-      evaluateMetaAppReviewRenamePolicy(config, f.preview, f.account, "foreign")
-        .kind,
+      evaluateMetaAppReviewRenamePolicy(
+        config,
+        f.preview,
+        f.account,
+        "foreign",
+        policy.serviceTokenId,
+      ).kind,
     ).toBe("blocked");
     expect(
       evaluateMetaAppReviewRenamePolicy(
@@ -180,6 +187,7 @@ describe("second controlled Meta campaign", () => {
         f.preview,
         { externalAccountId: "wrong" },
         policy.workspaceId,
+        policy.serviceTokenId,
       ).kind,
     ).not.toBe("allowed");
     expect(
@@ -188,7 +196,32 @@ describe("second controlled Meta campaign", () => {
         f.preview,
         f.account,
         policy.workspaceId,
+        policy.serviceTokenId,
       ).kind,
     ).not.toBe("allowed");
   });
+  it("blocks a different write-enabled credential in the same workspace", async () => {
+    const f = fixture();
+    f.principal.tokenId = "other-token";
+    await expect(
+      f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
+    ).resolves.toMatchObject({ status: "blocked" });
+    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+  });
+  it.each(["already target", "unexpected source"])(
+    "blocks %s before sending",
+    async (kind) => {
+      const f = fixture();
+      f.providers.readMetaControlledCampaign.mockReset().mockResolvedValue({
+        id: policy.campaignId,
+        accountId: policy.accountId,
+        status: "PAUSED",
+        name: kind === "already target" ? policy.targetName : "Unexpected",
+      });
+      await expect(
+        f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
+      ).resolves.toMatchObject({ status: "blocked" });
+      expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+    },
+  );
 });
