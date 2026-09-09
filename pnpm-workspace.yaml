@@ -9,6 +9,7 @@ allowBuilds:
   msgpackr-extract: true
   prisma: true
 overrides:
+  sharp@<0.35.4: 0.35.4
   deepmerge-ts: 8.0.1
   fastify@<5.12.1: 5.12.1
   fast-uri@>=3.0.0 <4.0.0: 3.1.6
