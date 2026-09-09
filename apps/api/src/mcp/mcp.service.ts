@@ -9,6 +9,7 @@ import type { ServiceTokenPrincipal } from "../service-tokens/service-token.serv
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ReportService } from "../reports/report.service.js";
 import { McpPreviewService } from "./mcp-preview.service.js";
+import { PreviewError } from "./mcp-preview.error.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
 
@@ -326,10 +327,11 @@ export class McpService {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
       description: toolDescription(name),
-      inputSchema: ga4ToolSchema(name) ?? {
-        type: "object",
-        additionalProperties: true,
-      },
+      inputSchema: previewToolSchema(name) ??
+        ga4ToolSchema(name) ?? {
+          type: "object",
+          additionalProperties: true,
+        },
     }));
   }
 
@@ -1141,13 +1143,12 @@ export class McpService {
         });
       case "confirm_preview":
         if (
+          Object.keys(args).length > 1 ||
           Object.keys(args).some(
             (key) => !["preview_token", "previewToken"].includes(key),
           )
         )
-          throw new ForbiddenException(
-            "Confirmation accepts only the exact preview token.",
-          );
+          throw new PreviewError("invalid_confirmation_arguments");
         return this.previews.confirm(
           principal,
           text(args.preview_token || args.previewToken),
@@ -1156,6 +1157,7 @@ export class McpService {
       case "commit_meta_app_review_preview":
       case "commit_meta_confirmed_write":
         if (
+          Object.keys(args).length > 1 ||
           Object.keys(args).some(
             (key) => !["preview_token", "previewToken"].includes(key),
           )
@@ -1858,14 +1860,57 @@ function toolDescription(name: string): string {
   if (name === "preview_change_campaign_name")
     return "Create a read-only rename preview. Use only after the user explicitly asks to rename a campaign and supplies the target name. Then confirm and commit the returned preview token in the same user-authorized flow.";
   if (name === "confirm_preview")
-    return "Confirm a previously created preview token. In an AI conversation, the user's explicit rename instruction is the authorization; do not use this tool for read-only requests.";
+    return "Confirm the exact opaque preview_token returned by preview_change_campaign_name, using the SAME MCP key. Send only {preview_token}; do not send provider, account_id, campaign_id, name, preview_id or a service key. This is a local confirmation, not a Meta request or mutation. Requires explicit user authorization of that preview.";
+  if (name === "preview_meta_update_campaign")
+    return "Generic campaign preview only; it cannot authorize the controlled App Review rename. For a name-only change use preview_change_campaign_name instead.";
   if (
     ["commit_meta_app_review_preview", "commit_meta_confirmed_write"].includes(
       name,
     )
   )
-    return "Commit an explicitly confirmed Meta rename preview. Server policy permits only the prepared Meta App Review campaign/name combination and always reads Meta before and after the mutation.";
+    return "Commit the exact explicitly confirmed preview_token using the same MCP key. Send only {preview_token}. The controlled policy allows only the prepared Meta account/campaign, PAUSED and name-only; the safe new name is bound to the preview. Reads Meta before and after the mutation. Generic writes remain blocked.";
   return `HolyMedia MCP compatibility tool: ${name}`;
+}
+
+function previewToolSchema(name: string): Record<string, unknown> | undefined {
+  if (
+    [
+      "confirm_preview",
+      "commit_preview",
+      "commit_meta_app_review_preview",
+      "commit_meta_confirmed_write",
+    ].includes(name)
+  )
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["preview_token"],
+      properties: {
+        preview_token: {
+          type: "string",
+          pattern: "^hmpp_[A-Za-z0-9_-]{20,120}$",
+          description:
+            "Exact opaque preview_token returned by the preview tool. Not preview_id, service key or confirmation ID. Use the same MCP key throughout.",
+        },
+      },
+    };
+  if (name === "preview_change_campaign_name")
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["provider", "account_id", "campaign_id", "new_name"],
+      properties: {
+        provider: { type: "string", enum: ["META_ADS", "GOOGLE_ADS"] },
+        account_id: {
+          type: "string",
+          minLength: 1,
+          description: "Authorized account ID in the current workspace.",
+        },
+        campaign_id: { type: "string", minLength: 1 },
+        new_name: { type: "string", minLength: 1, maxLength: 255 },
+      },
+    };
+  return undefined;
 }
 
 function ga4ToolSchema(name: string): Record<string, unknown> | undefined {

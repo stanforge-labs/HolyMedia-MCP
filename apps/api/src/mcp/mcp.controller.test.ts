@@ -1,6 +1,7 @@
 import { ForbiddenException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
+import { PreviewError } from "./mcp-preview.error.js";
 
 function controller(authenticate = vi.fn().mockResolvedValue(null)) {
   return new McpController(
@@ -25,6 +26,49 @@ function reply() {
 }
 
 describe("MCP bearer authentication", () => {
+  it("returns a typed local confirmation error without exposing internal details", async () => {
+    const instance = new McpController(
+      {
+        call: vi
+          .fn()
+          .mockRejectedValue(
+            new PreviewError(
+              "confirmation_context_mismatch",
+              "private diagnostic",
+            ),
+          ),
+      } as never,
+      {
+        authenticate: vi.fn().mockResolvedValue({
+          workspaceId: "workspace",
+          tokenId: "token-id",
+          serviceIdentityId: "identity-id",
+        }),
+      } as never,
+      { authenticate: vi.fn() } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record: vi.fn() } as never,
+    );
+    const result = await instance.post(
+      {
+        headers: { authorization: "Bearer test-opaque" },
+        body: {
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "confirm_preview",
+            arguments: { preview_token: "opaque-do-not-log" },
+          },
+        },
+      } as never,
+      reply() as never,
+    );
+    const text = JSON.stringify(result);
+    expect(text).toContain("confirmation_context_mismatch");
+    expect(text).not.toContain("рекламной платформе");
+    expect(text).not.toContain("private diagnostic");
+    expect(text).not.toContain("opaque-do-not-log");
+  });
   it("accepts a case-insensitive Bearer scheme", async () => {
     const authenticate = vi
       .fn()

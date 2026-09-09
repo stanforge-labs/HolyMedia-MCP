@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpPreviewService } from "./mcp-preview.service.js";
+import { McpService } from "./mcp.service.js";
 import { SECOND_META_APP_REVIEW as policy } from "./meta-app-review-write.policy.js";
 afterEach(() => vi.unstubAllEnvs());
 type Row = {
@@ -117,7 +118,11 @@ function fixture() {
         ),
         updateMany: vi.fn(async ({ where, data }) => {
           const row = rows.find(
-            (row) => row.id === where.id && row.consumedAt === null,
+            (row) =>
+              row.id === where.id &&
+              row.consumedAt === null &&
+              (where.confirmedAt !== null || row.confirmedAt === null) &&
+              (!where.expiresAt || row.expiresAt > where.expiresAt.gt),
           );
           if (!row) return { count: 0 };
           Object.assign(row, data);
@@ -154,6 +159,106 @@ function fixture() {
   };
 }
 describe("reproducible controlled Meta rename", () => {
+  it("passes the opaque token through the published sequential MCP contract without provider calls in confirm", async () => {
+    const f = fixture();
+    const mcp = new McpService(
+      f.database as never,
+      f.providers as never,
+      {} as never,
+      f.service,
+      {} as never,
+      {} as never,
+    );
+    const schema = mcp
+      .tools()
+      .find((tool) => tool.name === "confirm_preview")!.inputSchema;
+    expect(schema).toMatchObject({
+      additionalProperties: false,
+      required: ["preview_token"],
+      properties: {
+        preview_token: {
+          type: "string",
+          pattern: "^hmpp_[A-Za-z0-9_-]{20,120}$",
+        },
+      },
+    });
+    const result = (await mcp.call(
+      f.principal,
+      "preview_change_campaign_name",
+      {
+        provider: "META_ADS",
+        account_id: policy.accountId,
+        campaign_id: policy.campaignId,
+        new_name: "New safe reviewer name",
+      },
+    )) as { preview_token: string };
+    expect(result.preview_token).toMatch(/^hmpp_[A-Za-z0-9_-]{20,120}$/);
+    f.providers.readMetaControlledCampaign.mockRejectedValue(
+      new Error("Provider unavailable"),
+    );
+    await expect(
+      mcp.call(f.principal, "confirm_preview", {
+        preview_token: result.preview_token,
+        provider: "META_ADS",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_confirmation_arguments" });
+    await expect(
+      mcp.call(f.principal, "confirm_preview", {
+        preview_token: result.preview_token,
+      }),
+    ).resolves.toMatchObject({ status: "confirmed" });
+    expect(f.providers.readMetaControlledCampaign).toHaveBeenCalledTimes(1);
+    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+  });
+  it("confirms concurrently once and remains successful if ancillary audit fails", async () => {
+    const f = fixture();
+    const p = await f.preview();
+    f.audit.record.mockClear();
+    f.audit.record.mockRejectedValue(new Error("Audit unavailable"));
+    const results = await Promise.all([
+      f.service.confirm(f.principal, p.preview_token),
+      f.service.confirm(f.principal, p.preview_token),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["confirmed", "confirmed"]);
+    expect(f.audit.record).toHaveBeenCalledTimes(1);
+    expect(f.rows[0]!.confirmedAt).not.toBeNull();
+    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+  });
+  it("cannot confirm a preview consumed between lookup and conditional update", async () => {
+    const f = fixture();
+    const p = await f.preview();
+    f.database.client.mcpPreview.updateMany.mockImplementationOnce(async () => {
+      f.rows[0]!.consumedAt = new Date();
+      return { count: 0 };
+    });
+    await expect(
+      f.service.confirm(f.principal, p.preview_token),
+    ).rejects.toMatchObject({ code: "preview_already_consumed" });
+    expect(f.rows[0]!.confirmedAt).toBeNull();
+    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+  });
+  it.each([
+    "expired",
+    "malformed",
+    "consumed",
+    "read-only",
+    "foreign-workspace",
+  ])("returns a local error for %s confirmation", async (kind) => {
+    const f = fixture();
+    const p = await f.preview();
+    if (kind === "expired") f.rows[0]!.expiresAt = new Date(0);
+    if (kind === "consumed") f.rows[0]!.consumedAt = new Date();
+    if (kind === "read-only") f.principal.scopes = ["adforge:mcp:read"];
+    if (kind === "foreign-workspace") f.principal.workspaceId = randomUUID();
+    await expect(
+      f.service.confirm(
+        f.principal,
+        kind === "malformed" ? f.rows[0]!.id : p.preview_token,
+      ),
+    ).rejects.toMatchObject({ code: expect.any(String) });
+    expect(f.providers.readMetaControlledCampaign).toHaveBeenCalledTimes(1);
+    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+  });
   it("fresh token/workspace/connection IDs work with safe names and globals OFF", async () => {
     for (let i = 0; i < 2; i++) {
       const f = fixture();

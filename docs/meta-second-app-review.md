@@ -49,6 +49,22 @@ Generic `preview_meta_update_campaign`
 is not a rename substitute and remains blocked. Use the dedicated name tool.
 Any new safe name can be authorized in a new preview, even after a prior rename.
 No special reverse exception or fixed source/target pair is necessary.
+`tools/list` publishes strict schemas for the rename, confirmation and commit
+tools. Confirmation and commit accept only `{preview_token}`; do not attach
+provider/account/campaign/name fields, a preview UUID, or a service key. The
+opaque `hmpp_...` token returned by the dedicated rename preview is the input to
+both steps. The compatibility generic update preview is not interchangeable.
+
+Confirmation is local: no provider reads or mutations. It verifies the current
+principal and snapshot, then conditionally updates an unconsumed, unexpired,
+unconfirmed row with matching payload/diff and current account/token relations.
+Concurrent repeats return `confirmed`; consumed/expired/foreign previews fail
+closed. Confirmation audit is best effort and cannot undo persisted confirmation.
+Safe error codes distinguish invalid arguments/token, unavailable preview,
+expiration, consumption, write scope and context mismatch. Unknown local errors
+are not described as provider failures. Logs contain error codes, request and
+principal IDs and recognized argument names only, never argument/token values.
+
 New controlled-write keys snapshot the currently enabled connected account IDs
 through the normal creation API when no explicit account list is supplied.
 Empty selection fails closed; read-only key creation behavior is unchanged.

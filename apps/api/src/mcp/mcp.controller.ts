@@ -15,6 +15,7 @@ import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
 import { createLogger } from "@holymedia/observability";
+import { PreviewError } from "./mcp-preview.error.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
@@ -158,6 +159,35 @@ export class McpController {
                 : "unknown",
             httpStatus:
               error instanceof HttpException ? error.getStatus() : undefined,
+            errorCode: error instanceof PreviewError ? error.code : undefined,
+            workspaceId: principal.workspaceId,
+            serviceTokenId: principal.tokenId,
+            serviceIdentityId: principal.serviceIdentityId,
+            requestId: request.id,
+            // Names only, never argument values or opaque tokens.
+            argumentKeys:
+              params.arguments && typeof params.arguments === "object"
+                ? Object.keys(params.arguments)
+                    .slice(0, 20)
+                    .map((key) =>
+                      [
+                        "preview_token",
+                        "previewToken",
+                        "provider",
+                        "account_id",
+                        "accountId",
+                        "campaign_id",
+                        "campaignId",
+                        "new_name",
+                        "name",
+                        "preview_id",
+                        "confirmed",
+                        "confirmation",
+                      ].includes(key)
+                        ? key
+                        : "<other-field>",
+                    )
+                : [],
           },
           "MCP tool execution failed",
         );
@@ -167,7 +197,17 @@ export class McpController {
           id,
           result: {
             isError: true,
-            content: [{ type: "text", text: JSON.stringify({ message }) }],
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  message,
+                  ...(error instanceof PreviewError
+                    ? { code: error.code }
+                    : {}),
+                }),
+              },
+            ],
           },
         };
       }
@@ -188,6 +228,7 @@ export class McpController {
 }
 
 function mcpFailureMessage(error: unknown): string {
+  if (error instanceof PreviewError) return error.publicMessage;
   if (
     error instanceof ProviderError &&
     error.code === "insufficient_permissions"
@@ -206,7 +247,9 @@ function mcpFailureMessage(error: unknown): string {
     if (message === "Preview token is invalid.")
       return "Подтверждение изменения устарело или недействительно.";
   }
-  return "Запрос к рекламной платформе не выполнен.";
+  return error instanceof ProviderError
+    ? "Запрос к рекламной платформе не выполнен."
+    : "Не удалось выполнить запрос HolyMedia. Попробуйте ещё раз.";
 }
 
 function mcpUnauthorized(reply: FastifyReply) {

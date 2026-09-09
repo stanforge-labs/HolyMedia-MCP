@@ -3,7 +3,7 @@ import { PrismaClient } from "./generated/prisma/client.js";
 import { Pool } from "pg";
 
 export { PrismaClient } from "./generated/prisma/client.js";
-export type { Prisma } from "./generated/prisma/client.js";
+export { Prisma } from "./generated/prisma/client.js";
 
 export type DatabaseHandle = {
   client: PrismaClient;

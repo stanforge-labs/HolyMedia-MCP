@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import { loadConfig, type AppConfig } from "@holymedia/config";
-import type { Prisma } from "@holymedia/database";
+import { Prisma } from "@holymedia/database";
+import { createLogger } from "@holymedia/observability";
+import { PreviewError } from "./mcp-preview.error.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
@@ -210,33 +212,131 @@ export class McpPreviewService {
 
   public async confirm(principal: ServiceTokenPrincipal, previewToken: string) {
     this.ensureRead(principal);
+    if (!principal.scopes.includes(WRITE_SCOPE))
+      throw new PreviewError("write_scope_required");
     const preview = await this.find(principal, previewToken);
-    if (preview.consumedAt)
-      throw new ForbiddenException("Preview has already been consumed.");
+    if (preview.consumedAt) throw new PreviewError("preview_already_consumed");
     if (preview.expiresAt <= new Date())
-      throw new ForbiddenException("Preview has expired.");
-    if (
+      throw new PreviewError("preview_expired");
+    const controlled =
       preview.provider === "META_ADS" &&
       preview.externalObjectId === SECOND_META_APP_REVIEW.campaignId &&
-      this.config.metaAppReviewSecondRenameEnabled
-    ) {
-      const account = await this.account(principal, preview.accountId);
+      this.config.metaAppReviewSecondRenameEnabled;
+    const account = await this.account(principal, preview.accountId);
+    if (controlled) {
       await this.assertControlledPrincipal(principal, account.id);
       this.assertSnapshot(principal, preview, account);
     }
     if (preview.confirmedAt) return this.view(preview, "confirmed");
-    const updated = await this.database.client.mcpPreview.update({
-      where: { id: preview.id },
-      data: { confirmedAt: new Date() },
+    const confirmedAt = new Date();
+    const updated = await this.database.client.mcpPreview.updateMany({
+      where: {
+        id: preview.id,
+        workspaceId: principal.workspaceId,
+        serviceTokenId: principal.tokenId,
+        previewTokenDigest: preview.previewTokenDigest,
+        accountId: account.id,
+        operation: preview.operation,
+        externalObjectId: preview.externalObjectId,
+        confirmedAt: null,
+        consumedAt: null,
+        expiresAt: { gt: confirmedAt },
+        payload: {
+          equals: payloadRecord(preview.payload) as Prisma.InputJsonObject,
+        },
+        diff: { equals: payloadRecord(preview.diff) as Prisma.InputJsonObject },
+        account: {
+          workspaceId: principal.workspaceId,
+          enabled: true,
+          connectionId: account.connectionId,
+          externalAccountId: account.externalAccountId,
+          connection: {
+            workspaceId: principal.workspaceId,
+            status: { in: ["CONNECTED", "DEGRADED"] },
+          },
+        },
+        ...(controlled
+          ? {
+              serviceToken: {
+                serviceIdentityId: principal.serviceIdentityId,
+                revokedAt: null,
+                scopes: { array_contains: [READ_SCOPE, WRITE_SCOPE] },
+                AND: [
+                  {
+                    OR: [
+                      { expiresAt: null },
+                      { expiresAt: { gt: confirmedAt } },
+                    ],
+                  },
+                  {
+                    OR: [
+                      { accountIds: { equals: Prisma.AnyNull } },
+                      { accountIds: { equals: [] } },
+                      { accountIds: { array_contains: [account.id] } },
+                    ],
+                  },
+                ],
+                serviceIdentity: {
+                  workspaceId: principal.workspaceId,
+                  revokedAt: null,
+                  workspace: { accessStatus: "ACTIVE" },
+                  createdBy: {
+                    status: "active",
+                    memberships: {
+                      some: { workspaceId: principal.workspaceId },
+                    },
+                  },
+                },
+              },
+            }
+          : {}),
+      },
+      data: { confirmedAt },
     });
-    await this.audit.record({
-      eventType: "mcp_preview_confirmed",
-      actorType: "SERVICE",
-      workspaceId: principal.workspaceId,
-      targetType: "mcp_preview",
-      targetId: preview.id,
-    });
-    return this.view(updated, "confirmed");
+    if (updated.count !== 1) {
+      const current = await this.find(principal, previewToken);
+      if (current.consumedAt)
+        throw new PreviewError("preview_already_consumed");
+      if (current.expiresAt <= new Date())
+        throw new PreviewError("preview_expired");
+      if (controlled) {
+        await this.assertControlledPrincipal(principal, account.id);
+        this.assertSnapshot(
+          principal,
+          current,
+          await this.account(principal, current.accountId),
+        );
+      }
+      if (current.confirmedAt) return this.view(current, "confirmed");
+      throw new PreviewError("confirmation_context_mismatch");
+    }
+    try {
+      await this.audit.record({
+        eventType: "mcp_preview_confirmed",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        metadata: {
+          serviceTokenId: principal.tokenId,
+          serviceIdentityId: principal.serviceIdentityId,
+          connectionId: account.connectionId,
+          accountId: account.id,
+          operation: preview.operation,
+        },
+      });
+    } catch (error) {
+      createLogger("holymedia-mcp-preview").error(
+        {
+          previewId: preview.id,
+          workspaceId: principal.workspaceId,
+          errorType:
+            error instanceof Error ? error.constructor.name : "Unknown",
+        },
+        "Preview confirmation audit failed",
+      );
+    }
+    return this.view({ ...preview, confirmedAt }, "confirmed");
   }
 
   public async commit(principal: ServiceTokenPrincipal, previewToken: string) {
@@ -266,14 +366,21 @@ export class McpPreviewService {
     previewToken: string,
   ) {
     if (!principal.scopes.includes(WRITE_SCOPE))
-      throw new ForbiddenException("Write scope is required for commit.");
+      throw new PreviewError(
+        "write_scope_required",
+        "Write scope is required for commit.",
+      );
     const preview = await this.find(principal, previewToken);
     if (preview.consumedAt)
-      throw new ForbiddenException("Preview has already been consumed.");
+      throw new PreviewError(
+        "preview_already_consumed",
+        "Preview has already been consumed.",
+      );
     if (preview.expiresAt <= new Date())
-      throw new ForbiddenException("Preview has expired.");
+      throw new PreviewError("preview_expired", "Preview has expired.");
     if (!preview.confirmedAt)
-      throw new ForbiddenException(
+      throw new PreviewError(
+        "preview_not_confirmed",
         "Explicit preview confirmation is required.",
       );
 
@@ -295,7 +402,10 @@ export class McpPreviewService {
       data: { consumedAt: new Date() },
     });
     if (consumed.count !== 1)
-      throw new ForbiddenException("Preview has already been consumed.");
+      throw new PreviewError(
+        "preview_already_consumed",
+        "Preview has already been consumed.",
+      );
     if (policyReason) {
       await this.audit.record({
         eventType: "mcp_commit_blocked",
@@ -626,7 +736,8 @@ export class McpPreviewService {
         token.accountIds.length > 0 &&
         !token.accountIds.includes(accountId))
     )
-      throw new ForbiddenException(
+      throw new PreviewError(
+        "confirmation_context_mismatch",
         "A valid controlled-write key with workspace membership and account access is required.",
       );
     return token;
@@ -662,7 +773,8 @@ export class McpPreviewService {
       snapshot.requestedName !== requestedName.trim() ||
       Object.keys(payloadRecord(preview.payload)).length !== 1
     )
-      throw new ForbiddenException(
+      throw new PreviewError(
+        "confirmation_context_mismatch",
         "Preview binding is invalid. Create and confirm a new preview.",
       );
     return snapshot;
@@ -733,7 +845,7 @@ export class McpPreviewService {
   private async find(principal: ServiceTokenPrincipal, previewToken: string) {
     const value = previewToken.trim();
     if (!/^hmpp_[A-Za-z0-9_-]{20,120}$/.test(value))
-      throw new ForbiddenException("Preview token is invalid.");
+      throw new PreviewError("invalid_preview_token");
     const preview = await this.database.client.mcpPreview.findFirst({
       where: {
         previewTokenDigest: digest(value),
@@ -744,7 +856,7 @@ export class McpPreviewService {
           : {}),
       },
     });
-    if (!preview) throw new ForbiddenException("Preview token is invalid.");
+    if (!preview) throw new PreviewError("preview_not_found");
     return preview;
   }
 
