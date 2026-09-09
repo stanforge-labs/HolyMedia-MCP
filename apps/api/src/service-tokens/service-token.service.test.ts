@@ -5,6 +5,64 @@ import {
 } from "./service-token.service.js";
 
 describe("service token security primitives", () => {
+  it("a new controlled key snapshots selected account IDs through normal create", async () => {
+    const tokenCreate = vi.fn(async ({ data }) => ({
+      ...data,
+      id: "new-token",
+      createdAt: new Date(),
+      revokedAt: null,
+      lastUsedAt: null,
+    }));
+    const selected = vi.fn(async () => [{ id: "new-connection-account" }]);
+    const count = vi.fn(async () => 1);
+    const tx = {
+      serviceIdentity: { create: vi.fn(async () => ({ id: "new-identity" })) },
+      serviceToken: { create: tokenCreate },
+    };
+    const service = new ServiceTokenService(
+      {
+        client: {
+          providerAccount: { findMany: selected, count },
+          $transaction: async (run: (client: typeof tx) => Promise<unknown>) =>
+            run(tx),
+        },
+      } as never,
+      { record: vi.fn() } as never,
+    );
+    const result = await service.create(
+      "new-workspace",
+      { name: "Reviewer key", scopes: ["adforge:mcp:write"] },
+      { userId: "reviewer" } as never,
+      {} as never,
+    );
+    expect(result.accountIds).toEqual(["new-connection-account"]);
+    expect(result.scopes).toEqual(["adforge:mcp:read", "adforge:mcp:write"]);
+    expect(tokenCreate).toHaveBeenCalledOnce();
+    expect(selected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: "new-workspace",
+          enabled: true,
+        }),
+      }),
+    );
+  });
+  it("controlled key creation fails closed when no account is selected", async () => {
+    const service = new ServiceTokenService(
+      {
+        client: { providerAccount: { findMany: vi.fn(async () => []) } },
+      } as never,
+      {} as never,
+    );
+    await expect(
+      service.create(
+        "workspace",
+        { name: "key", scopes: ["adforge:mcp:write"] },
+        {} as never,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
   it("stores only a digest and never exposes the raw token", () => {
     const raw = "hmst_example-secret-value";
     const digest = hashServiceToken(raw);

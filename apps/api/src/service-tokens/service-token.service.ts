@@ -73,10 +73,47 @@ export class ServiceTokenService {
     request: RequestWithAuth,
   ) {
     const scopes = normalizeScopes(input.scopes);
-    const accountIds = [...new Set(input.accountIds ?? [])];
+    const controlled = scopes.includes(WRITE_SCOPE);
+    const selected =
+      controlled && !input.accountIds?.length
+        ? await this.database.client.providerAccount.findMany({
+            where: {
+              workspaceId,
+              enabled: true,
+              connection: {
+                workspaceId,
+                status: { in: ["CONNECTED", "DEGRADED"] },
+              },
+            },
+            select: { id: true },
+          })
+        : [];
+    const accountIds = [
+      ...new Set(
+        input.accountIds?.length
+          ? input.accountIds
+          : selected.map((account) => account.id),
+      ),
+    ];
+    if (controlled && !accountIds.length)
+      throw new BadRequestException(
+        "Select a connected account before creating a controlled-write key.",
+      );
     if (accountIds.length > 0) {
       const count = await this.database.client.providerAccount.count({
-        where: { workspaceId, id: { in: accountIds } },
+        where: {
+          workspaceId,
+          id: { in: accountIds },
+          ...(controlled
+            ? {
+                enabled: true,
+                connection: {
+                  workspaceId,
+                  status: { in: ["CONNECTED", "DEGRADED"] },
+                },
+              }
+            : {}),
+        },
       });
       if (count !== accountIds.length) {
         throw new BadRequestException(

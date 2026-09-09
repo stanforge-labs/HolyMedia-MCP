@@ -10,6 +10,7 @@ import {
   evaluateMetaAppReviewPrecondition,
   evaluateMetaAppReviewRenamePolicy,
   invariantChanges,
+  SECOND_META_APP_REVIEW,
 } from "./meta-app-review-write.policy.js";
 
 const READ_SCOPE = "adforge:mcp:read";
@@ -73,7 +74,70 @@ export class McpPreviewService {
 
     const previewToken = `hmpp_${randomBytes(32).toString("base64url")}`;
     const expiresAt = new Date(Date.now() + 10 * 60_000);
-    const diff = this.diff(input.operation, input.objectId, input.payload);
+    const diff: Record<string, unknown> = this.diff(
+      input.operation,
+      input.objectId,
+      input.payload,
+    );
+    const resourcePolicy = evaluateMetaAppReviewRenamePolicy(
+      this.config,
+      {
+        provider: input.provider,
+        operation: input.operation,
+        externalObjectId: input.objectId.trim(),
+        payload: input.payload,
+      },
+      account,
+    );
+    if (
+      this.isSecondReview(
+        input.provider,
+        input.objectId.trim(),
+        account.externalAccountId,
+      ) &&
+      resourcePolicy.kind === "allowed"
+    ) {
+      await this.assertControlledPrincipal(principal, account.id);
+      const before = await this.providers.readMetaControlledCampaign(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        input.objectId.trim(),
+      );
+      const check = evaluateMetaAppReviewPrecondition(
+        this.config,
+        before,
+        resourcePolicy.requestedName,
+      );
+      if (check.kind !== "allowed")
+        throw new ForbiddenException(
+          check.kind === "blocked"
+            ? check.message
+            : "Controlled preview unavailable.",
+        );
+      if (
+        before.id !== input.objectId.trim() ||
+        before.accountId !== account.externalAccountId
+      )
+        throw new ForbiddenException("Campaign/account mismatch.");
+      diff.before = before.name;
+      diff.controlled = {
+        version: 1,
+        workspaceId: principal.workspaceId,
+        serviceTokenId: principal.tokenId,
+        serviceIdentityId: principal.serviceIdentityId,
+        connectionId: account.connectionId,
+        accountId: account.id,
+        externalAccountId: account.externalAccountId,
+        campaignId: before.id,
+        currentName: before.name,
+        status: before.status,
+        requestedName: resourcePolicy.requestedName,
+        operation: "change_name",
+        allowedFields: ["name"],
+        retrievedAt: new Date().toISOString(),
+      };
+    }
     const preview = await this.database.client.mcpPreview.create({
       data: {
         workspaceId: principal.workspaceId,
@@ -104,8 +168,6 @@ export class McpPreviewService {
       this.config,
       preview,
       account,
-      principal.workspaceId,
-      principal.tokenId,
     );
     const policyReason =
       appReviewPolicy.kind === "allowed"
@@ -153,6 +215,15 @@ export class McpPreviewService {
       throw new ForbiddenException("Preview has already been consumed.");
     if (preview.expiresAt <= new Date())
       throw new ForbiddenException("Preview has expired.");
+    if (
+      preview.provider === "META_ADS" &&
+      preview.externalObjectId === SECOND_META_APP_REVIEW.campaignId &&
+      this.config.metaAppReviewSecondRenameEnabled
+    ) {
+      const account = await this.account(principal, preview.accountId);
+      await this.assertControlledPrincipal(principal, account.id);
+      this.assertSnapshot(principal, preview, account);
+    }
     if (preview.confirmedAt) return this.view(preview, "confirmed");
     const updated = await this.database.client.mcpPreview.update({
       where: { id: preview.id },
@@ -212,8 +283,6 @@ export class McpPreviewService {
       this.config,
       preview,
       account,
-      principal.workspaceId,
-      principal.tokenId,
     );
     const policyReason =
       appReviewPolicy.kind === "allowed"
@@ -336,17 +405,54 @@ export class McpPreviewService {
       provider: string;
       operation: string;
       externalObjectId: string;
+      diff: unknown;
+      confirmedAt: Date | null;
     },
     account: { id: string; connectionId: string; externalAccountId: string },
     payload: Record<string, unknown>,
     requestedName: string,
   ) {
+    const controlled = this.isSecondReview(
+      preview.provider,
+      preview.externalObjectId,
+      account.externalAccountId,
+    );
+    const identity = controlled
+      ? await this.assertControlledPrincipal(principal, account.id)
+      : null;
+    const snapshot = controlled
+      ? this.assertSnapshot(principal, { ...preview, payload }, account)
+      : null;
     const before = await this.providers.readMetaControlledCampaign(
       principal.workspaceId,
       account.connectionId,
       account.id,
       preview.externalObjectId,
     );
+    if (
+      snapshot &&
+      (before.name !== snapshot.currentName ||
+        before.status !== "PAUSED" ||
+        before.id !== preview.externalObjectId ||
+        before.accountId !== account.externalAccountId)
+    ) {
+      await this.audit.record({
+        eventType: "meta_app_review_rename_blocked",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        success: false,
+        metadata: {
+          reason: "preview_state_changed",
+          serviceTokenId: principal.tokenId,
+          connectionId: account.connectionId,
+        },
+      });
+      throw new ForbiddenException(
+        "Campaign changed after preview. Create and confirm a new preview.",
+      );
+    }
     const precondition = evaluateMetaAppReviewPrecondition(
       this.config,
       before,
@@ -361,6 +467,11 @@ export class McpPreviewService {
       requestedName: String(payload.new_name ?? ""),
       campaignStatus: before.status,
       serviceTokenId: principal.tokenId,
+      serviceIdentityId: principal.serviceIdentityId,
+      tokenPrefix: identity?.tokenPrefix ?? null,
+      connectionId: account.connectionId,
+      previewId: preview.id,
+      confirmedAt: preview.confirmedAt?.toISOString() ?? null,
     };
     if (precondition.kind === "blocked") {
       await this.audit.record({
@@ -457,9 +568,104 @@ export class McpPreviewService {
       execution_mode: "confirmed_write",
       provider_write_enabled: true,
       reread: after,
+      previous_name: before.name,
+      provider_write_result: mutation.result,
+      provider_write_result_source: "HolyMedia Meta adapter",
+      verification_source: "Meta Graph API campaign direct read",
+      verification_retrieved_at: new Date().toISOString(),
       message:
         "Название кампании изменено и подтверждено повторным чтением из Meta.",
     };
+  }
+
+  private isSecondReview(
+    provider: string,
+    campaignId: string,
+    externalAccountId: string,
+  ) {
+    return (
+      this.config.metaAppReviewSecondRenameEnabled &&
+      provider === "META_ADS" &&
+      campaignId === SECOND_META_APP_REVIEW.campaignId &&
+      externalAccountId === SECOND_META_APP_REVIEW.accountId
+    );
+  }
+
+  private async assertControlledPrincipal(
+    principal: ServiceTokenPrincipal,
+    accountId: string,
+  ) {
+    const token = await this.database.client.serviceToken.findFirst({
+      where: {
+        id: principal.tokenId,
+        serviceIdentityId: principal.serviceIdentityId,
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        serviceIdentity: {
+          workspaceId: principal.workspaceId,
+          revokedAt: null,
+          workspace: { accessStatus: "ACTIVE" },
+          createdBy: {
+            status: "active",
+            memberships: { some: { workspaceId: principal.workspaceId } },
+          },
+        },
+      },
+      select: { tokenPrefix: true, scopes: true, accountIds: true },
+    });
+    if (
+      !token ||
+      !Array.isArray(token.scopes) ||
+      !token.scopes.includes(READ_SCOPE) ||
+      !token.scopes.includes(WRITE_SCOPE) ||
+      !principal.scopes.includes(WRITE_SCOPE) ||
+      (token.accountIds !== null &&
+        (!Array.isArray(token.accountIds) ||
+          token.accountIds.some((id) => typeof id !== "string"))) ||
+      (Array.isArray(token.accountIds) &&
+        token.accountIds.length > 0 &&
+        !token.accountIds.includes(accountId))
+    )
+      throw new ForbiddenException(
+        "A valid controlled-write key with workspace membership and account access is required.",
+      );
+    return token;
+  }
+
+  private assertSnapshot(
+    principal: ServiceTokenPrincipal,
+    preview: {
+      diff: unknown;
+      payload: unknown;
+      externalObjectId: string;
+      operation: string;
+    },
+    account: { id: string; connectionId: string; externalAccountId: string },
+  ) {
+    const snapshot = payloadRecord(payloadRecord(preview.diff).controlled);
+    const requestedName = payloadRecord(preview.payload).new_name;
+    if (
+      snapshot.version !== 1 ||
+      snapshot.workspaceId !== principal.workspaceId ||
+      snapshot.serviceTokenId !== principal.tokenId ||
+      snapshot.serviceIdentityId !== principal.serviceIdentityId ||
+      snapshot.connectionId !== account.connectionId ||
+      snapshot.accountId !== account.id ||
+      snapshot.externalAccountId !== account.externalAccountId ||
+      snapshot.campaignId !== preview.externalObjectId ||
+      snapshot.operation !== "change_name" ||
+      preview.operation !== "change_name" ||
+      JSON.stringify(snapshot.allowedFields) !== '["name"]' ||
+      snapshot.status !== "PAUSED" ||
+      typeof snapshot.currentName !== "string" ||
+      typeof requestedName !== "string" ||
+      snapshot.requestedName !== requestedName.trim() ||
+      Object.keys(payloadRecord(preview.payload)).length !== 1
+    )
+      throw new ForbiddenException(
+        "Preview binding is invalid. Create and confirm a new preview.",
+      );
+    return snapshot;
   }
 
   private providerRequest(input: PreviewInput, objectId: string) {
@@ -503,7 +709,10 @@ export class McpPreviewService {
         // read and pre-checked, while every mutation remains subject to the
         // policy enforced in commit(). Disconnected/revoked connections stay
         // unavailable.
-        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
+        connection: {
+          workspaceId: principal.workspaceId,
+          status: { in: ["CONNECTED", "DEGRADED"] },
+        },
         ...(principal.accountIds.length
           ? { id: { in: principal.accountIds } }
           : {}),

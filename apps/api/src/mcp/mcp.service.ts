@@ -1098,6 +1098,23 @@ export class McpService {
           writes: "disabled in V2 MCP compatibility surface",
         };
       case "preview_change_campaign_name":
+        if (
+          Object.keys(args).some(
+            (key) =>
+              ![
+                "provider",
+                "account_id",
+                "accountId",
+                "campaign_id",
+                "campaignId",
+                "new_name",
+                "newName",
+              ].includes(key),
+          )
+        )
+          throw new ForbiddenException(
+            "Name-only preview does not accept additional fields.",
+          );
         return this.previews.create(principal, {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
@@ -1123,6 +1140,14 @@ export class McpService {
           payload: { daily_budget: args.daily_budget ?? args.dailyBudget },
         });
       case "confirm_preview":
+        if (
+          Object.keys(args).some(
+            (key) => !["preview_token", "previewToken"].includes(key),
+          )
+        )
+          throw new ForbiddenException(
+            "Confirmation accepts only the exact preview token.",
+          );
         return this.previews.confirm(
           principal,
           text(args.preview_token || args.previewToken),
@@ -1130,6 +1155,14 @@ export class McpService {
       case "commit_preview":
       case "commit_meta_app_review_preview":
       case "commit_meta_confirmed_write":
+        if (
+          Object.keys(args).some(
+            (key) => !["preview_token", "previewToken"].includes(key),
+          )
+        )
+          throw new ForbiddenException(
+            "Commit accepts only the confirmed preview token, not replacement fields.",
+          );
         return this.previews.commit(
           principal,
           text(args.preview_token || args.previewToken),

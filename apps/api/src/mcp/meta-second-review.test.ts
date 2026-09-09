@@ -1,48 +1,49 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadConfig } from "@holymedia/config";
 import { McpPreviewService } from "./mcp-preview.service.js";
-import {
-  evaluateMetaAppReviewRenamePolicy,
-  SECOND_META_APP_REVIEW as policy,
-} from "./meta-app-review-write.policy.js";
-
+import { SECOND_META_APP_REVIEW as policy } from "./meta-app-review-write.policy.js";
 afterEach(() => vi.unstubAllEnvs());
-
-function fixture(status = "PAUSED", newName = ` ${policy.targetName} `) {
+type Row = {
+  id: string;
+  workspaceId: string;
+  serviceTokenId: string;
+  provider: string;
+  accountId: string;
+  externalObjectId: string;
+  operation: string;
+  payload: Record<string, unknown>;
+  diff: Record<string, unknown>;
+  previewTokenDigest: string;
+  expiresAt: Date;
+  confirmedAt: Date | null;
+  consumedAt: Date | null;
+};
+function fixture() {
   vi.stubEnv("V2_META_APP_REVIEW_SECOND_RENAME_ENABLED", "true");
   vi.stubEnv("V2_PREVIEW_ONLY", "true");
   vi.stubEnv("V2_CONFIRMED_WRITE_ENABLED", "false");
+  const accountId = randomUUID();
   const principal = {
     kind: "service" as const,
-    workspaceId: String(policy.workspaceId),
-    tokenId: String(policy.serviceTokenId),
-    serviceIdentityId: "ppc-identity",
+    workspaceId: String(randomUUID()),
+    tokenId: String(randomUUID()),
+    serviceIdentityId: randomUUID(),
     scopes: ["adforge:mcp:read", "adforge:mcp:write"],
-    accountIds: ["account-id"],
-  };
-  const preview = {
-    id: "preview-id",
-    provider: "META_ADS",
-    operation: "change_name",
-    externalObjectId: policy.campaignId,
-    accountId: "account-id",
-    payload: { new_name: newName },
-    expiresAt: new Date(Date.now() + 60000),
-    confirmedAt: new Date(),
-    consumedAt: null,
+    accountIds: [accountId] as string[],
   };
   const account = {
-    id: "account-id",
-    connectionId: "connection-id",
-    provider: "META_ADS",
+    id: accountId,
+    connectionId: String(randomUUID()),
+    workspaceId: principal.workspaceId,
     externalAccountId: policy.accountId,
+    provider: "META_ADS",
   };
-  const before = {
+  const state = {
     id: policy.campaignId,
     accountId: policy.accountId,
-    name: "New Awareness Campaign",
-    status,
-    effectiveStatus: status,
+    name: "Current reviewer name C",
+    status: "PAUSED",
+    effectiveStatus: "PAUSED",
     objective: "OUTCOME_AWARENESS",
     dailyBudget: null,
     lifetimeBudget: null,
@@ -50,32 +51,78 @@ function fixture(status = "PAUSED", newName = ` ${policy.targetName} `) {
     startTime: null,
     stopTime: null,
   };
+  const rows: Row[] = [];
   const audit = { record: vi.fn(async () => undefined) };
   const providers = {
-    readMetaControlledCampaign: vi
-      .fn()
-      .mockResolvedValueOnce(before)
-      .mockResolvedValue({ ...before, name: newName.trim() }),
-    mutateCampaign: vi.fn(async () => ({ result: { providerAccepted: true } })),
+    readMetaControlledCampaign: vi.fn(async () => ({ ...state })),
+    mutateCampaign: vi.fn(async (_w, _c, _a, _id, _op, payload) => {
+      state.name = payload.new_name;
+      return { result: { providerAccepted: true } };
+    }),
   };
+  const tokenLookup = vi.fn(async () => ({
+    tokenPrefix: "hmst_redacted",
+    scopes: [...principal.scopes],
+    accountIds: [accountId],
+  }));
   const database = {
     client: {
+      serviceToken: { findFirst: tokenLookup },
       providerAccount: {
         findFirst: vi.fn(async ({ where }) =>
-          where.workspaceId === policy.workspaceId &&
-          where.id?.in.includes(account.id)
+          where.workspaceId === account.workspaceId &&
+          (!where.id || where.id.in.includes(accountId)) &&
+          where.OR.some(
+            (item: { id?: string; externalAccountId?: string }) =>
+              item.id === account.id ||
+              item.externalAccountId === account.externalAccountId,
+          )
             ? account
             : null,
         ),
       },
       mcpPreview: {
-        findFirst: vi.fn(async ({ where }) =>
-          where.workspaceId === policy.workspaceId &&
-          where.accountId?.in.includes(account.id)
-            ? preview
-            : null,
+        create: vi.fn(
+          async ({
+            data,
+          }: {
+            data: Omit<Row, "id" | "confirmedAt" | "consumedAt">;
+          }) => {
+            const row: Row = {
+              ...data,
+              id: randomUUID(),
+              confirmedAt: null,
+              consumedAt: null,
+            };
+            rows.push(row);
+            return row;
+          },
         ),
-        updateMany: vi.fn(async () => ({ count: 1 })),
+        findFirst: vi.fn(
+          async ({ where }) =>
+            rows.find(
+              (row) =>
+                row.workspaceId === where.workspaceId &&
+                row.serviceTokenId === where.serviceTokenId &&
+                row.previewTokenDigest === where.previewTokenDigest &&
+                (!where.accountId ||
+                  where.accountId.in.includes(row.accountId)),
+            ) ?? null,
+        ),
+        update: vi.fn(async ({ where, data }) =>
+          Object.assign(
+            rows.find((row) => row.id === where.id)!,
+            data,
+          ),
+        ),
+        updateMany: vi.fn(async ({ where, data }) => {
+          const row = rows.find(
+            (row) => row.id === where.id && row.consumedAt === null,
+          );
+          if (!row) return { count: 0 };
+          Object.assign(row, data);
+          return { count: 1 };
+        }),
       },
     },
   };
@@ -84,144 +131,185 @@ function fixture(status = "PAUSED", newName = ` ${policy.targetName} `) {
     audit as never,
     providers as never,
   );
-  return { principal, preview, account, audit, providers, service };
+  const input = {
+    provider: "META_ADS" as const,
+    accountId,
+    objectId: String(policy.campaignId),
+    operation: "change_name",
+    payload: { new_name: " Reviewer new name D " },
+  };
+  const preview = () => service.create(principal, input);
+  return {
+    principal,
+    account,
+    state,
+    rows,
+    audit,
+    providers,
+    tokenLookup,
+    database,
+    service,
+    input,
+    preview,
+  };
 }
-
-describe("second controlled Meta campaign", () => {
-  it("commits only the trimmed name with global writes OFF and verifies invariants", async () => {
-    const f = fixture();
-    await expect(
-      f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
-    ).resolves.toMatchObject({
-      status: "committed",
-      reread: { name: policy.targetName, status: "PAUSED" },
-    });
-    expect(f.providers.mutateCampaign).toHaveBeenCalledExactlyOnceWith(
-      policy.workspaceId,
-      "connection-id",
-      "account-id",
-      policy.campaignId,
-      "change_name",
-      { new_name: policy.targetName },
-    );
-    expect(f.providers.readMetaControlledCampaign).toHaveBeenCalledTimes(2);
-    expect(f.audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventType: "meta_app_review_rename_completed",
-        metadata: expect.objectContaining({
-          serviceTokenId: policy.serviceTokenId,
-          postWriteVerified: true,
-          invariantChangedFields: "",
-        }),
-      }),
-    );
-  });
-  it.each(["read-only", "foreign-workspace", "foreign-account"])(
-    "denies %s before provider mutation",
-    async (kind) => {
+describe("reproducible controlled Meta rename", () => {
+  it("fresh token/workspace/connection IDs work with safe names and globals OFF", async () => {
+    for (let i = 0; i < 2; i++) {
       const f = fixture();
-      if (kind === "read-only") f.principal.scopes = ["adforge:mcp:read"];
-      if (kind === "foreign-workspace") f.principal.workspaceId = "foreign";
-      if (kind === "foreign-account") f.principal.accountIds = ["foreign"];
+      const p = await f.preview();
+      expect(p.diff).toMatchObject({
+        before: "Current reviewer name C",
+        after: "Reviewer new name D",
+        field: "name",
+      });
+      expect(p.confirmed_write_available).toBe(true);
+      await f.service.confirm(f.principal, p.preview_token);
       await expect(
-        f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
+        f.service.commit(f.principal, p.preview_token),
+      ).resolves.toMatchObject({
+        status: "committed",
+        reread: { name: "Reviewer new name D", status: "PAUSED" },
+        previous_name: "Current reviewer name C",
+        provider_write_result: { providerAccepted: true },
+      });
+      expect(f.providers.mutateCampaign).toHaveBeenCalledExactlyOnceWith(
+        f.principal.workspaceId,
+        f.account.connectionId,
+        f.account.id,
+        policy.campaignId,
+        "change_name",
+        { new_name: "Reviewer new name D" },
+      );
+      expect(f.providers.readMetaControlledCampaign).toHaveBeenCalledTimes(3);
+      await expect(
+        f.service.commit(f.principal, p.preview_token),
       ).rejects.toThrow();
-      expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
-    },
-  );
-  it("blocks ACTIVE with an audit record", async () => {
-    const f = fixture("ACTIVE");
-    await expect(
-      f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
-    ).resolves.toMatchObject({ status: "blocked" });
-    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
-    expect(f.audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventType: "meta_app_review_rename_blocked",
-        success: false,
-      }),
-    );
+      expect(f.providers.mutateCampaign).toHaveBeenCalledTimes(1);
+    }
   });
-  it("blocks reverse/no-op target without mutation", async () => {
-    const f = fixture("PAUSED", "New Awareness Campaign");
-    await expect(
-      f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
-    ).resolves.toMatchObject({ status: "blocked" });
+  it.each([
+    "read-only",
+    "revoked",
+    "foreign-workspace",
+    "account-restricted",
+    "ACTIVE",
+    "unchanged",
+  ])("blocks %s", async (kind) => {
+    const f = fixture();
+    if (kind === "read-only") f.principal.scopes = ["adforge:mcp:read"];
+    if (kind === "revoked") f.tokenLookup.mockResolvedValue(null as never);
+    if (kind === "foreign-workspace") f.principal.workspaceId = randomUUID();
+    if (kind === "account-restricted") f.principal.accountIds = [randomUUID()];
+    if (kind === "ACTIVE") f.state.status = "ACTIVE";
+    if (kind === "unchanged") f.input.payload.new_name = f.state.name;
+    await expect(f.preview()).rejects.toThrow();
     expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
   });
   it.each([
-    { operation: "pause" },
-    { operation: "update_campaign" },
-    { externalObjectId: "wrong" },
-    { payload: { new_name: "name", status: "PAUSED" } },
-    { payload: { budget: 5 } },
-    { payload: { new_name: " " } },
-    { payload: { new_name: "x".repeat(256) } },
-  ])("blocks invalid input %j", (change) => {
+    "name",
+    "status",
+    "connection",
+    "target",
+    "expired",
+    "missing-snapshot",
+    "new-token",
+    "new-workspace",
+    "no-confirmation",
+  ])("blocks changed %s at commit", async (kind) => {
     const f = fixture();
-    expect(
-      evaluateMetaAppReviewRenamePolicy(
-        loadConfig(),
-        { ...f.preview, ...change },
-        f.account,
-        policy.workspaceId,
-        policy.serviceTokenId,
-      ).kind,
-    ).not.toBe("allowed");
-  });
-  it("requires exact workspace/account and can be disabled independently", () => {
-    const f = fixture();
-    const config = loadConfig();
-    expect(
-      evaluateMetaAppReviewRenamePolicy(
-        config,
-        f.preview,
-        f.account,
-        "foreign",
-        policy.serviceTokenId,
-      ).kind,
-    ).toBe("blocked");
-    expect(
-      evaluateMetaAppReviewRenamePolicy(
-        config,
-        f.preview,
-        { externalAccountId: "wrong" },
-        policy.workspaceId,
-        policy.serviceTokenId,
-      ).kind,
-    ).not.toBe("allowed");
-    expect(
-      evaluateMetaAppReviewRenamePolicy(
-        { ...config, metaAppReviewSecondRenameEnabled: false },
-        f.preview,
-        f.account,
-        policy.workspaceId,
-        policy.serviceTokenId,
-      ).kind,
-    ).not.toBe("allowed");
-  });
-  it("blocks a different write-enabled credential in the same workspace", async () => {
-    const f = fixture();
-    f.principal.tokenId = "other-token";
+    const p = await f.preview();
+    if (kind !== "no-confirmation")
+      await f.service.confirm(f.principal, p.preview_token);
+    if (kind === "name") f.state.name = "Concurrent edit";
+    if (kind === "status") f.state.status = "ACTIVE";
+    if (kind === "connection") f.account.connectionId = randomUUID();
+    if (kind === "target") f.rows[0]!.payload.new_name = "Unconfirmed target";
+    if (kind === "expired") f.rows[0]!.expiresAt = new Date(0);
+    if (kind === "missing-snapshot") f.rows[0]!.diff = {};
+    if (kind === "new-token") f.principal.tokenId = randomUUID();
+    if (kind === "new-workspace") f.principal.workspaceId = randomUUID();
     await expect(
-      f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
+      f.service.commit(f.principal, p.preview_token),
+    ).rejects.toThrow();
+    expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
+  });
+  it.each([
+    "update_campaign",
+    "pause",
+    "change_budget",
+    "update_targeting",
+    "configure_schedule",
+    "update_adset",
+    "update_ad",
+    "create_creative",
+  ])("generic %s cannot write", async (operation) => {
+    const f = fixture();
+    const p = await f.service.create(f.principal, {
+      ...f.input,
+      operation,
+      payload: { new_name: "D", daily_budget: 2 },
+    });
+    f.rows[0]!.confirmedAt = new Date();
+    await expect(
+      f.service.commit(f.principal, p.preview_token),
     ).resolves.toMatchObject({ status: "blocked" });
     expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
   });
-  it.each(["already target", "unexpected source"])(
-    "blocks %s before sending",
+  it("rejects confirmation for a different token and modified target", async () => {
+    const f = fixture();
+    const p = await f.preview();
+    await expect(
+      f.service.confirm(
+        { ...f.principal, tokenId: randomUUID() },
+        p.preview_token,
+      ),
+    ).rejects.toThrow();
+    f.rows[0]!.payload.new_name = "Changed";
+    await expect(
+      f.service.confirm(f.principal, p.preview_token),
+    ).rejects.toThrow();
+  });
+  it.each(["wrong-account", "wrong-campaign", "extra-field"])(
+    "blocks %s mutation",
     async (kind) => {
       const f = fixture();
-      f.providers.readMetaControlledCampaign.mockReset().mockResolvedValue({
-        id: policy.campaignId,
-        accountId: policy.accountId,
-        status: "PAUSED",
-        name: kind === "already target" ? policy.targetName : "Unexpected",
+      if (kind === "wrong-account")
+        f.account.externalAccountId = "act_other" as typeof policy.accountId;
+      if (kind === "wrong-campaign") f.input.objectId = "other";
+      const p = await f.service.create(f.principal, {
+        ...f.input,
+        payload:
+          kind === "extra-field"
+            ? { new_name: "D", status: "ACTIVE" }
+            : f.input.payload,
       });
+      f.rows[0]!.confirmedAt = new Date();
       await expect(
-        f.service.commit(f.principal, "hmpp_abcdefghijklmnopqrstuvwx"),
+        f.service.commit(f.principal, p.preview_token),
       ).resolves.toMatchObject({ status: "blocked" });
       expect(f.providers.mutateCampaign).not.toHaveBeenCalled();
     },
   );
+  it("requires active identity, user and membership in the database boundary", async () => {
+    const f = fixture();
+    await f.preview();
+    expect(f.tokenLookup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: f.principal.tokenId,
+          revokedAt: null,
+          serviceIdentity: expect.objectContaining({
+            workspaceId: f.principal.workspaceId,
+            revokedAt: null,
+            workspace: { accessStatus: "ACTIVE" },
+            createdBy: {
+              status: "active",
+              memberships: { some: { workspaceId: f.principal.workspaceId } },
+            },
+          }),
+        }),
+      }),
+    );
+  });
 });
