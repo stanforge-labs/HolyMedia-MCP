@@ -54,7 +54,11 @@ describe("CredentialVaultService", () => {
     process.env.PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION = "1";
     const vault = new CredentialVaultService();
     const encrypted = vault.encrypt({ accessToken: "opaque-token" });
-    const tampered = `${encrypted.ciphertext.slice(0, -1)}x`;
+    const parts = encrypted.ciphertext.split(".");
+    const data = Buffer.from(parts[3]!, "base64url");
+    data[0] = data[0]! ^ 1;
+    parts[3] = data.toString("base64url");
+    const tampered = parts.join(".");
     expect(() => vault.decrypt(tampered, 1)).toThrow(
       "Unsupported state or unable to authenticate data",
     );
