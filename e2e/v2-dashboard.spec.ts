@@ -324,7 +324,7 @@ test.describe("restored HolyMedia client UX", () => {
     });
 
     await page.goto(
-      "/dashboard?section=connections&oauth=success&provider=meta_ads",
+      "/dashboard/connections?oauth=success&provider=meta_ads",
     );
     await expect(
       page.getByText(
