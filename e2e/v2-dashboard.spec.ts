@@ -323,9 +323,7 @@ test.describe("restored HolyMedia client UX", () => {
       fullPage: true,
     });
 
-    await page.goto(
-      "/dashboard/connections?oauth=success&provider=meta_ads",
-    );
+    await page.goto("/dashboard/connections?oauth=success&provider=meta_ads");
     await expect(
       page.getByText(
         "Платформа подключена. Откройте список кабинетов и выберите нужные.",
