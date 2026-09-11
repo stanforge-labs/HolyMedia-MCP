@@ -8,6 +8,7 @@ import type {
   ProviderMetricSummary,
 } from "@holymedia/contracts";
 import { ProviderError } from "../provider.errors.js";
+import type { MetaInsightsRequest } from "../meta-insights.parameters.js";
 import {
   assertExternalId,
   encodeJson,
@@ -232,7 +233,7 @@ export class MetaAdsAdapter
     cursor?: string,
   ) {
     const accountId = metaAccountPath(context.accountId);
-    const rows = await this.listEdge(
+    const result = await this.edgePage(
       `${accountId}/campaigns`,
       {
         fields:
@@ -240,8 +241,9 @@ export class MetaAdsAdapter
       },
       context.credentials.accessToken,
       Math.min(Math.max(limit, 1), 500),
+      cursor,
     );
-    const items = rows.map(
+    const items = result.items.map(
       (row) =>
         ({
           id: String(row.id || ""),
@@ -261,16 +263,9 @@ export class MetaAdsAdapter
           provenance: provenance("META_ADS", "Meta Graph API campaign"),
         }) satisfies ProviderCampaign,
     );
-    const offset = cursor ? Number(cursor) || 0 : 0;
-    const page = items.slice(
-      offset,
-      offset + Math.min(Math.max(limit, 1), 500),
-    );
     return {
-      items: page,
-      ...(offset + page.length < items.length
-        ? { nextCursor: String(offset + page.length) }
-        : {}),
+      ...result,
+      items,
     };
   }
 
@@ -310,6 +305,234 @@ export class MetaAdsAdapter
       spend: row.spend,
     }));
     return sumMetrics(normalizedRows, context.currency ?? null);
+  }
+
+  public async flexibleInsights(
+    context: ProviderReadContext,
+    request: MetaInsightsRequest,
+  ) {
+    const fields = [
+      ...new Set([
+        "account_currency",
+        "date_start",
+        "date_stop",
+        ...(request.level !== "account"
+          ? ["campaign_id", "campaign_name"]
+          : []),
+        ...(["adset", "ad"].includes(request.level)
+          ? ["adset_id", "adset_name"]
+          : []),
+        ...(request.level === "ad" ? ["ad_id", "ad_name"] : []),
+        ...request.metrics.map((m) =>
+          ["conversions", "results"].includes(m) ? "actions" : m,
+        ),
+      ]),
+    ];
+    const params: Record<string, string> = {
+      fields: fields.join(","),
+      level: request.level,
+      time_range: encodeJson({
+        since: request.range.startDate,
+        until: request.range.endDate,
+      }),
+    };
+    if (request.breakdowns.length)
+      params.breakdowns = request.breakdowns.join(",");
+    if (request.campaignId)
+      params.filtering = encodeJson([
+        {
+          field: "campaign.id",
+          operator: "EQUAL",
+          value: assertExternalId(request.campaignId, "campaign id"),
+        },
+      ]);
+    const page = await this.edgePage(
+      `${metaAccountPath(context.accountId)}/insights`,
+      params,
+      context.credentials.accessToken,
+      request.limit,
+      request.cursor,
+    );
+    const items = page.items.map((row) => {
+      const result: Record<string, unknown> = {
+        currency: row.account_currency ?? context.currency ?? null,
+        date_start: row.date_start ?? null,
+        date_stop: row.date_stop ?? null,
+      };
+      for (const field of fields.filter((f) => !request.metrics.includes(f)))
+        if (row[field] !== undefined) result[field] = row[field];
+      for (const metric of request.metrics) {
+        if (["conversions", "results"].includes(metric)) {
+          result[metric] = metaConversions(row.actions);
+          continue;
+        }
+        if (
+          ["actions", "action_values", "cost_per_action_type"].includes(metric)
+        ) {
+          result[metric] = Array.isArray(row[metric])
+            ? (row[metric] as MetaResponse[]).map((a) => ({
+                action_type: String(a.action_type ?? ""),
+                value: numberValue(a.value),
+              }))
+            : [];
+        } else result[metric] = numberValue(row[metric]);
+      }
+      for (const field of request.breakdowns)
+        result[field] = row[field] ?? null;
+      return result;
+    });
+    return {
+      ...page,
+      items,
+      period: request.range,
+      level: request.level,
+      requested_metrics: request.metrics,
+      breakdowns: request.breakdowns,
+      provenance: provenance(
+        "META_ADS",
+        "Meta Graph API Insights",
+        items.length ? "live" : "empty",
+      ),
+    };
+  }
+
+  public async readEntity(
+    context: ProviderReadContext,
+    kind: "campaign" | "adset" | "ad",
+    id?: string,
+    limit = 100,
+    cursor?: string,
+  ) {
+    const fields =
+      kind === "campaign"
+        ? "id,account_id,name,status,effective_status,objective,daily_budget,lifetime_budget"
+        : kind === "adset"
+          ? "id,account_id,campaign_id,name,status,effective_status,daily_budget,lifetime_budget,start_time,end_time"
+          : "id,account_id,campaign_id,adset_id,name,status,effective_status";
+    if (id) {
+      const row = await this.get(
+        this.graphUrl(assertExternalId(id, "object id"), {
+          fields,
+          access_token: context.credentials.accessToken,
+        }),
+      );
+      if (
+        String(row.id) !== id ||
+        metaAccountPath(String(row.account_id ?? "")) !==
+          metaAccountPath(context.accountId)
+      )
+        throw new ProviderError(
+          "invalid_account",
+          "Object does not belong to selected account.",
+        );
+      return {
+        ...row,
+        provenance: provenance("META_ADS", `Meta Graph API ${kind}`),
+      };
+    }
+    const page = await this.edgePage(
+      `${metaAccountPath(context.accountId)}/${kind === "campaign" ? "campaigns" : kind === "adset" ? "adsets" : "ads"}`,
+      { fields },
+      context.credentials.accessToken,
+      limit,
+      cursor,
+    );
+    return {
+      ...page,
+      provenance: provenance("META_ADS", `Meta Graph API ${kind}`),
+    };
+  }
+
+  public async detailedReport(
+    context: ProviderReadContext,
+    request: MetaInsightsRequest,
+  ) {
+    const insights = await this.flexibleInsights(context, {
+      ...request,
+      level: "campaign",
+    });
+    const items = [];
+    // Bound provider concurrency; a 100-row report must not burst 100 requests.
+    for (let offset = 0; offset < insights.items.length; offset += 5) {
+      items.push(
+        ...(await Promise.all(
+          insights.items.slice(offset, offset + 5).map(async (metrics) => {
+            const id = assertExternalId(
+              String(metrics.campaign_id ?? ""),
+              "campaign id",
+            );
+            const campaign = await this.get(
+              this.graphUrl(id, {
+                fields: "id,name,status,account_id",
+                access_token: context.credentials.accessToken,
+              }),
+            );
+            if (
+              metaAccountPath(String(campaign.account_id ?? "")) !==
+              metaAccountPath(context.accountId)
+            )
+              throw new ProviderError(
+                "invalid_account",
+                "Campaign does not belong to selected account.",
+              );
+            return {
+              id,
+              name: String(campaign.name ?? metrics.campaign_name ?? ""),
+              status: optionalString(campaign.status),
+              metrics,
+            };
+          }),
+        )),
+      );
+    }
+    return {
+      ...insights,
+      items,
+      report_type: "campaign_performance",
+      coverage: "campaigns_with_insights_in_requested_period",
+    };
+  }
+
+  private async edgePage(
+    path: string,
+    params: Record<string, string>,
+    token: string,
+    limit: number,
+    cursor?: string,
+  ) {
+    const bounded = Math.min(Math.max(limit, 1), 100);
+    const response = await this.get(
+      this.graphUrl(path, {
+        ...params,
+        access_token: token,
+        limit: String(bounded),
+        ...(cursor ? { after: cursor } : {}),
+      }),
+    );
+    const items = Array.isArray(response.data)
+      ? response.data.filter(
+          (r): r is MetaResponse => !!r && typeof r === "object",
+        )
+      : [];
+    const paging =
+      response.paging && typeof response.paging === "object"
+        ? (response.paging as MetaResponse)
+        : {};
+    const cursors =
+      paging.cursors && typeof paging.cursors === "object"
+        ? (paging.cursors as MetaResponse)
+        : {};
+    const next = typeof paging.next === "string" && !!paging.next;
+    const after =
+      typeof cursors.after === "string" &&
+      /^[A-Za-z0-9_=-]{1,2048}$/.test(cursors.after)
+        ? cursors.after
+        : undefined;
+    return {
+      items: items.slice(0, bounded),
+      ...(next && after ? { nextCursor: after } : {}),
+      truncated: !!next || items.length > bounded,
+    };
   }
 
   public async health(
@@ -465,7 +688,9 @@ export class MetaAdsAdapter
       .map((row) => ({
         id: String(row.id || ""),
         name: optionalString(row.name),
-        verificationStatus: optionalString(row.verificationStatus),
+        verificationStatus: optionalString(
+          row.verificationStatus ?? row.verification_status,
+        ),
         provenance: provenance("META_ADS", "Meta Graph API /me/businesses"),
       }))
       .filter((row) => row.id);
@@ -571,10 +796,40 @@ export class MetaAdsAdapter
       }));
   }
 
+  public async getPagePost(
+    credentials: ProviderCredentialPayload,
+    pageId: string,
+    postId: string,
+  ) {
+    if (
+      !/^\d{1,40}$/.test(pageId) ||
+      !new RegExp(`^${pageId}_[0-9]{1,40}$`).test(postId)
+    )
+      throw new ProviderError(
+        "invalid_account",
+        "Post does not belong to selected Page.",
+      );
+    const token = await this.pageAccessToken(credentials.accessToken, pageId);
+    const row = await this.get(
+      this.graphUrl(postId, {
+        fields:
+          "id,message,story,created_time,permalink_url,shares,reactions.limit(0).summary(true)",
+        access_token: token,
+      }),
+    );
+    if (row.id !== postId)
+      throw new ProviderError("invalid_account", "Unexpected Page post.");
+    return {
+      ...row,
+      provenance: provenance("META_ADS", "Meta Graph API Page post"),
+    };
+  }
+
   public async listPagePosts(
     credentials: ProviderCredentialPayload,
     pageId: string,
     limit = 25,
+    cursor?: string,
   ) {
     const token = await this.pageAccessToken(credentials.accessToken, pageId);
     const edge = `${assertExternalId(pageId, "page id")}/published_posts`;
@@ -584,9 +839,20 @@ export class MetaAdsAdapter
       "id,message,story,created_time,permalink_url,full_picture,attachments{description,title,type,url},shares",
     ];
     let rows: MetaResponse[] = [];
+    let nextCursor: string | undefined;
+    let truncated = false;
     for (const [index, fields] of fieldVariants.entries()) {
       try {
-        rows = await this.listEdge(edge, { fields }, token, limit);
+        const page = await this.edgePage(
+          edge,
+          { fields },
+          token,
+          limit,
+          cursor,
+        );
+        rows = page.items;
+        nextCursor = page.nextCursor;
+        truncated = page.truncated;
         break;
       } catch (error) {
         if (
@@ -602,6 +868,8 @@ export class MetaAdsAdapter
     }
     return {
       items: rows,
+      ...(nextCursor ? { nextCursor } : {}),
+      truncated,
       provenance: provenance(
         "META_ADS",
         "Meta Graph API Page published_posts",

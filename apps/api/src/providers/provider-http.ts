@@ -26,6 +26,7 @@ export async function providerJson<T>(
           false,
           String(response.status),
           error.providerCode,
+          error.providerSubcode,
         );
       }
       if (response.status === 404) {
@@ -35,6 +36,7 @@ export async function providerJson<T>(
           false,
           String(response.status),
           error.providerCode,
+          error.providerSubcode,
         );
       }
       if (response.status === 429) {
@@ -44,6 +46,7 @@ export async function providerJson<T>(
           true,
           String(response.status),
           error.providerCode,
+          error.providerSubcode,
         );
       }
       if (response.status >= 500) {
@@ -53,6 +56,7 @@ export async function providerJson<T>(
           true,
           String(response.status),
           error.providerCode,
+          error.providerSubcode,
         );
       }
       throw new ProviderError(
@@ -61,6 +65,7 @@ export async function providerJson<T>(
         false,
         String(response.status),
         error.providerCode,
+        error.providerSubcode,
       );
     }
     return payload as T;
@@ -94,12 +99,20 @@ export function assertExternalId(value: string, label: string): string {
 function safeProviderError(payload: unknown): {
   code: "provider_response_invalid" | "insufficient_permissions";
   providerCode?: string;
+  providerSubcode?: string;
 } {
   if (!payload || typeof payload !== "object") {
     return { code: "provider_response_invalid" };
   }
   const value = payload as Record<string, unknown>;
   const error = value.error;
+  const rawSubcode =
+    error && typeof error === "object"
+      ? String((error as Record<string, unknown>).error_subcode ?? "")
+      : "";
+  const subcode = /^\d{1,12}$/.test(rawSubcode)
+    ? { providerSubcode: rawSubcode }
+    : {};
   const providerCode =
     typeof error === "string"
       ? error.slice(0, 80) || undefined
@@ -119,10 +132,12 @@ function safeProviderError(payload: unknown): {
   return /permission|access|scope|forbidden|unauthorized/.test(message)
     ? {
         code: "insufficient_permissions",
+        ...subcode,
         ...(providerCode ? { providerCode } : {}),
       }
     : {
         code: "provider_response_invalid",
+        ...subcode,
         ...(providerCode ? { providerCode } : {}),
       };
 }

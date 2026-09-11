@@ -16,6 +16,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
 import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
+import { MetaReadError } from "../providers/meta-read.error.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
@@ -159,7 +160,21 @@ export class McpController {
                 : "unknown",
             httpStatus:
               error instanceof HttpException ? error.getStatus() : undefined,
-            errorCode: error instanceof PreviewError ? error.code : undefined,
+            errorCode:
+              error instanceof PreviewError || error instanceof MetaReadError
+                ? error.code
+                : undefined,
+            ...(error instanceof MetaReadError
+              ? {
+                  provider: error.provider,
+                  operation: error.operation,
+                  upstreamCode: error.upstream_code,
+                  upstreamSubcode: error.upstream_subcode,
+                  upstreamHttpStatus: error.httpStatus,
+                  retryable: error.retryable,
+                  ...error.context,
+                }
+              : {}),
             workspaceId: principal.workspaceId,
             serviceTokenId: principal.tokenId,
             serviceIdentityId: principal.serviceIdentityId,
@@ -202,6 +217,9 @@ export class McpController {
                 type: "text",
                 text: JSON.stringify({
                   message,
+                  ...(error instanceof MetaReadError
+                    ? error.publicResult()
+                    : {}),
                   ...(error instanceof PreviewError
                     ? { code: error.code }
                     : {}),

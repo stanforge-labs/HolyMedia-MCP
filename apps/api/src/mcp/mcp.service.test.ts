@@ -5,7 +5,14 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
   const database = {
     client: {
       providerAccount: {
-        findMany: async () => accounts,
+        findMany: async ({
+          where,
+        }: { where?: { workspaceId?: string; id?: { in: string[] } } } = {}) =>
+          accounts.filter(
+            (a) =>
+              (!where?.workspaceId || a.workspaceId === where.workspaceId) &&
+              (!where?.id || where.id.in.includes(String(a.id))),
+          ),
         findFirst: async ({ where }: { where: Record<string, unknown> }) => {
           const or = where.OR as Array<Record<string, string>>;
           return accounts.find(
@@ -181,7 +188,7 @@ describe("MCP V1-compatible policy", () => {
     "get_page_post_engagement",
     "get_page_instagram_account",
   ])(
-    "blocks connection-wide Meta asset tool %s for an account-restricted token",
+    "blocks Meta asset tool %s when no account is authorized for the key",
     async (tool) => {
       const service = serviceWithAccounts([metaAccount]);
       await expect(
@@ -192,7 +199,7 @@ describe("MCP V1-compatible policy", () => {
             tokenId: "token-a",
             serviceIdentityId: "identity-a",
             scopes: ["adforge:mcp:read"],
-            accountIds: [metaAccount.id],
+            accountIds: ["foreign-internal-account"],
           },
           tool,
           {
@@ -204,7 +211,7 @@ describe("MCP V1-compatible policy", () => {
           },
         ),
       ).rejects.toThrow(
-        "Connection-wide assets are not available to an account-restricted service token.",
+        "Выберите доступный кабинет текущего подключения Meta.",
       );
     },
   );

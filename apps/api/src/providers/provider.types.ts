@@ -209,8 +209,11 @@ export interface MetaReadAdapter extends ProviderReadAdapter {
     credentials: ProviderCredentialPayload,
     pageId: string,
     limit?: number,
+    cursor?: string,
   ): Promise<{
     items: Record<string, unknown>[];
+    nextCursor?: string;
+    truncated?: boolean;
     provenance: ProviderProvenance;
   }>;
   getPageInstagramAccount(

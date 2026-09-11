@@ -26,6 +26,9 @@ import { ProviderError, toSafeProviderException } from "./provider.errors.js";
 import { ProviderRefreshCoordinator } from "./refresh-coordinator.service.js";
 import { ProviderRegistry } from "./provider.registry.js";
 import { ProviderMetricsService } from "./provider.metrics.js";
+import { MetaAdsAdapter } from "./adapters/meta.ads.js";
+import type { MetaInsightsRequest } from "./meta-insights.parameters.js";
+import { metaReadError } from "./meta-read.error.js";
 import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
@@ -966,6 +969,64 @@ export class ProviderService {
     return adapter.listBusinesses(context.credentials);
   }
 
+  public async metaEntity(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    kind: "campaign" | "adset" | "ad",
+    id?: string,
+    limit = 100,
+    cursor?: string,
+  ) {
+    try {
+      const context = await this.readContext(
+        workspaceId,
+        connectionId,
+        accountId,
+      );
+      if (!(context.adapter instanceof MetaAdsAdapter))
+        throw new ProviderError("invalid_account", "Meta account required.");
+      return await context.adapter.readEntity(
+        context.read,
+        kind,
+        id,
+        limit,
+        cursor,
+      );
+    } catch (error) {
+      throw metaReadError(error, "read_entity");
+    }
+  }
+
+  public async metaInsights(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    request: MetaInsightsRequest,
+    detailed = false,
+  ) {
+    try {
+      const context = await this.readContext(
+        workspaceId,
+        connectionId,
+        accountId,
+      );
+      if (!(context.adapter instanceof MetaAdsAdapter))
+        throw new ProviderError(
+          "provider_not_configured",
+          "Meta Insights is not configured.",
+        );
+      return detailed
+        ? await context.adapter.detailedReport(context.read, request)
+        : await context.adapter.flexibleInsights(context.read, request);
+    } catch (error) {
+      throw metaReadError(
+        error,
+        detailed ? "get_meta_ads_detailed_report" : "get_flexible_insights",
+      );
+    }
+  }
+
   public async metaPermissions(workspaceId: string, connectionId: string) {
     const context = await this.connectionReadCredentials(
       workspaceId,
@@ -1058,11 +1119,27 @@ export class ProviderService {
     return adapter.listBusinessPages(context.credentials, businessId);
   }
 
+  public async metaPagePost(
+    workspaceId: string,
+    connectionId: string,
+    pageId: string,
+    postId: string,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    if (!(context.adapter instanceof MetaAdsAdapter))
+      throw new ProviderError("invalid_account", "Meta connection required.");
+    return context.adapter.getPagePost(context.credentials, pageId, postId);
+  }
+
   public async metaPagePosts(
     workspaceId: string,
     connectionId: string,
     pageId: string,
     limit?: number,
+    cursor?: string,
   ) {
     const context = await this.connectionReadCredentials(
       workspaceId,
@@ -1074,7 +1151,7 @@ export class ProviderService {
         "provider_not_configured",
         "Meta Page read is not configured.",
       );
-    return adapter.listPagePosts(context.credentials, pageId, limit);
+    return adapter.listPagePosts(context.credentials, pageId, limit, cursor);
   }
 
   public async metaInstagram(

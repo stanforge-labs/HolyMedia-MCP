@@ -10,6 +10,12 @@ import { DatabaseService } from "../infrastructure/database.service.js";
 import { ReportService } from "../reports/report.service.js";
 import { McpPreviewService } from "./mcp-preview.service.js";
 import { PreviewError } from "./mcp-preview.error.js";
+import {
+  META_ASSET_TOOLS,
+  MetaAssetAuthorizationService,
+} from "./meta-asset-authorization.service.js";
+import { metaInsightsParameters } from "../providers/meta-insights.parameters.js";
+import { metaReadSchema } from "./meta-read.schema.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
 
@@ -327,7 +333,8 @@ export class McpService {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
       description: toolDescription(name),
-      inputSchema: previewToolSchema(name) ??
+      inputSchema: metaReadSchema(name) ??
+        previewToolSchema(name) ??
         ga4ToolSchema(name) ?? {
           type: "object",
           additionalProperties: true,
@@ -347,6 +354,73 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (
+      [
+        "get_campaign",
+        "get_object",
+        "list_objects",
+        "list_account_objects",
+      ].includes(name) &&
+      providerId(args.provider) === "META_ADS"
+    ) {
+      const kind =
+        name === "get_campaign"
+          ? "campaign"
+          : text(
+              args.object_type ?? args.objectType,
+              name === "get_object" ? "account" : "campaign",
+            );
+      if (["campaign", "adset", "ad"].includes(kind)) {
+        const account = await this.account(principal, args);
+        const id =
+          name === "get_campaign"
+            ? text(args.campaign_id ?? args.campaignId)
+            : name === "get_object"
+              ? text(args.object_id ?? args.objectId)
+              : undefined;
+        if ((name === "get_campaign" || name === "get_object") && !id)
+          throw new ForbiddenException("object_id is required.");
+        const limit = args.limit ?? 100;
+        if (
+          !Number.isInteger(limit) ||
+          Number(limit) < 1 ||
+          Number(limit) > 100
+        )
+          throw new ForbiddenException("limit must be between 1 and 100.");
+        return this.providers.metaEntity(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          kind as "campaign" | "adset" | "ad",
+          id,
+          Number(limit),
+          text(args.cursor) || undefined,
+        );
+      }
+    }
+    if (
+      name === "get_meta_ads_detailed_report" ||
+      (name === "get_flexible_insights" &&
+        providerId(args.provider) === "META_ADS")
+    ) {
+      const account = await this.account(principal, {
+        ...args,
+        provider: "META_ADS",
+      });
+      return this.providers.metaInsights(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        metaInsightsParameters(args, name === "get_meta_ads_detailed_report"),
+        name === "get_meta_ads_detailed_report",
+      );
+    }
+    if (META_ASSET_TOOLS.has(name)) {
+      return new MetaAssetAuthorizationService(
+        this.database,
+        this.providers,
+      ).call(principal, name, args);
+    }
     const previewOperation = COMPAT_PREVIEW_OPERATIONS[name];
     if (previewOperation) {
       return this.compatPreview(principal, name, previewOperation, args);
@@ -640,147 +714,6 @@ export class McpService {
           account.connectionId,
         );
         return { ...permissions, status: connection.status };
-      }
-      case "list_meta_businesses": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        return this.providers.metaBusinesses(
-          principal.workspaceId,
-          account.connectionId,
-        );
-      }
-      case "get_meta_business": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        const businesses = await this.providers.metaBusinesses(
-          principal.workspaceId,
-          account.connectionId,
-        );
-        const businessId = text(args.business_id || args.businessId);
-        return (
-          businesses.find((business) => business.id === businessId) ?? null
-        );
-      }
-      case "list_business_ad_accounts": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        return this.providers.metaBusinessAdAccounts(
-          principal.workspaceId,
-          account.connectionId,
-          text(args.business_id || args.businessId),
-        );
-      }
-      case "list_business_pages": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        return this.providers.metaBusinessPages(
-          principal.workspaceId,
-          account.connectionId,
-          text(args.business_id || args.businessId),
-        );
-      }
-      case "list_meta_pages": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        return this.providers.metaPages(
-          principal.workspaceId,
-          account.connectionId,
-        );
-      }
-      case "get_meta_page": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        const pages = await this.providers.metaPages(
-          principal.workspaceId,
-          account.connectionId,
-        );
-        const pageId = text(args.page_id || args.pageId);
-        return pages.find((page) => page.id === pageId) ?? null;
-      }
-      case "list_page_posts": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        return this.providers.metaPagePosts(
-          principal.workspaceId,
-          account.connectionId,
-          text(args.page_id || args.pageId),
-          typeof args.limit === "number" ? args.limit : undefined,
-        );
-      }
-      case "get_page_post": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        const posts = await this.providers.metaPagePosts(
-          principal.workspaceId,
-          account.connectionId,
-          text(args.page_id || args.pageId),
-          100,
-        );
-        const postId = text(args.post_id || args.postId);
-        return (
-          posts.items.find((post) => String(post.id ?? "") === postId) ?? null
-        );
-      }
-      case "get_page_post_engagement": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        const posts = await this.providers.metaPagePosts(
-          principal.workspaceId,
-          account.connectionId,
-          text(args.page_id || args.pageId),
-          100,
-        );
-        const postId = text(args.post_id || args.postId);
-        const post = posts.items.find(
-          (item) => String(item.id ?? "") === postId,
-        );
-        if (!post) return null;
-        return {
-          id: postId,
-          shares: post.shares ?? null,
-          reactions: post.reactions ?? null,
-          comments: post.comments ?? null,
-          provenance: posts.provenance,
-        };
-      }
-      case "get_page_instagram_account": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        this.ensureConnectionWideReadAllowed(principal);
-        return this.providers.metaInstagram(
-          principal.workspaceId,
-          account.connectionId,
-          text(args.page_id || args.pageId),
-        );
       }
       case "get_search_console_report": {
         const siteUrl = await this.searchConsoleSite(
@@ -1339,6 +1272,15 @@ export class McpService {
     name: string,
     args: JsonObject,
   ): Promise<unknown> {
+    if (
+      (name === "get_connected_assets" || name === "get_asset_health") &&
+      providerId(args.provider) === "META_ADS"
+    ) {
+      return new MetaAssetAuthorizationService(
+        this.database,
+        this.providers,
+      ).discover(principal, args);
+    }
     const account = await this.account(principal, args);
     const dates = range(args) ?? defaultReportRange();
     if (name === "detect_anomalies") {
@@ -1803,6 +1745,8 @@ export class McpService {
     const identifiers: Array<Record<string, string>> = [
       { externalAccountId: requested },
     ];
+    if (provider === "META_ADS" && /^\d{1,30}$/.test(requested))
+      identifiers.push({ externalAccountId: `act_${requested}` });
     if (isUuid(requested)) identifiers.unshift({ id: requested });
     const account = await this.database.client.providerAccount.findFirst({
       where: {
