@@ -1124,6 +1124,7 @@ export class ProviderService {
     connectionId: string,
     pageId: string,
     postId: string,
+    engagement = false,
   ) {
     const context = await this.connectionReadCredentials(
       workspaceId,
@@ -1131,7 +1132,12 @@ export class ProviderService {
     );
     if (!(context.adapter instanceof MetaAdsAdapter))
       throw new ProviderError("invalid_account", "Meta connection required.");
-    return context.adapter.getPagePost(context.credentials, pageId, postId);
+    return context.adapter.getPagePost(
+      context.credentials,
+      pageId,
+      postId,
+      engagement,
+    );
   }
 
   public async metaPagePosts(

@@ -188,6 +188,7 @@ export class MetaAssetAuthorizationService {
           connection,
           id,
           postId,
+          operation === "get_page_post_engagement",
         );
       }
       if (operation === "get_page_instagram_account")

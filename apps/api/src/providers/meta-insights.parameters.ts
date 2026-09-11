@@ -16,6 +16,7 @@ export const META_METRICS = [
   "conversions",
   "results",
   "cost_per_action_type",
+  "purchase_roas",
 ] as const;
 export type MetaInsightsRequest = {
   range: ProviderDateRange;

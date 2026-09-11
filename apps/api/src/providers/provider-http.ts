@@ -27,6 +27,7 @@ export async function providerJson<T>(
           String(response.status),
           error.providerCode,
           error.providerSubcode,
+          error.requirements,
         );
       }
       if (response.status === 404) {
@@ -37,6 +38,7 @@ export async function providerJson<T>(
           String(response.status),
           error.providerCode,
           error.providerSubcode,
+          error.requirements,
         );
       }
       if (response.status === 429) {
@@ -47,6 +49,7 @@ export async function providerJson<T>(
           String(response.status),
           error.providerCode,
           error.providerSubcode,
+          error.requirements,
         );
       }
       if (response.status >= 500) {
@@ -57,6 +60,7 @@ export async function providerJson<T>(
           String(response.status),
           error.providerCode,
           error.providerSubcode,
+          error.requirements,
         );
       }
       throw new ProviderError(
@@ -66,6 +70,7 @@ export async function providerJson<T>(
         String(response.status),
         error.providerCode,
         error.providerSubcode,
+        error.requirements,
       );
     }
     return payload as T;
@@ -100,6 +105,10 @@ function safeProviderError(payload: unknown): {
   code: "provider_response_invalid" | "insufficient_permissions";
   providerCode?: string;
   providerSubcode?: string;
+  requirements?: {
+    permission: "pages_read_user_content";
+    alternativeFeature?: "Page Public Content Access";
+  };
 } {
   if (!payload || typeof payload !== "object") {
     return { code: "provider_response_invalid" };
@@ -132,6 +141,18 @@ function safeProviderError(payload: unknown): {
   return /permission|access|scope|forbidden|unauthorized/.test(message)
     ? {
         code: "insufficient_permissions",
+        ...(providerCode === "10" && message.includes("pages_read_user_content")
+          ? {
+              requirements: {
+                permission: "pages_read_user_content" as const,
+                ...(message.includes("page public content access")
+                  ? {
+                      alternativeFeature: "Page Public Content Access" as const,
+                    }
+                  : {}),
+              },
+            }
+          : {}),
         ...subcode,
         ...(providerCode ? { providerCode } : {}),
       }

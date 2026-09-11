@@ -346,12 +346,47 @@ export class MetaAdsAdapter
           value: assertExternalId(request.campaignId, "campaign id"),
         },
       ]);
+    const unsupportedMetrics: Array<{
+      metric: string;
+      reason: string;
+      upstream_code: string;
+    }> = [];
     const page = await this.edgePage(
       `${metaAccountPath(context.accountId)}/insights`,
       params,
       context.credentials.accessToken,
       request.limit,
       request.cursor,
+    ).catch(async (error: unknown) => {
+      // Only a deterministic invalid-field/combination response permits a read-only
+      // retry without this known optional metric. Never mask auth or rate limits.
+      if (
+        !(error instanceof ProviderError) ||
+        error.providerCode !== "100" ||
+        !request.metrics.includes("purchase_roas") ||
+        request.metrics.length < 2
+      )
+        throw error;
+      const supported = await this.edgePage(
+        `${metaAccountPath(context.accountId)}/insights`,
+        {
+          ...params,
+          fields: fields.filter((f) => f !== "purchase_roas").join(","),
+        },
+        context.credentials.accessToken,
+        request.limit,
+        request.cursor,
+      );
+      unsupportedMetrics.push({
+        metric: "purchase_roas",
+        reason:
+          "meta_rejected_metric_combination; other requested metrics fetched in a separate valid request",
+        upstream_code: "100",
+      });
+      return supported;
+    });
+    const effectiveMetrics = request.metrics.filter(
+      (m) => !unsupportedMetrics.some((u) => u.metric === m),
     );
     const items = page.items.map((row) => {
       const result: Record<string, unknown> = {
@@ -361,13 +396,18 @@ export class MetaAdsAdapter
       };
       for (const field of fields.filter((f) => !request.metrics.includes(f)))
         if (row[field] !== undefined) result[field] = row[field];
-      for (const metric of request.metrics) {
+      for (const metric of effectiveMetrics) {
         if (["conversions", "results"].includes(metric)) {
           result[metric] = metaConversions(row.actions);
           continue;
         }
         if (
-          ["actions", "action_values", "cost_per_action_type"].includes(metric)
+          [
+            "actions",
+            "action_values",
+            "cost_per_action_type",
+            "purchase_roas",
+          ].includes(metric)
         ) {
           result[metric] = Array.isArray(row[metric])
             ? (row[metric] as MetaResponse[]).map((a) => ({
@@ -387,6 +427,30 @@ export class MetaAdsAdapter
       period: request.range,
       level: request.level,
       requested_metrics: request.metrics,
+      returned_metrics: effectiveMetrics.filter((m) =>
+        page.items.some((row) =>
+          Object.hasOwn(
+            row,
+            ["conversions", "results"].includes(m) ? "actions" : m,
+          ),
+        ),
+      ),
+      unsupported_metrics: unsupportedMetrics,
+      unavailable_metrics: effectiveMetrics
+        .filter(
+          (m) =>
+            !page.items.some((row) =>
+              Object.hasOwn(
+                row,
+                ["conversions", "results"].includes(m) ? "actions" : m,
+              ),
+            ),
+        )
+        .map((metric) => ({
+          metric,
+          reason:
+            "not_returned_by_meta_for_this_response; not a zero or proof of unsupported capability",
+        })),
       breakdowns: request.breakdowns,
       provenance: provenance(
         "META_ADS",
@@ -800,6 +864,7 @@ export class MetaAdsAdapter
     credentials: ProviderCredentialPayload,
     pageId: string,
     postId: string,
+    engagement = false,
   ) {
     if (
       !/^\d{1,40}$/.test(pageId) ||
@@ -812,8 +877,9 @@ export class MetaAdsAdapter
     const token = await this.pageAccessToken(credentials.accessToken, pageId);
     const row = await this.get(
       this.graphUrl(postId, {
-        fields:
-          "id,message,story,created_time,permalink_url,shares,reactions.limit(0).summary(true)",
+        fields: engagement
+          ? "id,shares,reactions.limit(0).summary(true),comments.limit(0).summary(true)"
+          : "id,message,story,created_time,permalink_url,shares",
         access_token: token,
       }),
     );

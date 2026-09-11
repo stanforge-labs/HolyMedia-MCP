@@ -12,6 +12,10 @@ export class ProviderError extends Error {
     public readonly providerStatus?: string,
     public readonly providerCode?: string,
     public readonly providerSubcode?: string,
+    public readonly requirements?: {
+      permission: "pages_read_user_content";
+      alternativeFeature?: "Page Public Content Access";
+    },
   ) {
     super(message);
     this.name = "ProviderError";
