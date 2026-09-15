@@ -124,6 +124,27 @@ export default function AuthPage() {
       setOauthTransaction(transaction);
     }
     if (requested === "signup" || requested === "forgot") setMode(requested);
+    // Restore only ordinary login; consent/signup/reset flows keep their own lifecycle.
+    const controller = new AbortController();
+    if ((!requested || requested === "login") && !transaction) {
+      void fetch(`${API}/api/v1/auth/session`, {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (
+            response.ok &&
+            (await response.json()).user &&
+            !controller.signal.aborted
+          )
+            window.location.replace(safeDashboardPath(query.get("next")));
+        })
+        .catch(() => {
+          /* A temporary API error does not invalidate the cookie. */
+        });
+    }
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {

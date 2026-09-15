@@ -485,6 +485,8 @@ export default function DashboardPage() {
   const [reportPreviewError, setReportPreviewError] = useState("");
   const [reportDownloadError, setReportDownloadError] = useState("");
   const reportAccountTriggerRef = useRef<HTMLButtonElement>(null);
+  const tiktokAccountTriggerRef = useRef<HTMLElement | null>(null);
+  const [accountSaveError, setAccountSaveError] = useState("");
   const [analysisUrl, setAnalysisUrl] = useState("");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("quick");
   const [analysisBrief, setAnalysisBrief] = useState<AnalysisBrief>({
@@ -663,10 +665,16 @@ export default function DashboardPage() {
     const response = await fetch(`${API}/api/v1/workspaces`, {
       credentials: "include",
       cache: "no-store",
-    });
-    if (!response.ok) {
+    }).catch(() => null);
+    if (response?.status === 401) {
       const requestedPath = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/auth?next=${encodeURIComponent(requestedPath)}`);
+      return;
+    }
+    if (!response?.ok) {
+      fail(
+        "Не удалось восстановить данные. Обновите страницу — повторный вход не требуется, пока сессия действительна.",
+      );
       return;
     }
     const data = (await response.json()) as Workspace[];
@@ -867,6 +875,12 @@ export default function DashboardPage() {
   }, [reportPickerOpen]);
 
   function openAccountSelector(connection: Connection) {
+    setAccountSaveError("");
+    if (connection.provider === "TIKTOK_ADS")
+      tiktokAccountTriggerRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
     setDrafts((current) => ({
       ...current,
       [connection.id]: connection.accounts
@@ -878,6 +892,10 @@ export default function DashboardPage() {
   }
 
   function closeAccountSelector() {
+    if (selectorConnection?.provider === "TIKTOK_ADS") {
+      setHighlightedProvider(null);
+      requestAnimationFrame(() => tiktokAccountTriggerRef.current?.focus());
+    }
     setOpenAccountsId(null);
     setAccountSearch("");
   }
@@ -1007,10 +1025,12 @@ export default function DashboardPage() {
       (account) => account.enabled !== selected.has(account.id),
     );
     if (!changes.length) {
+      if (connection.provider === "TIKTOK_ADS") closeAccountSelector();
       notify("Выбор уже сохранён.");
       return;
     }
     setSavingAccounts(connection.id);
+    setAccountSaveError("");
     try {
       const csrfToken = await csrf();
       const response = await fetch(
@@ -1026,10 +1046,32 @@ export default function DashboardPage() {
         },
       );
       if (!response.ok) throw new Error();
-      await loadConnections(active);
+      if (connection.provider === "TIKTOK_ADS") {
+        const accounts = (await response.json()) as Connection["accounts"];
+        if (!Array.isArray(accounts)) throw new Error();
+        setConnections((current) =>
+          current.map((item) =>
+            item.id === connection.id ? { ...item, accounts } : item,
+          ),
+        );
+        setDrafts((current) => ({
+          ...current,
+          [connection.id]: accounts
+            .filter((account) => account.enabled)
+            .map((account) => account.id),
+        }));
+      } else await loadConnections(active);
       closeAccountSelector();
       notify("Выбранные кабинеты сохранены.");
     } catch (cause) {
+      if (connection.provider === "TIKTOK_ADS") {
+        setAccountSaveError(
+          language === "en"
+            ? "Could not save your selection. Your choices are preserved. Please try again."
+            : "Не удалось сохранить выбор. Ваш выбор сохранён в окне — попробуйте ещё раз.",
+        );
+        return;
+      }
       await loadConnections(active);
       fail(
         cause instanceof Error
@@ -3305,6 +3347,7 @@ export default function DashboardPage() {
                   </p>
                 )}
                 <div className="account-selector__save">
+                  {accountSaveError && <p role="alert">{accountSaveError}</p>}
                   <button
                     className="secondary-button"
                     type="button"
