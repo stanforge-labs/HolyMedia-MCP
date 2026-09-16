@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./locale-link";
 import { useLanguage } from "./language-switcher";
 
 export function SiteFooter({ compact = false }: { compact?: boolean }) {

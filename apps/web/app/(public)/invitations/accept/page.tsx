@@ -1,6 +1,7 @@
 "use client";
+import { currentLocaleHref } from "../../../components/locale-routing";
 
-import Link from "next/link";
+import Link from "../../../components/locale-link";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { LanguageSwitcher } from "../../../components/language-switcher";
@@ -50,7 +51,10 @@ export default function AcceptInvitationPage() {
       setMessage(
         `Приглашение принято. Команда: ${data.workspace?.name ?? "доступ открыт"}.`,
       );
-      window.setTimeout(() => window.location.assign("/dashboard"), 600);
+      window.setTimeout(
+        () => window.location.assign(currentLocaleHref("/dashboard")),
+        600,
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error

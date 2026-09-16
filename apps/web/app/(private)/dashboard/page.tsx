@@ -1,4 +1,9 @@
 "use client";
+import {
+  currentLocaleHref,
+  localizedHref,
+  withoutLocale,
+} from "../../components/locale-routing";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
@@ -668,7 +673,9 @@ export default function DashboardPage() {
     }).catch(() => null);
     if (response?.status === 401) {
       const requestedPath = `${window.location.pathname}${window.location.search}`;
-      window.location.assign(`/auth?next=${encodeURIComponent(requestedPath)}`);
+      window.location.assign(
+        currentLocaleHref(`/auth?next=${encodeURIComponent(requestedPath)}`),
+      );
       return;
     }
     if (!response?.ok) {
@@ -768,7 +775,7 @@ export default function DashboardPage() {
     const requestedSection = dashboardSectionFromLegacyQuery(
       query.get("section"),
     );
-    if (requestedSection && pathname === "/dashboard")
+    if (requestedSection && withoutLocale(pathname) === "/dashboard")
       router.replace(dashboardRoute(requestedSection) as never);
     const oauthProvider = query.get("provider")?.toUpperCase();
     const oauthProviderAliases: Record<string, string> = {
@@ -1464,7 +1471,7 @@ export default function DashboardPage() {
       credentials: "include",
       headers: { "x-csrf-token": await csrf() },
     });
-    window.location.assign("/auth");
+    window.location.assign(currentLocaleHref("/auth"));
   }
 
   const nav: Array<{
@@ -1495,7 +1502,7 @@ export default function DashboardPage() {
         <div className="dashboard-topbar">
           <a
             className="brand-link"
-            href="/dashboard"
+            href={localizedHref("/dashboard", language)}
             aria-label="HolyMedia MCP — обзор"
           >
             <BrandLockup />

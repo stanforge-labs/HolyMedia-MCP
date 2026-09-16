@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useLanguage } from "./language-switcher";
+import { privacyCopy } from "./privacy-copy";
 
 type LegalSection = {
   heading: string;
@@ -17,171 +18,6 @@ type LegalCopy = {
   sections: LegalSection[];
   contact: string;
   site: string;
-};
-
-const privacy: Record<"ru" | "en", LegalCopy> = {
-  ru: {
-    eyebrow: "Правовая информация",
-    title: "Политика конфиденциальности HolyMedia MCP",
-    updated: "Последнее обновление: 22 июня 2026 года",
-    intro: [
-      "HolyMedia MCP — B2B-сервис для подключения рекламных кабинетов, просмотра рекламных данных, анализа кампаний и работы с AI-клиентами.",
-      "В этой политике описано, какие данные мы обрабатываем, для чего они нужны и как мы защищаем их при работе с сайтом, кабинетом и OAuth-подключениями рекламных платформ.",
-    ],
-    sections: [
-      {
-        heading: "1. Какие данные мы обрабатываем",
-        paragraphs: ["Мы можем обрабатывать следующие категории данных:"],
-        items: [
-          "данные аккаунта: имя, email, настройки профиля, статус аккаунта и данные сессии;",
-          "данные рекламных подключений: платформы, ID и названия доступных рекламных кабинетов, а также выбранные пользователем кабинеты;",
-          "рекламные данные: кампании, статусы, бюджеты, расходы, показы, клики, конверсии и основные показатели эффективности;",
-          "данные авторизации, необходимые для поддержания подключений;",
-          "технические данные: IP-адрес, тип браузера, диагностические события, ошибки и журналы безопасности.",
-        ],
-      },
-      {
-        heading: "2. Как мы используем данные",
-        paragraphs: [
-          "Мы используем данные только для работы функций HolyMedia MCP:",
-        ],
-        items: [
-          "создания и поддержки вашего рабочего пространства;",
-          "подключения рекламных платформ через OAuth;",
-          "показа рекламных кабинетов, кампаний, статусов и показателей;",
-          "подготовки отчётов, рекомендаций и предварительного просмотра действий;",
-          "работы AI-клиентов, подключённых пользователем;",
-          "обеспечения безопасности, предотвращения злоупотреблений и поддержки сервиса.",
-        ],
-      },
-      {
-        heading: "3. Данные Google и Meta",
-        paragraphs: [
-          "HolyMedia MCP получает данные Google Ads и Meta Ads только после явного разрешения пользователя через OAuth и использует их только для рекламной аналитики и работы с подключёнными кабинетами.",
-          "Мы не продаём данные рекламных платформ и не используем их для кредитования, несвязанного профилирования или сторонней рекламы. Данные Google API обрабатываются в соответствии с Политикой пользовательских данных сервисов Google API, включая требования Limited Use.",
-        ],
-      },
-      {
-        heading: "4. Передача третьим лицам",
-        paragraphs: [
-          "Мы не продаём персональные или рекламные данные. Ограниченная передача возможна только инфраструктурным провайдерам, авторизованным рекламным платформам, AI-клиентам, подключённым пользователем, или в случаях, предусмотренных законом.",
-        ],
-      },
-      {
-        heading: "5. Хранение и безопасность",
-        paragraphs: [
-          "Мы используем HTTPS, зашифрованные OAuth-подключения, хешированные ключи доступа, изоляцию данных рабочих пространств, ограниченный доступ к production и защищённые диагностические журналы.",
-          "Секреты платформ, ключи и служебные данные не публикуются и не показываются повторно после сохранения.",
-        ],
-      },
-      {
-        heading: "6. Срок хранения",
-        paragraphs: [
-          "Данные хранятся только столько, сколько необходимо для работы сервиса, обеспечения безопасности, выполнения требований закона и поддержки пользователей.",
-        ],
-      },
-      {
-        heading: "7. Ваши права и удаление данных",
-        paragraphs: [
-          "Вы можете запросить удаление аккаунта, отключение рекламных платформ, экспорт или разъяснение по своим данным через поддержку. Также вы можете отозвать доступ приложения в настройках соответствующей платформы.",
-        ],
-      },
-      {
-        heading: "8. Международная обработка",
-        paragraphs: [
-          "Данные могут обрабатываться на инфраструктуре за пределами страны проживания пользователя. Мы применяем разумные меры защиты в соответствии с этой политикой.",
-        ],
-      },
-      {
-        heading: "9. Изменения политики",
-        paragraphs: [
-          "Мы можем обновлять эту политику. Существенные изменения в обработке данных будут отражены на этой странице и, когда это требуется, потребуют нового согласия.",
-        ],
-      },
-    ],
-    contact: "10. Контакты",
-    site: "Сайт",
-  },
-  en: {
-    eyebrow: "Legal information",
-    title: "HolyMedia MCP Privacy Policy",
-    updated: "Last updated: June 22, 2026",
-    intro: [
-      "HolyMedia MCP is a B2B service for connecting advertising accounts, viewing advertising data, analyzing campaigns, and working with AI clients.",
-      "This policy explains what data we process, why we need it, and how we protect it when you use the website, workspace, and OAuth connections to advertising platforms.",
-    ],
-    sections: [
-      {
-        heading: "1. Data we collect",
-        paragraphs: ["We may process the following categories of data:"],
-        items: [
-          "account data: name, email, profile settings, account status, and session data;",
-          "advertising connection data: platforms, IDs and names of available advertising accounts, and accounts selected by the user;",
-          "advertising data: campaigns, statuses, budgets, spend, impressions, clicks, conversions, and core performance metrics;",
-          "authorization data needed to maintain connections;",
-          "technical data: IP address, browser type, diagnostic events, errors, and security logs.",
-        ],
-      },
-      {
-        heading: "2. How we use data",
-        paragraphs: ["We use data only to provide HolyMedia MCP features:"],
-        items: [
-          "creating and maintaining your workspace;",
-          "connecting advertising platforms through OAuth;",
-          "displaying advertising accounts, campaigns, statuses, and metrics;",
-          "preparing reports, recommendations, and action previews;",
-          "serving AI clients connected by the user;",
-          "providing security, abuse prevention, and service support.",
-        ],
-      },
-      {
-        heading: "3. Google and Meta data",
-        paragraphs: [
-          "HolyMedia MCP receives Google Ads and Meta Ads data only after the user's explicit OAuth permission and uses it only for advertising analytics and work with connected accounts.",
-          "We do not sell advertising platform data or use it for lending, unrelated profiling, or third-party advertising. Google API data is handled in accordance with the Google API Services User Data Policy, including Limited Use requirements.",
-        ],
-      },
-      {
-        heading: "4. Sharing with third parties",
-        paragraphs: [
-          "We do not sell personal or advertising data. Limited sharing may occur only with infrastructure providers, authorized advertising platforms, AI clients connected by the user, or where legally required.",
-        ],
-      },
-      {
-        heading: "5. Storage and security",
-        paragraphs: [
-          "We use HTTPS, encrypted OAuth connections, hashed access keys, workspace isolation, restricted production access, and secure diagnostic logs.",
-          "Platform secrets, keys, and service data are never published or shown again after they are saved.",
-        ],
-      },
-      {
-        heading: "6. Retention",
-        paragraphs: [
-          "Data is retained only as long as necessary to provide the service, maintain security, meet legal requirements, and support users.",
-        ],
-      },
-      {
-        heading: "7. Your rights and deletion",
-        paragraphs: [
-          "You may request account deletion, disconnection of advertising platforms, export, or clarification of your data by contacting support. You can also revoke application access in the settings of the relevant platform.",
-        ],
-      },
-      {
-        heading: "8. International processing",
-        paragraphs: [
-          "Data may be processed on infrastructure outside the user's country of residence. We apply reasonable safeguards consistent with this policy.",
-        ],
-      },
-      {
-        heading: "9. Policy changes",
-        paragraphs: [
-          "We may update this policy. Material changes to data processing will be reflected on this page and, where required, will require renewed consent.",
-        ],
-      },
-    ],
-    contact: "10. Contact",
-    site: "Website",
-  },
 };
 
 const terms: Record<"ru" | "en", LegalCopy> = {
@@ -385,11 +221,49 @@ const terms: Record<"ru" | "en", LegalCopy> = {
 
 export function LegalContent({ kind }: { kind: "privacy" | "terms" }) {
   const language = useLanguage();
-  const copy = (kind === "privacy" ? privacy : terms)[language];
+  const copy = terms[language];
 
   useEffect(() => {
-    document.title = `${copy.title} | HolyMedia MCP`;
-  }, [copy.title]);
+    document.title =
+      kind === "privacy"
+        ? privacyCopy[language].split("\n")[0]!.slice(2)
+        : `${copy.title} | HolyMedia MCP`;
+  }, [copy.title, kind, language]);
+
+  if (kind === "privacy")
+    return (
+      <article className="legal-card" data-language-static>
+        {privacyCopy[language].split(/\n\n+/).map((block, index) => {
+          if (block.startsWith("### "))
+            return <h3 key={index}>{block.slice(4)}</h3>;
+          if (block.startsWith("## "))
+            return <h2 key={index}>{block.slice(3)}</h2>;
+          if (block.startsWith("# "))
+            return <h1 key={index}>{block.slice(2)}</h1>;
+          if (block.startsWith("- "))
+            return (
+              <ul key={index}>
+                {block.split("\n").map((item) => (
+                  <li key={item}>{item.slice(2)}</li>
+                ))}
+              </ul>
+            );
+          if (block.startsWith("https://"))
+            return (
+              <p key={index}>
+                <a href={block}>{block}</a>
+              </p>
+            );
+          if (block === "mcp@holymedia.kz")
+            return (
+              <p key={index}>
+                <a href={`mailto:${block}`}>{block}</a>
+              </p>
+            );
+          return <p key={index}>{block}</p>;
+        })}
+      </article>
+    );
 
   return (
     <article className="legal-card" data-language-static>

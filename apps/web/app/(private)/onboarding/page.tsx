@@ -1,4 +1,5 @@
 "use client";
+import { currentLocaleHref } from "../../components/locale-routing";
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -52,12 +53,18 @@ export default function OnboardingPage() {
       const response = await fetch(`${API}/api/v1/workspaces`, {
         credentials: "include",
       });
-      if (!response.ok) return window.location.assign("/auth");
+      if (!response.ok)
+        return window.location.assign(
+          currentLocaleHref(
+            `/auth?next=${encodeURIComponent(window.location.pathname)}`,
+          ),
+        );
       const workspaces = (await response.json()) as Workspace[];
       const pending = workspaces.find(
         (item) => item.accessStatus === "PENDING" && item.role === "OWNER",
       );
-      if (!pending) return window.location.assign("/dashboard");
+      if (!pending)
+        return window.location.assign(currentLocaleHref("/dashboard"));
       setWorkspace(pending);
       const [companyResponse, sessionResponse] = await Promise.all([
         fetch(`${API}/api/v1/workspaces/${pending.id}`, {
@@ -125,7 +132,8 @@ export default function OnboardingPage() {
       .split(/[\s,;]+/)
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean);
-    if (!emails.length) return window.location.assign("/dashboard");
+    if (!emails.length)
+      return window.location.assign(currentLocaleHref("/dashboard"));
     setBusy(true);
     setError("");
     try {
@@ -297,7 +305,9 @@ export default function OnboardingPage() {
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => window.location.assign("/dashboard")}
+                onClick={() =>
+                  window.location.assign(currentLocaleHref("/dashboard"))
+                }
               >
                 {ru ? "Пропустить и открыть профиль" : "Skip to profile"}
               </button>

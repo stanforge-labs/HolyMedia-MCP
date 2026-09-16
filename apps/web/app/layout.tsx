@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { AppLoader } from "./components/app-loader";
 import { ThemeProvider } from "./components/theme-provider";
 import "./globals.css";
@@ -15,11 +16,13 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
+  const locale =
+    (await headers()).get("x-holymedia-page-locale") === "en" ? "en" : "ru";
   return (
-    <html lang="ru" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <meta
           name="theme-color"

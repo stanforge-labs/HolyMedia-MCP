@@ -8,7 +8,7 @@ import {
   tariffPresentation,
 } from "@holymedia/contracts";
 import { BrandLockup } from "../components/brand-lockup";
-import { ThemeSwitcher } from "../components/theme-switcher";
+import { LanguageSwitcher } from "../components/language-switcher";
 import { ProjectSelect } from "../components/project-select";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -164,7 +164,17 @@ function humanError(code: string) {
 
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [section, setSection] = useState<Section>("overview");
+  const [section, updateSection] = useState<Section>("overview");
+  function setSection(next: Section) {
+    updateSection(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", next);
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }
   const [data, setData] = useState<Json>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -181,7 +191,8 @@ export default function AdminPage() {
     const requestedSection = new URLSearchParams(window.location.search).get(
       "section",
     );
-    if (requestedSection === "support") setSection("support");
+    if (requestedSection && Object.hasOwn(labels, requestedSection))
+      updateSection(requestedSection as Section);
   }, []);
 
   const endpoint = useMemo(() => {
@@ -279,7 +290,7 @@ export default function AdminPage() {
           <small>Защищённый доступ владельца</small>
         </div>
         <div className="admin-header__actions">
-          <ThemeSwitcher compact />
+          <LanguageSwitcher compact />
           <button
             className="text-button"
             onClick={() =>
@@ -532,6 +543,7 @@ function AdminLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
   return (
     <main className="admin-login">
       <section className="admin-login__card">
+        <LanguageSwitcher compact />
         <BrandLockup />
         <p className="eyebrow">HOLYMEDIA MCP · SYSTEM ACCESS</p>
         <h1>Вход в админ-панель</h1>

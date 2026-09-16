@@ -1,4 +1,5 @@
 "use client";
+import { localizedHref } from "../../components/locale-routing";
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
@@ -201,7 +202,7 @@ export default function ClaudeConsentPage() {
         <header className="oauth-consent-card__header">
           <a
             className="oauth-consent-brand"
-            href="/"
+            href={localizedHref("/", language)}
             aria-label="HolyMedia MCP"
           >
             <BrandLockup />

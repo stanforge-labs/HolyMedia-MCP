@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import Link from "../../components/locale-link";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { currentLocaleHref } from "../../components/locale-routing";
 import {
   LanguageSwitcher,
   useLanguage,
@@ -83,20 +84,20 @@ async function csrf(): Promise<string> {
 }
 
 function safeDashboardPath(value: string | null): string {
-  if (!value) return "/dashboard";
+  if (!value) return currentLocaleHref("/dashboard");
   try {
     const url = new URL(value, window.location.origin);
     if (
       url.origin === window.location.origin &&
-      /^\/dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?$/.test(
+      /^\/(?:en\/)?(?:dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?|onboarding)$/.test(
         url.pathname,
       )
     )
-      return `${url.pathname}${url.search}`;
+      return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     // Use the safe dashboard default.
   }
-  return "/dashboard";
+  return currentLocaleHref("/dashboard");
 }
 
 export default function AuthPage() {
@@ -173,7 +174,11 @@ export default function AuthPage() {
     if (oauthTransaction) query.set("oauth_transaction", oauthTransaction);
     if (nextPath !== "/dashboard") query.set("next", nextPath);
     const suffix = query.toString();
-    window.history.replaceState({}, "", suffix ? `/auth?${suffix}` : "/auth");
+    window.history.replaceState(
+      {},
+      "",
+      currentLocaleHref(suffix ? `/auth?${suffix}` : "/auth"),
+    );
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -221,7 +226,7 @@ export default function AuthPage() {
         navigating = true;
         window.location.assign(
           mode === "signup"
-            ? "/onboarding"
+            ? currentLocaleHref("/onboarding")
             : oauthTransaction
               ? `${API}/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
               : nextPath,

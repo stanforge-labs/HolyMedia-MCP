@@ -199,11 +199,11 @@ function normalizeNextPath(value: string): string {
     const dashboard = new URL(value, "https://mcp.holymedia.kz");
     if (
       dashboard.origin === "https://mcp.holymedia.kz" &&
-      /^\/dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?$/.test(
+      /^\/(?:en\/)?dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?$/.test(
         dashboard.pathname,
       )
     ) {
-      return `${dashboard.pathname}${dashboard.search}`;
+      return `${dashboard.pathname}${dashboard.search}${dashboard.hash}`;
     }
   } catch {
     // Continue with the non-dashboard continuation check below.

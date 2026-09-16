@@ -1,7 +1,15 @@
-import Link from "next/link";
+import Link from "../components/locale-link";
 import { LandingHeader } from "../components/landing-header";
 import { SiteFooter } from "../components/site-footer";
 import { TariffCatalog } from "../components/tariff-catalog";
+import { publicPageMetadata } from "../components/page-metadata";
+
+export function generateMetadata() {
+  return publicPageMetadata("/", {
+    ru: "HolyMedia MCP — AI-доступ к рекламным кабинетам",
+    en: "HolyMedia MCP — AI access to advertising accounts",
+  });
+}
 
 const baseUrl =
   process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";

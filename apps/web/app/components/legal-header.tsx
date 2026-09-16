@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./locale-link";
 import { useCallback, useEffect, useState } from "react";
 import { BrandLockup } from "./brand-lockup";
 import { LanguageSwitcher } from "./language-switcher";
+import { currentLocaleHref } from "./locale-routing";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -47,7 +48,7 @@ export function LegalHeader() {
           if (destination) return;
           event.preventDefault();
           void resolveDestination().then((nextDestination) => {
-            window.location.assign(nextDestination);
+            window.location.assign(currentLocaleHref(nextDestination));
           });
         }}
       >

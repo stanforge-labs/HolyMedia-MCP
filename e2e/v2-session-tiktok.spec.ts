@@ -89,48 +89,64 @@ test("valid session restores from login to requested deep link", async ({
   await expect(page).toHaveURL(/dashboard\/connections$/);
 });
 
-test("real session survives Chromium process restart and logout revokes it", async ({}, testInfo) => {
-  test.skip(
-    !process.env.V2_E2E_EMAIL,
-    "Requires isolated CI API/database fixture, never production credentials",
-  );
-  const directory = await mkdtemp(join(tmpdir(), "holymedia-session-browser-"));
-  const options = {
-    headless: true,
-    baseURL: String(testInfo.project.use.baseURL ?? "http://localhost:3000"),
-  };
-  let context = await chromium.launchPersistentContext(directory, options);
-  try {
-    let page = context.pages()[0] ?? (await context.newPage());
-    await page.goto("/auth?next=%2Fdashboard%2Fconnections");
-    await page.locator('input[name="email"]').fill(process.env.V2_E2E_EMAIL!);
-    await page
-      .locator('input[name="password"]')
-      .fill(process.env.V2_E2E_PASSWORD!);
-    await page
-      .getByRole("button", { name: "Войти", exact: true })
-      .last()
-      .click();
-    await expect(page).toHaveURL(/dashboard\/connections$/);
-    const cookie = (await context.cookies()).find(
-      (c) => c.name === "hm_v2_session",
+for (const locale of ["ru", "en"]) {
+  test(`real ${locale} session survives Chromium process restart and logout revokes it`, async ({}, testInfo) => {
+    const prefix = locale === "en" ? "/en" : "";
+    test.skip(
+      !process.env.V2_E2E_EMAIL,
+      "Requires isolated CI API/database fixture, never production credentials",
     );
-    expect(cookie?.httpOnly).toBe(true);
-    expect(cookie!.expires - Date.now() / 1000).toBeGreaterThan(13 * 86400);
-    await page.reload();
-    await expect(page).toHaveURL(/dashboard\/connections$/);
-    await context.close();
-    context = await chromium.launchPersistentContext(directory, options);
-    page = context.pages()[0] ?? (await context.newPage());
-    await page.goto("/dashboard/connections");
-    await expect(page.locator("main.dashboard-shell")).toBeVisible();
-    await expect(page).toHaveURL(/dashboard\/connections$/);
-    await page.getByRole("button", { name: "Выйти", exact: true }).click();
-    await expect(page).toHaveURL(/auth/);
-    await page.goto("/dashboard/connections");
-    await expect(page).toHaveURL(/auth\?next=/);
-  } finally {
-    await context.close();
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+    const directory = await mkdtemp(
+      join(tmpdir(), "holymedia-session-browser-"),
+    );
+    const options = {
+      headless: true,
+      baseURL: String(testInfo.project.use.baseURL ?? "http://localhost:3000"),
+    };
+    let context = await chromium.launchPersistentContext(directory, options);
+    try {
+      let page = context.pages()[0] ?? (await context.newPage());
+      await page.goto(
+        `${prefix}/auth?next=${encodeURIComponent(`${prefix}/dashboard/connections`)}`,
+      );
+      await page.locator('input[name="email"]').fill(process.env.V2_E2E_EMAIL!);
+      await page
+        .locator('input[name="password"]')
+        .fill(process.env.V2_E2E_PASSWORD!);
+      await page
+        .getByRole("button", {
+          name: locale === "en" ? "Sign in" : "Войти",
+          exact: true,
+        })
+        .last()
+        .click();
+      await expect(page).toHaveURL(/dashboard\/connections$/);
+      const cookie = (await context.cookies()).find(
+        (c) => c.name === "hm_v2_session",
+      );
+      expect(cookie?.httpOnly).toBe(true);
+      expect(cookie!.expires - Date.now() / 1000).toBeGreaterThan(13 * 86400);
+      await page.reload();
+      await expect(page).toHaveURL(/dashboard\/connections$/);
+      await context.close();
+      context = await chromium.launchPersistentContext(directory, options);
+      page = context.pages()[0] ?? (await context.newPage());
+      await page.goto(`${prefix}/dashboard/connections`);
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      await expect(page.locator("main.dashboard-shell")).toBeVisible();
+      await expect(page).toHaveURL(/dashboard\/connections$/);
+      await page
+        .getByRole("button", {
+          name: locale === "en" ? "Sign out" : "Выйти",
+          exact: true,
+        })
+        .click();
+      await expect(page).toHaveURL(/auth/);
+      await page.goto(`${prefix}/dashboard/connections`);
+      await expect(page).toHaveURL(/auth\?next=/);
+    } finally {
+      await context.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}

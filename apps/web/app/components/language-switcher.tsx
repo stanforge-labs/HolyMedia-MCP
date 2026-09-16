@@ -1,15 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { languageSwitchHref, localeFromPath } from "./locale-routing";
 import { ThemeSwitcher } from "./theme-switcher";
+import { adminTranslations } from "./admin-translations";
 
 export type Language = "en" | "ru";
 
-// Keep the old key out of the default decision: the previous release stored
-// its English default as if the user had explicitly selected it.
-const STORAGE_KEY = "holymedia-language-v2";
 const LANGUAGE_CHANGE_EVENT = "holymedia-language-change";
 const PAIRS: Array<[string, string]> = [
+  ...adminTranslations,
+  ["Вход в админ-панель", "Admin sign in"],
+  [
+    "Отдельная защищённая сессия. Обычный клиентский вход здесь не подходит.",
+    "Separate secure session. Customer sign-in cannot be used here.",
+  ],
+  ["Операционная панель", "Operations panel"],
+  ["Защищённый доступ владельца", "Secure administrator access"],
+  ["Разделы администрирования", "Administration sections"],
+  ["Компании", "Companies"],
+  ["Пользователи", "Users"],
+  ["Диагностика", "Diagnostics"],
+  ["Поддержка", "Support"],
+  ["Заявки на тарифы", "Plan requests"],
+  ["Журнал действий", "Audit log"],
+  ["Логин", "Username"],
+  ["Проверяем…", "Checking…"],
+  ["Проверяем защищённую сессию…", "Checking secure session…"],
+  ["Принять приглашение", "Accept invitation"],
+  ["Код приглашения", "Invitation code"],
+  [
+    "Войдите в аккаунт, которому предназначено приглашение, затем вставьте одноразовый код из письма.",
+    "Sign in to the account invited, then paste the one-time code from the email.",
+  ],
+  ["Новый пароль", "New password"],
+  [
+    "Придумайте новый пароль для аккаунта.",
+    "Choose a new password for your account.",
+  ],
+  ["Код из письма", "Code from email"],
+  ["Сохранить пароль", "Save password"],
+  ["← Назад ко входу", "← Back to sign in"],
   ["Подключите кабинеты", "Connect accounts"],
   [
     "AI-клиент увидит все подключённые кабинеты вашей компании.",
@@ -464,6 +496,13 @@ let activeLanguage: Language = "ru";
 let applyingLanguage = false;
 
 function translate(value: string, language: Language): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalizedTranslation =
+    language === "en"
+      ? translations.get(normalized)
+      : reverseTranslations.get(normalized);
+  if (normalizedTranslation)
+    return value.replace(/\S[\s\S]*\S|\S/, normalizedTranslation);
   const exact =
     language === "ru"
       ? reverseTranslations.get(value)
@@ -560,25 +599,13 @@ function applyLanguage(language: Language): void {
 }
 
 export function useLanguage(): Language {
-  const [language, setLanguage] = useState<Language>("ru");
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    setLanguage(saved === "en" ? "en" : "ru");
-    const onChange = (event: Event) => {
-      setLanguage((event as CustomEvent<Language>).detail);
-    };
-    window.addEventListener(LANGUAGE_CHANGE_EVENT, onChange);
-    return () => window.removeEventListener(LANGUAGE_CHANGE_EVENT, onChange);
-  }, []);
-
-  return language;
+  return localeFromPath(usePathname());
 }
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
+  const language = useLanguage();
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    activeLanguage = saved === "en" ? "en" : "ru";
+    activeLanguage = language;
     const apply = () => applyLanguage(activeLanguage);
     const observer = new MutationObserver(() => apply());
     apply();
@@ -587,12 +614,10 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
       subtree: true,
     });
     return () => observer.disconnect();
-  }, []);
+  }, [language]);
 
   function select(language: Language) {
-    activeLanguage = language;
-    window.localStorage.setItem(STORAGE_KEY, language);
-    applyLanguage(language);
+    window.location.assign(languageSwitchHref(window.location.href, language));
   }
 
   return (

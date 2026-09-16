@@ -1,14 +1,14 @@
-import type { Metadata } from "next";
+import { publicPageMetadata } from "../../components/page-metadata";
 import { LegalContent } from "../../components/legal-content";
 import { LegalHeader } from "../../components/legal-header";
 import { SiteFooter } from "../../components/site-footer";
 
-export const metadata: Metadata = {
-  title: "Политика конфиденциальности",
-  description: "Политика конфиденциальности HolyMedia MCP.",
-  alternates: { canonical: "/privacy" },
-  robots: { index: true, follow: true },
-};
+export function generateMetadata() {
+  return publicPageMetadata("/privacy", {
+    ru: "Политика конфиденциальности HolyMedia MCP",
+    en: "HolyMedia MCP Privacy Policy",
+  });
+}
 
 export default function PrivacyPage() {
   return (

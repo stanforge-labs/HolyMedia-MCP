@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./locale-link";
 import { useEffect, useState } from "react";
 import { BrandLockup } from "./brand-lockup";
 import { LanguageSwitcher } from "./language-switcher";

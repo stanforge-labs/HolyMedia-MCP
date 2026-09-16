@@ -3991,7 +3991,20 @@ pre {
 }
 
 .legal-card > * {
-  max-width: none;
+  max-width: 48rem;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.legal-card > h2 {
+  margin-inline: auto;
+}
+
+.legal-card h3 {
+  margin-top: 24px;
+  margin-bottom: 10px;
+  font-size: 1.125rem;
 }
 
 .legal-card > .eyebrow,

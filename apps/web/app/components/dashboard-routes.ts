@@ -21,12 +21,12 @@ const SECTION_BY_SLUG: Record<string, DashboardSection> = {
 };
 
 export function dashboardSectionFromPath(pathname: string): DashboardSection {
-  const slug = pathname.split("/").filter(Boolean)[1];
+  const slug = withoutLocale(pathname).split("/").filter(Boolean)[1];
   return (slug && SECTION_BY_SLUG[slug]) || "overview";
 }
 
 export function dashboardRoute(section: DashboardSection): string {
-  return DASHBOARD_ROUTES[section];
+  return currentLocaleHref(DASHBOARD_ROUTES[section]);
 }
 
 export function dashboardSectionFromLegacyQuery(
@@ -35,3 +35,4 @@ export function dashboardSectionFromLegacyQuery(
   if (!value) return null;
   return value === "ai-client" ? "mcp" : (SECTION_BY_SLUG[value] ?? null);
 }
+import { currentLocaleHref, withoutLocale } from "./locale-routing";

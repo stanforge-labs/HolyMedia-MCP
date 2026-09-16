@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "../../../components/locale-link";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { LanguageSwitcher } from "../../../components/language-switcher";

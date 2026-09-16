@@ -127,4 +127,34 @@ describe("GoogleLoginService", () => {
       name: "Client Example",
     });
   });
+
+  it("preserves localized frontend return URLs without changing OAuth callback or accepting EN technical paths", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    const database = databaseMock();
+    const service = new GoogleLoginService(database as never);
+    const started = await service.start(
+      "/en/dashboard/reports?period=30d#summary",
+    );
+    expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        nextPath: "/en/dashboard/reports?period=30d#summary",
+      }),
+    });
+    expect(
+      new URL(started.authorizationUrl).searchParams.get("redirect_uri"),
+    ).toBe(service.redirectUri());
+    for (const path of [
+      "//attacker.example/en/dashboard",
+      "/en/oauth/authorize/continue",
+      "/en/admin",
+      "/en/dashboard/unknown",
+    ]) {
+      await service.start(path);
+      expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+        data: expect.objectContaining({ nextPath: "/dashboard" }),
+      });
+    }
+  });
 });
