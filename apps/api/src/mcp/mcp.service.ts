@@ -114,6 +114,7 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "list_business_pages",
   "list_campaigns",
   "list_connected_platforms",
+  "list_connected_resources",
   "list_creative_assets",
   "list_detailed_ad_report_types",
   "list_lead_forms",
@@ -336,8 +337,10 @@ export class McpService {
       inputSchema: metaReadSchema(name) ??
         previewToolSchema(name) ??
         ga4ToolSchema(name) ?? {
+          ...(name === "list_connected_resources"
+            ? { additionalProperties: false }
+            : { additionalProperties: true }),
           type: "object",
-          additionalProperties: true,
         },
     }));
   }
@@ -575,7 +578,9 @@ export class McpService {
       case "list_accounts":
         return this.listAccounts(principal, args.provider);
       case "list_ad_accounts":
-        return this.listAccounts(principal, args.provider);
+        return this.listAdvertisingAccounts(principal, args.provider);
+      case "list_connected_resources":
+        return this.listConnectedResources(principal);
       case "get_account_status": {
         const account = await this.account(principal, args);
         return {
@@ -1666,7 +1671,81 @@ export class McpService {
       },
       orderBy: { displayName: "asc" },
     });
-    return accounts.map((account) => ({
+    return accounts.map((account) => this.accountResource(account));
+  }
+
+  private async listAdvertisingAccounts(
+    principal: ServiceTokenPrincipal,
+    rawProvider: unknown,
+  ) {
+    const provider = rawProvider ? providerId(rawProvider) : undefined;
+    const advertisingProviders: ProviderId[] = [
+      "GOOGLE_ADS",
+      "META_ADS",
+      "TIKTOK_ADS",
+      "YANDEX_DIRECT",
+    ];
+    if (provider && !advertisingProviders.includes(provider)) {
+      throw new ForbiddenException(
+        "list_ad_accounts supports advertising providers only.",
+      );
+    }
+    const accounts = await this.database.client.providerAccount.findMany({
+      where: {
+        workspaceId: principal.workspaceId,
+        enabled: true,
+        provider: provider ?? { in: advertisingProviders },
+        ...(principal.accountIds.length
+          ? { id: { in: principal.accountIds } }
+          : {}),
+        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
+      },
+      orderBy: { displayName: "asc" },
+    });
+    return accounts.map((account) => this.accountResource(account));
+  }
+
+  private async listConnectedResources(principal: ServiceTokenPrincipal) {
+    const accounts = await this.database.client.providerAccount.findMany({
+      where: {
+        workspaceId: principal.workspaceId,
+        enabled: true,
+        ...(principal.accountIds.length
+          ? { id: { in: principal.accountIds } }
+          : {}),
+        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
+      },
+      orderBy: { displayName: "asc" },
+    });
+    const resource = (account: (typeof accounts)[number]) =>
+      this.accountResource(account);
+    return {
+      advertising_accounts: accounts
+        .filter((account) =>
+          ["GOOGLE_ADS", "META_ADS", "TIKTOK_ADS", "YANDEX_DIRECT"].includes(
+            account.provider,
+          ),
+        )
+        .map(resource),
+      analytics_properties: accounts
+        .filter((account) => account.provider === "GOOGLE_ANALYTICS")
+        .map(resource),
+      seo_properties: accounts
+        .filter((account) => account.provider === "GOOGLE_SEARCH_CONSOLE")
+        .map(resource),
+      source: "v2_database_provider_account",
+    };
+  }
+
+  private accountResource(account: {
+    provider: ProviderId;
+    externalAccountId: string;
+    displayName: string;
+    currency: string | null;
+    timezone: string | null;
+    status: string | null;
+  }) {
+    return {
       provider: account.provider,
       account_id: account.externalAccountId,
       name: account.displayName,
@@ -1674,7 +1753,7 @@ export class McpService {
       timezone: account.timezone,
       status: account.status,
       source: "v2_database_provider_account",
-    }));
+    };
   }
 
   private supported(provider: ProviderId, kind: "objects" | "metrics") {
@@ -1799,6 +1878,12 @@ export class McpService {
 }
 
 function toolDescription(name: string): string {
+  if (name === "list_connected_resources")
+    return "List all currently enabled resources in the caller's workspace, grouped as advertising accounts, Google Analytics properties and Search Console properties. Use this for a complete connection inventory.";
+  if (name === "list_ad_accounts")
+    return "List enabled advertising accounts only (Google Ads, Meta Ads, TikTok Ads and Yandex Direct). It deliberately excludes Google Analytics and Search Console properties.";
+  if (name === "list_connected_platforms")
+    return "Legacy compatible inventory of enabled resources in the caller's workspace. For a complete, clearly grouped inventory use list_connected_resources.";
   if (name.startsWith("google_analytics_"))
     return "Read-only Google Analytics 4 tool. It can access only an enabled GA4 property in the caller's current workspace and never changes Analytics configuration.";
   if (name === "preview_change_campaign_name")

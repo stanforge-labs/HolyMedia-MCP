@@ -37,6 +37,7 @@ describe("service token security primitives", () => {
     );
     expect(result.accountIds).toEqual(["new-connection-account"]);
     expect(result.scopes).toEqual(["adforge:mcp:read", "adforge:mcp:write"]);
+    expect(result.resourceAccessMode).toBe("STATIC_ALLOWLIST");
     expect(tokenCreate).toHaveBeenCalledOnce();
     expect(selected).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -46,6 +47,64 @@ describe("service token security primitives", () => {
         }),
       }),
     );
+  });
+
+  it("creates a normal read-only AI key as ALL_CONNECTED without a snapshot", async () => {
+    const tokenCreate = vi.fn(async ({ data }) => ({
+      ...data,
+      id: "new-token",
+      createdAt: new Date(),
+      revokedAt: null,
+      lastUsedAt: null,
+    }));
+    const tx = {
+      serviceIdentity: { create: vi.fn(async () => ({ id: "new-identity" })) },
+      serviceToken: { create: tokenCreate },
+    };
+    const service = new ServiceTokenService(
+      {
+        client: {
+          providerAccount: { count: vi.fn() },
+          $transaction: async (run: (client: typeof tx) => Promise<unknown>) =>
+            run(tx),
+        },
+      } as never,
+      { record: vi.fn() } as never,
+    );
+
+    const result = await service.create(
+      "workspace",
+      { name: "Normal AI key", scopes: ["adforge:mcp:read"] },
+      { userId: "user" } as never,
+      {} as never,
+    );
+
+    expect(result.resourceAccessMode).toBe("ALL_CONNECTED");
+    expect(result.accountIds).toEqual([]);
+    expect(tokenCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ resourceAccessMode: "ALL_CONNECTED" }),
+      }),
+    );
+  });
+
+  it("does not allow write scopes on an ALL_CONNECTED key", async () => {
+    const service = new ServiceTokenService(
+      { client: { providerAccount: { count: vi.fn() } } } as never,
+      {} as never,
+    );
+    await expect(
+      service.create(
+        "workspace",
+        {
+          name: "Unsafe key",
+          scopes: ["adforge:mcp:write"],
+          resourceAccessMode: "ALL_CONNECTED",
+        },
+        {} as never,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
   it("controlled key creation fails closed when no account is selected", async () => {
     const service = new ServiceTokenService(

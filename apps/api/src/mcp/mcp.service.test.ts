@@ -7,11 +7,21 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
       providerAccount: {
         findMany: async ({
           where,
-        }: { where?: { workspaceId?: string; id?: { in: string[] } } } = {}) =>
+        }: {
+          where?: {
+            workspaceId?: string;
+            id?: { in: string[] };
+            provider?: string | { in: string[] };
+          };
+        } = {}) =>
           accounts.filter(
             (a) =>
               (!where?.workspaceId || a.workspaceId === where.workspaceId) &&
-              (!where?.id || where.id.in.includes(String(a.id))),
+              (!where?.id || where.id.in.includes(String(a.id))) &&
+              (!where?.provider ||
+                (typeof where.provider === "string"
+                  ? a.provider === where.provider
+                  : where.provider.in.includes(String(a.provider)))),
           ),
         findFirst: async ({ where }: { where: Record<string, unknown> }) => {
           const or = where.OR as Array<Record<string, string>>;
@@ -152,7 +162,7 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(156);
+    expect(service.tools()).toHaveLength(157);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
@@ -399,6 +409,40 @@ describe("MCP V1-compatible policy", () => {
         { property_id: "987654" },
       ),
     ).rejects.toThrow("Account is not available to this service token.");
+  });
+
+  it("groups selected workspace resources without mixing GA4 into ad accounts", async () => {
+    const service = serviceWithAccounts([account, ga4Account, metaAccount]);
+    const principal = {
+      kind: "service" as const,
+      tokenId: "token",
+      serviceIdentityId: "identity",
+      workspaceId: "workspace-a",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [],
+      resourceAccessMode: "ALL_CONNECTED" as const,
+    };
+
+    await expect(
+      service.call(principal, "list_ad_accounts", {}),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: "GOOGLE_ADS" }),
+        expect.objectContaining({ provider: "META_ADS" }),
+      ]),
+    );
+    const result = (await service.call(
+      principal,
+      "list_connected_resources",
+      {},
+    )) as { advertising_accounts: unknown[]; analytics_properties: unknown[] };
+    expect(result.advertising_accounts).toHaveLength(2);
+    expect(result.analytics_properties).toEqual([
+      expect.objectContaining({
+        provider: "GOOGLE_ANALYTICS",
+        account_id: "987654",
+      }),
+    ]);
   });
 
   it("compares two periods using the provider read adapter", async () => {

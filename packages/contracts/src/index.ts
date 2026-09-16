@@ -39,6 +39,9 @@ export type ProviderConnectionStatus =
   | "DISCONNECTED"
   | "ERROR";
 
+export type ServiceTokenResourceAccessMode =
+  "ALL_CONNECTED" | "STATIC_ALLOWLIST";
+
 export type ProviderDefinition = {
   id: ProviderId;
   displayName: string;
@@ -77,6 +80,9 @@ export type ProviderConnectionView = {
   disconnectedAt: string | null;
   lastSuccessAt: string | null;
   lastErrorCode: string | null;
+  lastDiscoveryAt?: string | null;
+  lastDiscoveryError?: string | null;
+  propertyCount?: number | null;
   credentialVersion: number;
   requestedScopes: string[];
   grantedScopes: string[];

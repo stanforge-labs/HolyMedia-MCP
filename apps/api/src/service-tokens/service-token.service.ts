@@ -25,7 +25,25 @@ export type ServiceTokenPrincipal = {
   workspaceId: string;
   scopes: string[];
   accountIds: string[];
+  /**
+   * Optional during the rollout so older in-process principals and test
+   * fixtures retain their established semantics. Persisted tokens always
+   * receive an explicit value from the database migration.
+   */
+  resourceAccessMode?: "ALL_CONNECTED" | "STATIC_ALLOWLIST";
 };
+
+function resourceAccessModeFor(token: {
+  resourceAccessMode?: "ALL_CONNECTED" | "STATIC_ALLOWLIST" | null;
+  accountIds: unknown;
+}): "ALL_CONNECTED" | "STATIC_ALLOWLIST" {
+  if (token.resourceAccessMode === "STATIC_ALLOWLIST")
+    return "STATIC_ALLOWLIST";
+  if (token.resourceAccessMode === "ALL_CONNECTED") return "ALL_CONNECTED";
+  return jsonStrings(token.accountIds).length
+    ? "STATIC_ALLOWLIST"
+    : "ALL_CONNECTED";
+}
 
 export function hashServiceToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
@@ -74,8 +92,23 @@ export class ServiceTokenService {
   ) {
     const scopes = normalizeScopes(input.scopes);
     const controlled = scopes.includes(WRITE_SCOPE);
+    const resourceAccessMode =
+      input.resourceAccessMode ??
+      (controlled ? "STATIC_ALLOWLIST" : "ALL_CONNECTED");
+    if (controlled && resourceAccessMode !== "STATIC_ALLOWLIST") {
+      throw new BadRequestException(
+        "Controlled-write keys require a static resource allowlist.",
+      );
+    }
+    if (resourceAccessMode === "ALL_CONNECTED" && input.accountIds?.length) {
+      throw new BadRequestException(
+        "ALL_CONNECTED keys cannot include a static account allowlist.",
+      );
+    }
     const selected =
-      controlled && !input.accountIds?.length
+      resourceAccessMode === "STATIC_ALLOWLIST" &&
+      controlled &&
+      !input.accountIds?.length
         ? await this.database.client.providerAccount.findMany({
             where: {
               workspaceId,
@@ -90,14 +123,14 @@ export class ServiceTokenService {
         : [];
     const accountIds = [
       ...new Set(
-        input.accountIds?.length
+        resourceAccessMode === "STATIC_ALLOWLIST" && input.accountIds?.length
           ? input.accountIds
           : selected.map((account) => account.id),
       ),
     ];
-    if (controlled && !accountIds.length)
+    if (resourceAccessMode === "STATIC_ALLOWLIST" && !accountIds.length)
       throw new BadRequestException(
-        "Select a connected account before creating a controlled-write key.",
+        "Select at least one connected resource for a static-allowlist key.",
       );
     if (accountIds.length > 0) {
       const count = await this.database.client.providerAccount.count({
@@ -141,6 +174,7 @@ export class ServiceTokenService {
           tokenPrefix: rawToken.slice(0, 13),
           name: input.name.trim(),
           scopes,
+          resourceAccessMode,
           ...(accountIds.length ? { accountIds } : {}),
           expiresAt,
         },
@@ -156,6 +190,7 @@ export class ServiceTokenService {
       ...(request.requestId ? { requestId: request.requestId } : {}),
       metadata: {
         scopes: scopes.join(","),
+        resourceAccessMode,
         restrictedAccounts: accountIds.length,
       },
     });
@@ -301,7 +336,11 @@ export class ServiceTokenService {
 
     const scopes = normalizeScopes(input.scopes);
     const accountIds = jsonStrings(token.accountIds);
-    if (scopes.includes(WRITE_SCOPE) && accountIds.length !== 1) {
+    if (
+      scopes.includes(WRITE_SCOPE) &&
+      (resourceAccessModeFor(token) !== "STATIC_ALLOWLIST" ||
+        accountIds.length !== 1)
+    ) {
       throw new BadRequestException(
         "Write scope requires a service token restricted to exactly one account.",
       );
@@ -362,6 +401,7 @@ export class ServiceTokenService {
       workspaceId: token.serviceIdentity.workspaceId,
       scopes: jsonStrings(token.scopes),
       accountIds: jsonStrings(token.accountIds),
+      resourceAccessMode: resourceAccessModeFor(token),
     };
   }
 
@@ -372,6 +412,7 @@ export class ServiceTokenService {
       name: string;
       scopes: unknown;
       accountIds: unknown;
+      resourceAccessMode: "ALL_CONNECTED" | "STATIC_ALLOWLIST";
       createdAt: Date;
       expiresAt: Date | null;
       revokedAt: Date | null;
@@ -386,6 +427,7 @@ export class ServiceTokenService {
       tokenPrefix: token.tokenPrefix,
       scopes: jsonStrings(token.scopes),
       accountIds: jsonStrings(token.accountIds),
+      resourceAccessMode: resourceAccessModeFor(token),
       createdAt: token.createdAt.toISOString(),
       expiresAt: token.expiresAt?.toISOString() ?? null,
       revokedAt: token.revokedAt?.toISOString() ?? null,

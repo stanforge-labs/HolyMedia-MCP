@@ -46,6 +46,11 @@ enum ProviderConnectionStatus {
   ERROR
 }
 
+enum ServiceTokenResourceAccessMode {
+  ALL_CONNECTED
+  STATIC_ALLOWLIST
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -374,6 +379,7 @@ model ServiceToken {
   name              String          @db.VarChar(160)
   scopes            Json
   accountIds        Json?           @map("account_ids")
+  resourceAccessMode ServiceTokenResourceAccessMode @default(ALL_CONNECTED) @map("resource_access_mode")
   createdAt         DateTime        @default(now()) @map("created_at")
   expiresAt         DateTime?       @map("expires_at")
   revokedAt         DateTime?       @map("revoked_at")

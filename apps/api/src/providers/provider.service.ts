@@ -209,6 +209,7 @@ export class ProviderService {
     );
     let callbackPrincipal = principal;
     let callbackWorkspaceId = workspaceId;
+    let persistedConnectionId: string | undefined;
     try {
       const startedAt = Date.now();
       const state = await this.states.consume({
@@ -241,6 +242,7 @@ export class ProviderService {
         redirectUri: this.redirectUri(provider),
         ...(state.codeVerifier ? { codeVerifier: state.codeVerifier } : {}),
       });
+      this.logDiscoveryStage("token_exchange", provider, state.workspaceId);
       const scopeMetadata = this.scopeMetadata(
         entry.definition.scopes,
         credentials.scopes,
@@ -268,7 +270,7 @@ export class ProviderService {
           create: {
             workspaceId: state.workspaceId,
             provider: provider as never,
-            status: "CONNECTED",
+            status: provider === "GOOGLE_ANALYTICS" ? "PENDING" : "CONNECTED",
             ...(credentials.externalSubjectId
               ? { externalSubjectId: credentials.externalSubjectId }
               : {}),
@@ -277,12 +279,14 @@ export class ProviderService {
               : {}),
             createdBy: state.userId,
             connectedAt: new Date(),
-            lastSuccessAt: new Date(),
+            ...(provider === "GOOGLE_ANALYTICS"
+              ? {}
+              : { lastSuccessAt: new Date() }),
             credentialVersion: 1,
             metadata: scopeMetadata,
           },
           update: {
-            status: "CONNECTED",
+            status: provider === "GOOGLE_ANALYTICS" ? "PENDING" : "CONNECTED",
             ...(credentials.externalSubjectId
               ? { externalSubjectId: credentials.externalSubjectId }
               : { externalSubjectId: null }),
@@ -293,7 +297,9 @@ export class ProviderService {
             lastErrorAt: null,
             lastErrorCode: null,
             connectedAt: new Date(),
-            lastSuccessAt: new Date(),
+            ...(provider === "GOOGLE_ANALYTICS"
+              ? {}
+              : { lastSuccessAt: new Date() }),
             credentialVersion: (current?.credentialVersion ?? 0) + 1,
             metadata: scopeMetadata,
           },
@@ -312,12 +318,34 @@ export class ProviderService {
         });
         return saved;
       });
+      persistedConnectionId = connection.id;
+      this.logDiscoveryStage(
+        "credential_persist",
+        provider,
+        state.workspaceId,
+        connection.id,
+      );
       await this.persistAccounts(
         state.workspaceId,
         connection.id,
         provider,
         credentials,
         entry.adapter,
+        provider === "GOOGLE_ANALYTICS"
+          ? (stage) =>
+              this.logDiscoveryStage(
+                stage,
+                provider,
+                state.workspaceId,
+                connection.id,
+              )
+          : undefined,
+      );
+      this.logDiscoveryStage(
+        "completed",
+        provider,
+        state.workspaceId,
+        connection.id,
       );
       await this.record(
         "oauth_completed",
@@ -341,6 +369,17 @@ export class ProviderService {
       return this.getConnection(state.workspaceId, connection.id);
     } catch (error) {
       this.metrics.record("oauth_failure", provider);
+      if (
+        provider === "GOOGLE_ANALYTICS" &&
+        callbackWorkspaceId &&
+        persistedConnectionId
+      ) {
+        await this.markGoogleAnalyticsDiscoveryFailure(
+          callbackWorkspaceId,
+          persistedConnectionId,
+          error,
+        );
+      }
       if (callbackPrincipal)
         await this.record(
           "oauth_failed",
@@ -524,6 +563,15 @@ export class ProviderService {
         fresh.connection.provider as ProviderId,
         fresh.credentials,
         fresh.adapter,
+        context.connection.provider === "GOOGLE_ANALYTICS"
+          ? (stage) =>
+              this.logDiscoveryStage(
+                stage,
+                context.connection.provider as ProviderId,
+                workspaceId,
+                connectionId,
+              )
+          : undefined,
       );
       await this.record(
         "accounts_discovered",
@@ -548,17 +596,25 @@ export class ProviderService {
         "account_discovery_failure",
         context.connection.provider as ProviderId,
       );
-      await this.database.client.providerConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: "DEGRADED",
-          lastErrorAt: new Date(),
-          lastErrorCode:
-            error instanceof ProviderError
-              ? error.code
-              : "provider_response_invalid",
-        },
-      });
+      if (context.connection.provider === "GOOGLE_ANALYTICS") {
+        await this.markGoogleAnalyticsDiscoveryFailure(
+          workspaceId,
+          connectionId,
+          error,
+        );
+      } else {
+        await this.database.client.providerConnection.update({
+          where: { id: connectionId },
+          data: {
+            status: "DEGRADED",
+            lastErrorAt: new Date(),
+            lastErrorCode:
+              error instanceof ProviderError
+                ? error.code
+                : "provider_response_invalid",
+          },
+        });
+      }
       throw toSafeProviderException(error);
     }
   }
@@ -1479,9 +1535,15 @@ export class ProviderService {
         credentials: ProviderCredentialPayload,
       ) => Promise<NormalizedProviderAccount[]>;
     },
+    onStage?: (
+      stage: "admin_discovery" | "property_enrichment" | "property_persist",
+    ) => void,
   ) {
+    onStage?.("admin_discovery");
     const accounts = await adapter.discoverAccounts(credentials);
+    onStage?.("property_enrichment");
     await this.database.client.$transaction(async (tx) => {
+      onStage?.("property_persist");
       for (const account of accounts) {
         await tx.providerAccount.upsert({
           where: {
@@ -1513,6 +1575,10 @@ export class ProviderService {
           },
         });
       }
+      const current = await tx.providerConnection.findUnique({
+        where: { id: connectionId },
+        select: { metadata: true },
+      });
       await tx.providerConnection.update({
         where: { id: connectionId },
         data: {
@@ -1520,10 +1586,110 @@ export class ProviderService {
           lastSuccessAt: new Date(),
           lastErrorAt: null,
           lastErrorCode: null,
+          ...(provider === "GOOGLE_ANALYTICS"
+            ? {
+                metadata: this.googleAnalyticsDiscoveryMetadata(
+                  current?.metadata,
+                  accounts.length,
+                  null,
+                ),
+              }
+            : {}),
         },
       });
     });
     return accounts;
+  }
+
+  private async markGoogleAnalyticsDiscoveryFailure(
+    workspaceId: string,
+    connectionId: string,
+    error: unknown,
+  ) {
+    const code =
+      error instanceof ProviderError ? error.code : "provider_response_invalid";
+    const providerStatus =
+      error instanceof ProviderError ? error.providerStatus : undefined;
+    const providerCode =
+      error instanceof ProviderError ? error.providerCode : undefined;
+    await this.database.client.$transaction(async (tx) => {
+      const connection = await tx.providerConnection.findFirst({
+        where: {
+          id: connectionId,
+          workspaceId,
+          provider: "GOOGLE_ANALYTICS" as never,
+        },
+        select: { metadata: true },
+      });
+      if (!connection) return;
+      await tx.providerConnection.update({
+        where: { id: connectionId },
+        data: {
+          status: "DEGRADED",
+          lastErrorAt: new Date(),
+          lastErrorCode: [code, providerCode]
+            .filter(Boolean)
+            .join(":")
+            .slice(0, 120),
+          metadata: this.googleAnalyticsDiscoveryMetadata(
+            connection.metadata,
+            null,
+            code,
+          ),
+        },
+      });
+    });
+    this.logger.warn(
+      {
+        provider: "GOOGLE_ANALYTICS",
+        workspaceId,
+        connectionId,
+        stage: "admin_discovery",
+        providerErrorCode: code,
+        providerStatus,
+        providerCode,
+        retryable: error instanceof ProviderError ? error.retryable : false,
+      },
+      "Google Analytics property synchronization failed",
+    );
+  }
+
+  private googleAnalyticsDiscoveryMetadata(
+    metadata: unknown,
+    propertyCount: number | null,
+    lastDiscoveryError: string | null,
+  ): Prisma.InputJsonValue {
+    const current =
+      metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? (metadata as Record<string, unknown>)
+        : {};
+    return {
+      ...current,
+      googleAnalyticsDiscovery: {
+        lastDiscoveryAt: new Date().toISOString(),
+        lastDiscoveryError,
+        propertyCount,
+      },
+    };
+  }
+
+  private logDiscoveryStage(
+    stage:
+      | "token_exchange"
+      | "credential_persist"
+      | "admin_discovery"
+      | "property_enrichment"
+      | "property_persist"
+      | "completed",
+    provider: ProviderId,
+    workspaceId: string,
+    connectionId?: string,
+  ) {
+    if (provider !== "GOOGLE_ANALYTICS") return;
+    this.logger.info(
+      { provider, workspaceId, connectionId, stage },
+      "Google Analytics OAuth/discovery stage",
+    );
   }
 
   private async connectionWithCredential(
@@ -1571,6 +1737,7 @@ export class ProviderService {
     }>,
   ): ProviderConnectionView {
     const scopes = this.scopeMetadataFromJson(connection.metadata);
+    const discovery = googleAnalyticsDiscoveryMetadata(connection.metadata);
     return {
       id: connection.id,
       workspaceId: connection.workspaceId,
@@ -1581,6 +1748,13 @@ export class ProviderService {
       disconnectedAt: toIso(connection.disconnectedAt),
       lastSuccessAt: toIso(connection.lastSuccessAt),
       lastErrorCode: connection.lastErrorCode,
+      ...(connection.provider === "GOOGLE_ANALYTICS"
+        ? {
+            lastDiscoveryAt: discovery.lastDiscoveryAt,
+            lastDiscoveryError: discovery.lastDiscoveryError,
+            propertyCount: discovery.propertyCount,
+          }
+        : {}),
       credentialVersion: connection.credentialVersion,
       ...scopes,
       accounts: (connection.accounts ?? []).map((account) =>
@@ -1701,6 +1875,41 @@ function stringMetadata(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = (value as Record<string, unknown>)[key];
   return typeof candidate === "string" ? candidate : undefined;
+}
+
+function googleAnalyticsDiscoveryMetadata(value: unknown): {
+  lastDiscoveryAt: string | null;
+  lastDiscoveryError: string | null;
+  propertyCount: number | null;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      lastDiscoveryAt: null,
+      lastDiscoveryError: null,
+      propertyCount: null,
+    };
+  }
+  const discovery = (value as Record<string, unknown>).googleAnalyticsDiscovery;
+  if (!discovery || typeof discovery !== "object" || Array.isArray(discovery)) {
+    return {
+      lastDiscoveryAt: null,
+      lastDiscoveryError: null,
+      propertyCount: null,
+    };
+  }
+  const fields = discovery as Record<string, unknown>;
+  return {
+    lastDiscoveryAt:
+      typeof fields.lastDiscoveryAt === "string"
+        ? fields.lastDiscoveryAt
+        : null,
+    lastDiscoveryError:
+      typeof fields.lastDiscoveryError === "string"
+        ? fields.lastDiscoveryError
+        : null,
+    propertyCount:
+      typeof fields.propertyCount === "number" ? fields.propertyCount : null,
+  };
 }
 
 type SearchConsoleTotals = {

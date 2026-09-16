@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -27,6 +28,10 @@ export class CreateServiceTokenDto {
   @ArrayMaxSize(500)
   @IsString({ each: true })
   public accountIds?: string[];
+
+  @IsOptional()
+  @IsIn(["ALL_CONNECTED", "STATIC_ALLOWLIST"])
+  public resourceAccessMode?: "ALL_CONNECTED" | "STATIC_ALLOWLIST";
 
   @IsOptional()
   @IsInt()

@@ -64,6 +64,9 @@ type Connection = {
   provider: string;
   displayName: string | null;
   status: string;
+  lastDiscoveryAt?: string | null;
+  lastDiscoveryError?: string | null;
+  propertyCount?: number | null;
   accounts: ProviderAccount[];
 };
 type ServiceToken = {
@@ -72,6 +75,7 @@ type ServiceToken = {
   tokenPrefix: string;
   scopes: string[];
   accountIds: string[];
+  resourceAccessMode: "ALL_CONNECTED" | "STATIC_ALLOWLIST";
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -472,6 +476,10 @@ export default function DashboardPage() {
   const [createdToken, setCreatedToken] = useState("");
   const [tokenName, setTokenName] = useState("");
   const [tokenAccessMode, setTokenAccessMode] = useState("read_only");
+  const [tokenResourceMode, setTokenResourceMode] = useState<
+    "ALL_CONNECTED" | "STATIC_ALLOWLIST"
+  >("ALL_CONNECTED");
+  const [tokenResourceIds, setTokenResourceIds] = useState<string[]>([]);
   const [editingTokenId, setEditingTokenId] = useState<string | null>(null);
   const [tokenNameDraft, setTokenNameDraft] = useState("");
   const [tokenActionId, setTokenActionId] = useState<string | null>(null);
@@ -980,10 +988,16 @@ export default function DashboardPage() {
       );
       if (!response.ok) throw new Error();
       await loadConnections(active);
-      notify("Список кабинетов обновлён. Сохранённый выбор не изменён.");
+      notify(
+        connection.provider === "GOOGLE_ANALYTICS"
+          ? "Ресурсы Google Analytics синхронизированы. Сохранённый выбор не изменён."
+          : "Список кабинетов обновлён. Сохранённый выбор не изменён.",
+      );
     } catch {
       fail(
-        "Не удалось обновить список кабинетов. Проверьте подключение платформы и попробуйте ещё раз.",
+        connection.provider === "GOOGLE_ANALYTICS"
+          ? "Не удалось синхронизировать ресурсы Google Analytics. Проверьте подключение и повторите синхронизацию."
+          : "Не удалось обновить список кабинетов. Проверьте подключение платформы и попробуйте ещё раз.",
       );
     } finally {
       setBusy(false);
@@ -1112,6 +1126,13 @@ export default function DashboardPage() {
               form.get("access_mode") === "controlled_write"
                 ? ["adforge:mcp:read", "adforge:mcp:write"]
                 : ["adforge:mcp:read"],
+            resourceAccessMode:
+              form.get("access_mode") === "controlled_write"
+                ? "STATIC_ALLOWLIST"
+                : tokenResourceMode,
+            ...(tokenResourceMode === "STATIC_ALLOWLIST"
+              ? { accountIds: tokenResourceIds }
+              : {}),
             expiresInDays: Number(form.get("expires_in_days") || 90),
           }),
         },
@@ -1122,6 +1143,8 @@ export default function DashboardPage() {
       formElement.reset();
       setTokenName("");
       setTokenAccessMode("read_only");
+      setTokenResourceMode("ALL_CONNECTED");
+      setTokenResourceIds([]);
       await loadTokens(active);
       notify("Ключ создан. Сохраните его сейчас.");
     } catch {
@@ -1788,8 +1811,12 @@ export default function DashboardPage() {
                         </p>
                         {connection.status !== "CONNECTED" && (
                           <p className="connection-note">
-                            Подключите платформу заново, чтобы восстановить
-                            доступ к кабинетам.
+                            {providerId === "GOOGLE_ANALYTICS" &&
+                            connection.lastDiscoveryError
+                              ? language === "ru"
+                                ? "Google Analytics подключён, но ресурсы не синхронизированы."
+                                : "Google Analytics is connected, but properties have not been synchronized."
+                              : "Подключите платформу заново, чтобы восстановить доступ к кабинетам."}
                           </p>
                         )}
                         <div className="connection-actions">
@@ -1811,7 +1838,12 @@ export default function DashboardPage() {
                             disabled={busy}
                             onClick={() => void refreshAccounts(connection)}
                           >
-                            Обновить
+                            {providerId === "GOOGLE_ANALYTICS" &&
+                            connection.lastDiscoveryError
+                              ? language === "ru"
+                                ? "Повторить синхронизацию"
+                                : "Retry synchronization"
+                              : "Обновить"}
                           </button>
                           {connection.status !== "CONNECTED" && (
                             <button
@@ -1954,8 +1986,14 @@ export default function DashboardPage() {
                             </label>
                           </div>
                           <p className="scope-note">
-                            Ключ получит доступ ко всем подключённым кабинетам
-                            из раздела «Подключения» текущей компании.
+                            {tokenAccessMode === "read_only" &&
+                            tokenResourceMode === "STATIC_ALLOWLIST"
+                              ? language === "ru"
+                                ? "Ключ получит доступ только к ресурсам, выбранным ниже."
+                                : "The key will have access only to the resources selected below."
+                              : language === "ru"
+                                ? "Ключ получит доступ ко всем подключённым и выбранным ресурсам текущей компании."
+                                : "The key will have access to all connected and selected resources in the current workspace."}
                           </p>
                           <label>
                             {language === "ru"
@@ -1969,7 +2007,17 @@ export default function DashboardPage() {
                               }
                               name="access_mode"
                               value={tokenAccessMode}
-                              onChange={setTokenAccessMode}
+                              onChange={(next) => {
+                                setTokenAccessMode(next);
+                                if (next === "controlled_write") {
+                                  setTokenResourceMode("STATIC_ALLOWLIST");
+                                  setTokenResourceIds(
+                                    enabledAccounts.map(
+                                      ({ account }) => account.id,
+                                    ),
+                                  );
+                                }
+                              }}
                               options={[
                                 {
                                   value: "read_only",
@@ -1993,6 +2041,81 @@ export default function DashboardPage() {
                               ? "Контролируемая запись разрешает только операции из серверной политики после вашего явного запроса. Произвольные изменения запрещены."
                               : "Controlled write allows only server-policy-approved operations after your explicit request. Arbitrary changes are blocked."}
                           </p>
+                          {tokenAccessMode === "read_only" && (
+                            <label>
+                              {language === "ru"
+                                ? "Доступ к ресурсам"
+                                : "Resource access"}
+                              <ProjectSelect
+                                ariaLabel={
+                                  language === "ru"
+                                    ? "Доступ к ресурсам"
+                                    : "Resource access"
+                                }
+                                name="resource_access_mode"
+                                value={tokenResourceMode}
+                                onChange={(next) => {
+                                  const mode = next as
+                                    "ALL_CONNECTED" | "STATIC_ALLOWLIST";
+                                  setTokenResourceMode(mode);
+                                  if (mode === "ALL_CONNECTED")
+                                    setTokenResourceIds([]);
+                                }}
+                                options={[
+                                  {
+                                    value: "ALL_CONNECTED",
+                                    label:
+                                      language === "ru"
+                                        ? "Все подключённые ресурсы"
+                                        : "All connected resources",
+                                  },
+                                  {
+                                    value: "STATIC_ALLOWLIST",
+                                    label:
+                                      language === "ru"
+                                        ? "Только выбранные ресурсы"
+                                        : "Selected resources only",
+                                  },
+                                ]}
+                              />
+                            </label>
+                          )}
+                          {tokenResourceMode === "STATIC_ALLOWLIST" && (
+                            <fieldset className="token-resource-list">
+                              <legend>
+                                {language === "ru"
+                                  ? "Разрешённые ресурсы"
+                                  : "Allowed resources"}
+                              </legend>
+                              {enabledAccounts.map(
+                                ({ account, connection }) => (
+                                  <label key={account.id}>
+                                    <input
+                                      type="checkbox"
+                                      checked={tokenResourceIds.includes(
+                                        account.id,
+                                      )}
+                                      onChange={(event) =>
+                                        setTokenResourceIds((current) =>
+                                          event.target.checked
+                                            ? [
+                                                ...new Set([
+                                                  ...current,
+                                                  account.id,
+                                                ]),
+                                              ]
+                                            : current.filter(
+                                                (id) => id !== account.id,
+                                              ),
+                                        )
+                                      }
+                                    />
+                                    {connection.provider}: {account.displayName}
+                                  </label>
+                                ),
+                              )}
+                            </fieldset>
+                          )}
                           <button
                             className="primary-button"
                             type="submit"
