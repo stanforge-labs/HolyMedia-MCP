@@ -5236,7 +5236,7 @@ pre {
   .admin-nav {
     position: sticky;
     z-index: 10;
-    top: 64px;
+    top: 104px;
     display: flex;
     overflow-x: auto;
     padding: 10px 0;
@@ -5255,14 +5255,19 @@ pre {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .admin-header {
-    min-height: 64px;
+    min-height: 104px;
     padding-inline: 14px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .admin-header__title small {
     display: none;
   }
   .admin-header__actions {
     gap: 8px;
+    flex-basis: 100%;
+    justify-content: space-between;
+    margin-left: 0;
   }
 }
 @media (max-width: 520px) {
@@ -5280,7 +5285,7 @@ pre {
     padding: 16px;
   }
   .admin-filters {
-    top: 64px;
+    top: 162px;
     grid-template-columns: 1fr;
   }
   .admin-filter-actions {

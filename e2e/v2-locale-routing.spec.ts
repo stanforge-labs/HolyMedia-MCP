@@ -235,3 +235,25 @@ test("onboarding, legacy redirect and admin existing sections preserve locale", 
     await expect(page.locator("main.admin-shell")).toBeVisible();
   }
 });
+
+test("admin locale controls never overlap logout at narrow widths", async ({
+  page,
+}) => {
+  await installMockApi(page);
+  await page.route("**/api/v1/admin/**", (r) => r.fulfill({ json: {} }));
+  for (const width of [320, 600, 820]) {
+    await page.setViewportSize({ width, height: 850 });
+    for (const prefix of ["", "/en"]) {
+      await page.goto(`${prefix}/admin`);
+      const logout = page.locator(".admin-header__actions > button");
+      await expect(logout).toBeVisible();
+      await logout.click({ trial: true });
+      const controls = await page
+        .locator(".admin-header .header-preferences")
+        .boundingBox();
+      const button = await logout.boundingBox();
+      expect(controls!.x + controls!.width).toBeLessThanOrEqual(button!.x);
+      expect(button!.x + button!.width).toBeLessThanOrEqual(width);
+    }
+  }
+});
