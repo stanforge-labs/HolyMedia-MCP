@@ -707,6 +707,14 @@ test.describe("restored HolyMedia client UX", () => {
       "aria-checked",
       "true",
     );
+    await page.evaluate(async () => {
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      );
+    });
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath("claude-light.png"),
@@ -756,6 +764,14 @@ test.describe("restored HolyMedia client UX", () => {
       "aria-checked",
       "true",
     );
+    await page.evaluate(async () => {
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      );
+    });
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath("chatgpt-light.png"),
