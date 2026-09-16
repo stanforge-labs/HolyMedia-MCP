@@ -8,6 +8,18 @@ import {
 } from "../apps/web/app/components/locale-routing";
 
 test("locale helpers never prefix technical routes or carry OAuth parameters", () => {
+  const oneTimeCode = "a".repeat(43);
+  for (const form of ["/auth/reset", "/invitations/accept"]) {
+    expect(
+      languageSwitchHref(`${form}?token=${oneTimeCode}&code=secret`, "en"),
+    ).toBe(`/en${form}?token=${oneTimeCode}`);
+    expect(languageSwitchHref(`/en${form}?token=${oneTimeCode}`, "ru")).toBe(
+      `${form}?token=${oneTimeCode}`,
+    );
+  }
+  expect(languageSwitchHref(`/auth?token=${oneTimeCode}`, "en")).toBe(
+    "/en/auth",
+  );
   const transaction = "11111111-1111-4111-8111-111111111111";
   expect(
     languageSwitchHref(

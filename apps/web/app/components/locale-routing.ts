@@ -57,6 +57,14 @@ export function languageSwitchHref(href: string, locale: Locale): string {
     for (const value of url.searchParams.getAll(key)) safe.append(key, value);
   }
   const next = url.searchParams.get("next");
+  // These two frontend forms already receive a HolyMedia one-time code in
+  // their URL. Preserve it only on the same form, never on provider callbacks.
+  if (
+    ["/auth/reset", "/invitations/accept"].includes(withoutLocale(url.pathname))
+  ) {
+    const token = url.searchParams.get("token");
+    if (token && /^[A-Za-z0-9_-]{43}$/.test(token)) safe.set("token", token);
+  }
   // HolyMedia UI continuation IDs are not provider OAuth state/code. Keep only
   // validated internal UUIDs so switching the consent/login UI cannot lose it.
   for (const key of ["oauth_transaction", "transaction"]) {
