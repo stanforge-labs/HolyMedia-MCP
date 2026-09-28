@@ -37,6 +37,8 @@ export function toSafeProviderException(error: unknown): Error {
     invalid_account: "Рекламный кабинет недействителен.",
     account_disabled: "Рекламный кабинет отключён.",
     connection_revoked: "Доступ к подключению отозван.",
+    google_ads_manager_metrics_unsupported:
+      "Управляющий аккаунт Google Ads не содержит метрик кампаний. Повторите отчёт для клиентского рекламного аккаунта внутри этого MCC.",
     provider_response_invalid: "Провайдер вернул неожиданный ответ.",
     authentication_failed: "Провайдер не подтвердил авторизацию.",
   };

@@ -4,6 +4,19 @@ const id = { type: "string", pattern: "^[0-9]{1,40}$" };
 export function metaReadSchema(
   name: string,
 ): Record<string, unknown> | undefined {
+  if (name === "get_meta_oauth_permissions")
+    return {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        account_id: {
+          type: "string",
+          pattern: "^(act_)?[0-9]{1,40}$",
+          description:
+            "Optional enabled external Meta ad account ID selecting its current workspace connection.",
+        },
+      },
+    };
   if (META_ASSET_TOOLS.has(name)) {
     const required: string[] = [];
     if (

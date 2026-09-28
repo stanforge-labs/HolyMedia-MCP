@@ -17,6 +17,15 @@ export async function providerJson<T>(
     }
     if (!response.ok) {
       const error = safeProviderError(payload);
+      if (error.code === "google_ads_manager_metrics_unsupported") {
+        throw new ProviderError(
+          error.code,
+          "Google Ads campaign metrics are not available for manager accounts.",
+          false,
+          String(response.status),
+          error.providerCode,
+        );
+      }
       if (response.status === 401 || response.status === 403) {
         throw new ProviderError(
           error.code === "insufficient_permissions"
@@ -102,7 +111,10 @@ export function assertExternalId(value: string, label: string): string {
 }
 
 function safeProviderError(payload: unknown): {
-  code: "provider_response_invalid" | "insufficient_permissions";
+  code:
+    | "provider_response_invalid"
+    | "insufficient_permissions"
+    | "google_ads_manager_metrics_unsupported";
   providerCode?: string;
   providerSubcode?: string;
   requirements?: {
@@ -113,11 +125,46 @@ function safeProviderError(payload: unknown): {
   if (!payload || typeof payload !== "object") {
     return { code: "provider_response_invalid" };
   }
-  const value = payload as Record<string, unknown>;
+  const first = Array.isArray(payload)
+    ? payload.find((item): item is Record<string, unknown> =>
+        Boolean(item && typeof item === "object" && "error" in item),
+      )
+    : payload;
+  const value =
+    first && typeof first === "object"
+      ? (first as Record<string, unknown>)
+      : {};
   const error = value.error;
+  const errorValue =
+    error && typeof error === "object"
+      ? (error as Record<string, unknown>)
+      : value;
+  const details = Array.isArray(errorValue.details) ? errorValue.details : [];
+  const managerError = details
+    .flatMap((detail) =>
+      detail && typeof detail === "object" && Array.isArray(detail.errors)
+        ? detail.errors
+        : [],
+    )
+    .find((entry) => {
+      if (!entry || typeof entry !== "object") return false;
+      const code = (entry as Record<string, unknown>).errorCode;
+      return (
+        Boolean(code) &&
+        typeof code === "object" &&
+        (code as Record<string, unknown>).queryError ===
+          "REQUESTED_METRICS_FOR_MANAGER"
+      );
+    });
+  if (managerError) {
+    return {
+      code: "google_ads_manager_metrics_unsupported",
+      providerCode: "REQUESTED_METRICS_FOR_MANAGER",
+    };
+  }
   const rawSubcode =
     error && typeof error === "object"
-      ? String((error as Record<string, unknown>).error_subcode ?? "")
+      ? String(errorValue.error_subcode ?? "")
       : "";
   const subcode = /^\d{1,12}$/.test(rawSubcode)
     ? { providerSubcode: rawSubcode }
@@ -126,17 +173,14 @@ function safeProviderError(payload: unknown): {
     typeof error === "string"
       ? error.slice(0, 80) || undefined
       : error && typeof error === "object"
-        ? String(
-            (error as Record<string, unknown>).status ??
-              (error as Record<string, unknown>).code ??
-              "",
-          ).slice(0, 80) || undefined
+        ? String(errorValue.status ?? errorValue.code ?? "").slice(0, 80) ||
+          undefined
         : undefined;
   const message =
     typeof error === "string"
       ? String(value.error_description ?? "").toLowerCase()
       : error && typeof error === "object"
-        ? String((error as Record<string, unknown>).message ?? "").toLowerCase()
+        ? String(errorValue.message ?? "").toLowerCase()
         : "";
   return /permission|access|scope|forbidden|unauthorized/.test(message)
     ? {

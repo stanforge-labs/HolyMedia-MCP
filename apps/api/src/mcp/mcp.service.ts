@@ -706,19 +706,18 @@ export class McpService {
         );
       }
       case "get_meta_oauth_permissions": {
-        const account = await this.account(principal, {
-          ...args,
-          provider: "meta_ads",
-        });
-        const permissions = await this.providers.metaPermissions(
+        const accountId = text(args.account_id || args.accountId);
+        const account = accountId
+          ? await this.account(principal, {
+              ...args,
+              provider: "META_ADS",
+              account_id: accountId,
+            })
+          : undefined;
+        return this.providers.metaPermissions(
           principal.workspaceId,
-          account.connectionId,
+          account?.connectionId,
         );
-        const connection = await this.providers.getConnection(
-          principal.workspaceId,
-          account.connectionId,
-        );
-        return { ...permissions, status: connection.status };
       }
       case "get_search_console_report": {
         const siteUrl = await this.searchConsoleSite(
@@ -1884,6 +1883,8 @@ function toolDescription(name: string): string {
     return "List enabled advertising accounts only (Google Ads, Meta Ads, TikTok Ads and Yandex Direct). It deliberately excludes Google Analytics and Search Console properties.";
   if (name === "list_connected_platforms")
     return "Legacy compatible inventory of enabled resources in the caller's workspace. For a complete, clearly grouped inventory use list_connected_resources.";
+  if (name === "get_meta_oauth_permissions")
+    return "Read requested, granted, declined and missing OAuth permissions for the current workspace's Meta connection. No account_id is required; if supplied, it must be an enabled Meta ad account in the caller's workspace. This only inspects permissions and never changes Meta data.";
   if (name.startsWith("google_analytics_"))
     return "Read-only Google Analytics 4 tool. It can access only an enabled GA4 property in the caller's current workspace and never changes Analytics configuration.";
   if (name === "preview_change_campaign_name")

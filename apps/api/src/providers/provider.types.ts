@@ -71,6 +71,7 @@ export type ProviderErrorCode =
   | "invalid_account"
   | "account_disabled"
   | "connection_revoked"
+  | "google_ads_manager_metrics_unsupported"
   | "provider_response_invalid"
   | "provider_not_configured"
   | "invalid_oauth_state";

@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { metaReadSchema } from "./meta-read.schema.js";
 describe("published Meta read contracts", () => {
+  it("checks Meta OAuth permissions without requiring an ad account", () => {
+    expect(metaReadSchema("get_meta_oauth_permissions")).toEqual({
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        account_id: expect.objectContaining({ type: "string" }),
+      },
+    });
+  });
   it("lists Pages without requiring an account or Page id", () => {
     expect(metaReadSchema("list_meta_pages")).toMatchObject({
       required: [],

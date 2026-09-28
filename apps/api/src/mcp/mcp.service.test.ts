@@ -42,6 +42,13 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
   } as never;
   const providers = {
     listProviders: () => [{ id: "GOOGLE_ADS", displayName: "Google Ads" }],
+    metaPermissions: vi.fn(async () => ({
+      requested: ["ads_read"],
+      granted: ["ads_read"],
+      missing: [],
+      declined: [],
+      status: "CONNECTED",
+    })),
     readMetrics: async (
       _workspaceId: string,
       _connectionId: string,
@@ -443,6 +450,26 @@ describe("MCP V1-compatible policy", () => {
         account_id: "987654",
       }),
     ]);
+  });
+
+  it("reads Meta OAuth permissions from the workspace connection without an account argument", async () => {
+    const service = serviceWithAccounts([]);
+    const principal = {
+      kind: "service" as const,
+      tokenId: "token",
+      serviceIdentityId: "identity",
+      workspaceId: "workspace-a",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [],
+      resourceAccessMode: "ALL_CONNECTED" as const,
+    };
+
+    await expect(
+      service.call(principal, "get_meta_oauth_permissions", {}),
+    ).resolves.toMatchObject({
+      granted: ["ads_read"],
+      status: "CONNECTED",
+    });
   });
 
   it("compares two periods using the provider read adapter", async () => {

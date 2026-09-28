@@ -1083,10 +1083,20 @@ export class ProviderService {
     }
   }
 
-  public async metaPermissions(workspaceId: string, connectionId: string) {
+  public async metaPermissions(
+    workspaceId: string,
+    connectionId?: string,
+  ): Promise<{
+    requested: string[];
+    granted: string[];
+    missing: string[];
+    declined: string[];
+    status: string;
+  }> {
     const context = await this.connectionReadCredentials(
       workspaceId,
-      connectionId,
+      connectionId ?? "",
+      "META_ADS",
     );
     const adapter = context.adapter as unknown as MetaReadAdapter;
     const permissions = await adapter.getPermissions(context.credentials);
@@ -1094,34 +1104,12 @@ export class ProviderService {
     const missing = requested.filter(
       (scope) => !permissions.granted.includes(scope),
     );
-    const metadata = {
-      ...((context.connection.metadata as Record<string, unknown> | null) ??
-        {}),
-      requestedScopes: requested,
-      grantedScopes: permissions.granted,
-      missingScopes: missing,
-    };
-    const encrypted = this.vault.encrypt({
-      ...context.credentials,
-      scopes: permissions.granted,
-    });
-    await this.database.client.providerConnection.update({
-      where: { id: context.connection.id },
-      data: {
-        metadata,
-        credential: {
-          update: {
-            encryptedPayload: encrypted.ciphertext,
-            encryptionVersion: encrypted.encryptionVersion,
-          },
-        },
-      },
-    });
     return {
       requested,
       granted: permissions.granted,
       missing,
       declined: permissions.declined,
+      status: context.connection.status,
     };
   }
 

@@ -223,6 +223,17 @@ export class McpController {
                   ...(error instanceof PreviewError
                     ? { code: error.code }
                     : {}),
+                  ...(error instanceof ProviderError &&
+                  error.code === "google_ads_manager_metrics_unsupported"
+                    ? {
+                        code: error.code,
+                        provider: "GOOGLE_ADS",
+                        operation: name,
+                        retryable: false,
+                        user_action: "select_client_account",
+                        upstream_code: error.providerCode,
+                      }
+                    : {}),
                 }),
               },
             ],
@@ -245,13 +256,18 @@ export class McpController {
   }
 }
 
-function mcpFailureMessage(error: unknown): string {
+export function mcpFailureMessage(error: unknown): string {
   if (error instanceof PreviewError) return error.publicMessage;
   if (
     error instanceof ProviderError &&
     error.code === "insufficient_permissions"
   )
     return "У подключения Meta недостаточно разрешений для этой операции.";
+  if (
+    error instanceof ProviderError &&
+    error.code === "google_ads_manager_metrics_unsupported"
+  )
+    return "Управляющий аккаунт Google Ads не содержит метрик кампаний. Повторите отчёт для клиентского рекламного аккаунта внутри этого MCC.";
   if (error instanceof HttpException) {
     const message = error.message;
     if (message === "Account is not available to this service token.")
