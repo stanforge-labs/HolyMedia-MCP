@@ -262,7 +262,9 @@ export function mcpFailureMessage(error: unknown): string {
     error instanceof ProviderError &&
     error.code === "insufficient_permissions"
   )
-    return "У подключения Meta недостаточно разрешений для этой операции.";
+    return error.providerCode === "PERMISSION_DENIED"
+      ? "Google Ads не разрешает доступ к этому клиентскому кабинету. Выберите другой кабинет или проверьте права доступа."
+      : "У подключения Meta недостаточно разрешений для этой операции.";
   if (
     error instanceof ProviderError &&
     error.code === "google_ads_manager_metrics_unsupported"
