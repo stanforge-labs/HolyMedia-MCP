@@ -22,6 +22,13 @@ export class ProviderError extends Error {
   }
 }
 
+export function shouldMarkConnectionDegraded(error: unknown): boolean {
+  return !(
+    error instanceof ProviderError &&
+    error.code === "google_ads_manager_metrics_unsupported"
+  );
+}
+
 export function toSafeProviderException(error: unknown): Error {
   if (!(error instanceof ProviderError))
     return new ServiceUnavailableException("Provider operation failed.");

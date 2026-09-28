@@ -22,7 +22,11 @@ import { RedisRateLimitService } from "../infrastructure/redis-rate-limit.servic
 import { hashIp } from "../infrastructure/security.utils.js";
 import { CredentialVaultService } from "./credential-vault.service.js";
 import { OAuthStateService } from "./oauth-state.service.js";
-import { ProviderError, toSafeProviderException } from "./provider.errors.js";
+import {
+  ProviderError,
+  shouldMarkConnectionDegraded,
+  toSafeProviderException,
+} from "./provider.errors.js";
 import { ProviderRefreshCoordinator } from "./refresh-coordinator.service.js";
 import { ProviderRegistry } from "./provider.registry.js";
 import { ProviderMetricsService } from "./provider.metrics.js";
@@ -928,20 +932,22 @@ export class ProviderService {
         error instanceof ProviderError
           ? error.code
           : "provider_response_invalid";
-      await this.database.client.providerConnection.updateMany({
-        where: { id: connectionId, workspaceId },
-        data: {
-          status: "DEGRADED",
-          lastErrorAt: new Date(),
-          lastErrorCode: [
-            code,
-            error instanceof ProviderError ? error.providerCode : undefined,
-          ]
-            .filter(Boolean)
-            .join(":")
-            .slice(0, 120),
-        },
-      });
+      if (shouldMarkConnectionDegraded(error)) {
+        await this.database.client.providerConnection.updateMany({
+          where: { id: connectionId, workspaceId },
+          data: {
+            status: "DEGRADED",
+            lastErrorAt: new Date(),
+            lastErrorCode: [
+              code,
+              error instanceof ProviderError ? error.providerCode : undefined,
+            ]
+              .filter(Boolean)
+              .join(":")
+              .slice(0, 120),
+          },
+        });
+      }
       this.logger.warn(
         {
           operation,
