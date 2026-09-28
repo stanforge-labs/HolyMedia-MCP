@@ -23,10 +23,17 @@ export class ProviderError extends Error {
 }
 
 export function shouldMarkConnectionDegraded(error: unknown): boolean {
-  return !(
-    error instanceof ProviderError &&
-    error.code === "google_ads_manager_metrics_unsupported"
-  );
+  if (!(error instanceof ProviderError)) return true;
+  if (error.code === "google_ads_manager_metrics_unsupported") return false;
+  // A denied customer can coexist with other readable customers on the same
+  // Google OAuth connection; do not mark the entire connection unhealthy.
+  if (
+    error.code === "insufficient_permissions" &&
+    error.providerStatus === "403" &&
+    error.providerCode === "PERMISSION_DENIED"
+  )
+    return false;
+  return true;
 }
 
 export function toSafeProviderException(error: unknown): Error {

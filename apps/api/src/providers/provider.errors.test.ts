@@ -35,4 +35,34 @@ describe("provider error boundary", () => {
       ),
     ).toBe(true);
   });
+
+  it("does not degrade all Google Ads customers for one denied customer", () => {
+    expect(
+      shouldMarkConnectionDegraded(
+        new ProviderError(
+          "insufficient_permissions",
+          "Customer access denied.",
+          false,
+          "403",
+          "PERMISSION_DENIED",
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      shouldMarkConnectionDegraded(
+        new ProviderError("insufficient_permissions", "Missing OAuth scope."),
+      ),
+    ).toBe(true);
+    expect(
+      shouldMarkConnectionDegraded(
+        new ProviderError(
+          "insufficient_permissions",
+          "Meta permission missing.",
+          false,
+          "400",
+          "10",
+        ),
+      ),
+    ).toBe(true);
+  });
 });
