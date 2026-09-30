@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { HumanPrincipal } from "../auth/auth.types.js";
+import { loadConfig } from "@holymedia/config";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 import {
@@ -36,6 +37,8 @@ export type OAuthAuthorizationContextView = {
 
 @Injectable()
 export class OAuthAuthorizationService {
+  private readonly writeScopeEnabled = loadConfig().publicMcpWriteScopeEnabled;
+
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(OAuthClientMetadataService)
@@ -101,6 +104,7 @@ export class OAuthAuthorizationService {
       throw new BadRequestException("OAuth client or redirect URI is invalid.");
     }
     const scope = normalizeScope(stringValue(input.scope), resource);
+    this.assertWriteScopeEnabled(scope);
     const clientScopes = new Set(client.scope.split(/\s+/).filter(Boolean));
     if (scope.split(" ").some((item) => !clientScopes.has(item))) {
       throw new BadRequestException(
@@ -221,8 +225,13 @@ export class OAuthAuthorizationService {
     allow: boolean,
     principal: HumanPrincipal,
     workspaceId?: string,
+    approvedScope?: string,
   ) {
     const transaction = await this.activeTransaction(transactionId);
+    const grantedScope = allow
+      ? this.approvedScope(transaction.scope, approvedScope)
+      : transaction.scope;
+    if (allow) this.assertWriteScopeEnabled(grantedScope);
     if (transaction.userId && transaction.userId !== principal.userId) {
       throw new UnauthorizedException("OAuth transaction is not available.");
     }
@@ -300,7 +309,7 @@ export class OAuthAuthorizationService {
           workspaceId: selectedWorkspaceId,
           userId: principal.userId,
           redirectUri: transaction.redirectUri,
-          scope: transaction.scope,
+          scope: grantedScope,
           resource: transaction.resource,
           codeChallenge: transaction.codeChallenge,
           codeChallengeMethod: transaction.codeChallengeMethod,
@@ -348,6 +357,7 @@ export class OAuthAuthorizationService {
     ) {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
+    this.assertWriteScopeEnabled(code.scope);
 
     const familyId = randomUUID();
     const rawToken = `hm_oauth_${randomBytes(32).toString("base64url")}`;
@@ -438,6 +448,7 @@ export class OAuthAuthorizationService {
     ) {
       throw new UnauthorizedException("OAuth refresh token is invalid.");
     }
+    this.assertWriteScopeEnabled(refresh.scope);
     if (
       refresh.usedAt ||
       refresh.revokedAt ||
@@ -622,6 +633,24 @@ export class OAuthAuthorizationService {
     if (!existing) return this.clientMetadata.resolve(clientId);
     if (existing.registrationSource !== "cimd") return existing;
     return this.clientMetadata.resolve(clientId);
+  }
+
+  private assertWriteScopeEnabled(scope: string): void {
+    if (scope.split(/\s+/).includes(MCP_WRITE_SCOPE) && !this.writeScopeEnabled)
+      throw new BadRequestException("OAuth write scope is not available.");
+  }
+
+  private approvedScope(requested: string, approved?: string): string {
+    if (
+      requested === MCP_READ_SCOPE &&
+      (!approved || approved === MCP_READ_SCOPE)
+    )
+      return MCP_READ_SCOPE;
+    if (requested === `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`) {
+      if (approved === MCP_READ_SCOPE) return MCP_READ_SCOPE;
+      if (approved === requested) return requested;
+    }
+    throw new BadRequestException("Explicit OAuth scope consent is required.");
   }
 
   private async activeTransaction(transactionId: string) {

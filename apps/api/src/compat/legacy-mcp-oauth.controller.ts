@@ -175,6 +175,7 @@ export class LegacyMcpOAuthController {
       body.decision === "allow",
       principal,
       workspaceId,
+      typeof body.approved_scope === "string" ? body.approved_scope : undefined,
     );
     return { redirect_url: result.url };
   }

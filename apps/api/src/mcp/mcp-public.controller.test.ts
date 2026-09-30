@@ -67,7 +67,7 @@ describe("public MCP transport", () => {
     )) as {
       result: { tools: Array<{ name: string }> };
     };
-    expect(publicList.result.tools).toHaveLength(43);
+    expect(publicList.result.tools).toHaveLength(42);
     const legacyList = (await controller.post(
       request("tools/list"),
       reply() as never,
@@ -75,6 +75,9 @@ describe("public MCP transport", () => {
     expect(legacyList.result.tools).toHaveLength(157);
     expect(
       publicList.result.tools.some((tool) => tool.name === "commit_preview"),
+    ).toBe(false);
+    expect(
+      publicList.result.tools.some((tool) => tool.name === "confirm_preview"),
     ).toBe(false);
     const hidden = (await controller.postPublic(
       request("tools/call", "commit_preview"),
@@ -87,6 +90,15 @@ describe("public MCP transport", () => {
       "public_operation_not_available",
     );
     expect(read).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    const hiddenConfirmation = (await controller.postPublic(
+      request("tools/call", "confirm_preview"),
+      reply() as never,
+    )) as { result: { isError: boolean; content: Array<{ text: string }> } };
+    expect(hiddenConfirmation.result.isError).toBe(true);
+    expect(JSON.parse(hiddenConfirmation.result.content[0]!.text).code).toBe(
+      "public_operation_not_available",
+    );
     expect(write).not.toHaveBeenCalled();
     await controller.postPublic(
       request("tools/call", "list_connected_resources"),

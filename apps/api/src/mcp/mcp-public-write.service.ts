@@ -8,6 +8,8 @@ import { ProviderService } from "../providers/provider.service.js";
 import type { MetaControlledCampaignState } from "../providers/provider.types.js";
 import { PreviewError } from "./mcp-preview.error.js";
 import type { OAuthMcpPrincipal } from "./mcp-principal.js";
+import type { HumanPrincipal } from "../auth/auth.types.js";
+import { MCP_PUBLIC_RESOURCE } from "./oauth-authorization.service.js";
 
 export const PUBLIC_PREVIEW_TTL_MS = 10 * 60_000;
 
@@ -51,9 +53,18 @@ function snapshot(state: MetaControlledCampaignState): PublicSnapshot {
   };
 }
 
-function snapshotHash(state: PublicSnapshot): string {
+function snapshotHash(
+  operation: PublicOperation,
+  state: PublicSnapshot,
+): string {
+  // Resource identity is verified separately. Only the field this operation
+  // changes should make its optimistic-concurrency snapshot stale.
   return digest(
-    JSON.stringify([state.id, state.accountId, state.name, state.status]),
+    JSON.stringify(
+      operation === "META_CAMPAIGN_RENAME"
+        ? [operation, state.name]
+        : [operation, state.status],
+    ),
   );
 }
 
@@ -82,8 +93,6 @@ export class McpPublicWriteService {
     const args = record(raw);
     if (Object.prototype.hasOwnProperty.call(operations, name))
       return this.create(principal, name as keyof typeof operations, args);
-    if (name === "confirm_preview")
-      return this.confirm(principal, this.onlyToken(args));
     if (name === "commit_confirmed_preview")
       return this.commit(principal, this.onlyToken(args));
     throw new PreviewError("public_operation_not_available");
@@ -119,6 +128,7 @@ export class McpPublicWriteService {
       throw new PreviewError("preview_no_change");
 
     const rawToken = `hmpp_${randomBytes(32).toString("base64url")}`;
+    const approvalToken = `hmap_${randomBytes(32).toString("base64url")}`;
     const expiresAt = new Date(Date.now() + PUBLIC_PREVIEW_TTL_MS);
     const preview = await this.database.client.mcpPreview.create({
       data: {
@@ -136,8 +146,9 @@ export class McpPublicWriteService {
         diff: { before, requested } as Prisma.InputJsonValue,
         beforeState: before as Prisma.InputJsonValue,
         requestedState: requested as Prisma.InputJsonValue,
-        snapshotDigest: snapshotHash(before),
+        snapshotDigest: snapshotHash(operation, before),
         previewTokenDigest: digest(rawToken),
+        approvalTokenDigest: digest(approvalToken),
         expiresAt,
         commitStatus: "PREVIEWED",
       },
@@ -164,80 +175,227 @@ export class McpPublicWriteService {
     return {
       status: "preview",
       preview_token: rawToken,
-      preview_id: preview.id,
-      actor_user_id: principal.userId,
-      workspace_id: principal.workspaceId,
-      connection_id: account.connectionId,
+      summary:
+        operation === "META_CAMPAIGN_RENAME"
+          ? `Rename Meta Ads campaign ${before.name}`
+          : operation === "META_CAMPAIGN_PAUSE"
+            ? `Pause Meta Ads campaign ${before.name}`
+            : `Resume Meta Ads campaign ${before.name}`,
+      provider: "META_ADS",
       account_id: account.externalAccountId,
       campaign_id: campaignId,
       operation,
       before,
       requested,
-      snapshot_digest: preview.snapshotDigest,
-      created_at: preview.createdAt.toISOString(),
       expires_at: expiresAt.toISOString(),
-      confirmed_at: null,
-      commit_status: "PREVIEWED",
-      provider_write_enabled: this.config.publicMcpControlledWriteEnabled,
-      execution_mode: "simulated_no_write",
+      approval_url: `${this.config.publicBaseUrl}/mcp/approve?approval=${encodeURIComponent(approvalToken)}`,
+      provider_mutation_sent: false,
+      user_action:
+        "Open the HolyMedia approval URL and explicitly approve this change in your browser before calling commit_confirmed_preview.",
     };
   }
 
-  private async confirm(principal: OAuthMcpPrincipal, rawToken: string) {
-    const preview = await this.find(principal, rawToken);
-    this.assertUsable(preview);
-    const account = await this.account(principal, preview.accountId);
-    this.assertContext(preview, account);
-    await this.requireMetaWritePermission(principal, account.connectionId);
-    if (preview.confirmedAt) return this.confirmationView(preview);
+  /** GET is a pure view: a browser nonce alone never confirms anything. */
+  public async approvalView(principal: HumanPrincipal, rawNonce: string) {
+    const { preview, account } = await this.browserApprovalContext(
+      principal,
+      rawNonce,
+    );
+    const before = record(preview.beforeState);
+    const requested = record(preview.requestedState);
+    return {
+      provider: "Meta Ads",
+      account: account.displayName || account.externalAccountId,
+      campaign: String(before.name),
+      operation: preview.operation,
+      field: preview.operation === "META_CAMPAIGN_RENAME" ? "name" : "status",
+      before:
+        preview.operation === "META_CAMPAIGN_RENAME"
+          ? before.name
+          : before.status,
+      after:
+        preview.operation === "META_CAMPAIGN_RENAME"
+          ? requested.name
+          : requested.status,
+      expires_at: preview.expiresAt.toISOString(),
+      approved: Boolean(preview.confirmedAt && preview.approvedByUserId),
+    };
+  }
+
+  /** Called only behind HolyMedia cookie-session and CSRF guards. */
+  public async decideApproval(
+    principal: HumanPrincipal,
+    rawNonce: string,
+    decision: "approve" | "cancel",
+  ) {
+    const { preview } = await this.browserApprovalContext(principal, rawNonce);
+    if (preview.confirmedAt)
+      throw new PreviewError("preview_already_confirmed");
     const now = new Date();
     const updated = await this.database.client.mcpPreview.updateMany({
       where: {
         id: preview.id,
+        approvalTokenDigest: digest(rawNonce),
         principalType: "OAUTH_USER",
-        workspaceId: principal.workspaceId,
+        workspaceId: preview.workspaceId,
         oauthUserId: principal.userId,
-        oauthClientId: principal.clientId,
-        oauthGrantId: principal.grantId,
+        oauthClientId: preview.oauthClientId,
+        oauthGrantId: preview.oauthGrantId,
         confirmedAt: null,
         consumedAt: null,
+        cancelledAt: null,
         expiresAt: { gt: now },
       },
-      data: { confirmedAt: now, commitStatus: "CONFIRMED" },
+      data:
+        decision === "approve"
+          ? {
+              confirmedAt: now,
+              approvedByUserId: principal.userId,
+              approvalSessionId: principal.sessionId,
+              commitStatus: "CONFIRMED",
+            }
+          : { cancelledAt: now, commitStatus: "CANCELLED" },
     });
-    if (updated.count !== 1) {
-      const current = await this.find(principal, rawToken);
-      this.assertUsable(current);
-      if (current.confirmedAt) return this.confirmationView(current);
+    if (updated.count !== 1)
       throw new PreviewError("confirmation_context_mismatch");
-    }
     await this.audit.record({
-      eventType: "mcp_public_preview_confirmed",
+      eventType:
+        decision === "approve"
+          ? "mcp_public_preview_web_approved"
+          : "mcp_public_preview_web_cancelled",
       actorType: "HUMAN",
       actorUserId: principal.userId,
-      workspaceId: principal.workspaceId,
+      workspaceId: preview.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
       metadata: {
-        oauthClientId: principal.clientId,
-        oauthGrantId: principal.grantId,
-        provider: "META_ADS",
-        accountId: account.id,
+        oauthClientId: preview.oauthClientId,
+        oauthGrantId: preview.oauthGrantId,
+        accountId: preview.accountId,
         campaignId: preview.externalObjectId,
         operation: preview.operation,
-        confirmedAt: now.toISOString(),
+        decision,
+        decidedAt: now.toISOString(),
       },
     });
-    return this.confirmationView({ ...preview, confirmedAt: now });
+    return { status: decision === "approve" ? "approved" : "cancelled" };
+  }
+
+  private async browserApprovalContext(
+    principal: HumanPrincipal,
+    rawNonce: string,
+  ) {
+    if (!/^hmap_[A-Za-z0-9_-]{43}$/.test(rawNonce))
+      throw new PreviewError("approval_not_found");
+    const preview = await this.database.client.mcpPreview.findFirst({
+      where: {
+        approvalTokenDigest: digest(rawNonce),
+        principalType: "OAUTH_USER",
+        oauthUserId: principal.userId,
+      },
+    });
+    if (!preview) throw new PreviewError("approval_not_found");
+    this.assertUsable(preview);
+    if (!preview.oauthClientId || !preview.oauthGrantId)
+      throw new PreviewError("approval_not_found");
+    const [membership, grant, account] = await Promise.all([
+      this.database.client.workspaceMembership.findFirst({
+        where: {
+          userId: principal.userId,
+          workspaceId: preview.workspaceId,
+          workspace: { accessStatus: "ACTIVE" },
+        },
+        select: { id: true },
+      }),
+      this.database.client.oAuthRefreshToken.findFirst({
+        where: {
+          familyId: preview.oauthGrantId,
+          userId: principal.userId,
+          workspaceId: preview.workspaceId,
+          clientId: preview.oauthClientId,
+          resource: MCP_PUBLIC_RESOURCE,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+          client: { status: "active", revokedAt: null },
+          workspace: { accessStatus: "ACTIVE" },
+          user: { status: "active" },
+        },
+        select: { scope: true },
+      }),
+      this.database.client.providerAccount.findFirst({
+        where: {
+          id: preview.accountId,
+          workspaceId: preview.workspaceId,
+          connectionId: preview.connectionId ?? "",
+          provider: "META_ADS",
+          enabled: true,
+          connection: {
+            workspaceId: preview.workspaceId,
+            status: "CONNECTED",
+          },
+        },
+      }),
+    ]);
+    if (
+      !membership ||
+      !grant ||
+      !grant.scope.split(/\s+/).includes("adforge:mcp:write") ||
+      !account
+    )
+      throw new PreviewError("approval_not_found");
+    this.assertContext(preview, account);
+    await this.providers
+      .metaPermissions(preview.workspaceId, account.connectionId)
+      .then((permissions) => {
+        if (!permissions.granted.includes("ads_management"))
+          throw new PreviewError("approval_not_found");
+      });
+    return { preview, account };
   }
 
   private async commit(principal: OAuthMcpPrincipal, rawToken: string) {
     const preview = await this.find(principal, rawToken);
     this.assertUsable(preview);
-    if (!preview.confirmedAt) throw new PreviewError("preview_not_confirmed");
+    if (
+      !preview.confirmedAt ||
+      preview.approvedByUserId !== principal.userId ||
+      !preview.approvalSessionId
+    )
+      throw new PreviewError("preview_not_confirmed");
     const account = await this.account(principal, preview.accountId);
     this.assertContext(preview, account);
-    if (!this.config.publicMcpControlledWriteEnabled) {
+    await this.requireMetaWritePermission(principal, account.connectionId);
+    const operation = preview.operation as PublicOperation;
+    const desired = record(preview.requestedState);
+    let current: PublicSnapshot;
+    try {
+      current = await this.readCampaign(
+        principal,
+        account,
+        preview.externalObjectId,
+      );
+    } catch (error) {
+      await this.markPrewriteFailure(
+        principal,
+        preview.id,
+        "PREWRITE_READ_FAILED",
+      );
+      throw error;
+    }
+    if (snapshotHash(operation, current) !== preview.snapshotDigest) {
+      await this.markPrewriteFailure(
+        principal,
+        preview.id,
+        "PREVIEW_STALE",
+        current,
+      );
+      throw new PreviewError("preview_stale");
+    }
+    if (
+      !this.config.publicMcpWriteScopeEnabled ||
+      !this.config.publicMcpControlledWriteEnabled
+    ) {
       await this.audit.record({
         eventType: "mcp_public_commit_blocked",
         actorType: "HUMAN",
@@ -253,7 +411,6 @@ export class McpPublicWriteService {
       });
       throw new PreviewError("public_write_disabled");
     }
-    await this.requireMetaWritePermission(principal, account.connectionId);
     const now = new Date();
     const claimed = await this.database.client.mcpPreview.updateMany({
       where: {
@@ -266,6 +423,9 @@ export class McpPublicWriteService {
         accountId: account.id,
         connectionId: account.connectionId,
         confirmedAt: { not: null },
+        approvedByUserId: principal.userId,
+        approvalSessionId: { not: null },
+        cancelledAt: null,
         consumedAt: null,
         expiresAt: { gt: now },
       },
@@ -294,36 +454,6 @@ export class McpPublicWriteService {
         attemptedAt: now.toISOString(),
       },
     });
-
-    const operation = preview.operation as PublicOperation;
-    const desired = record(preview.requestedState);
-    let current: PublicSnapshot;
-    try {
-      current = await this.readCampaign(
-        principal,
-        account,
-        preview.externalObjectId,
-      );
-    } catch (error) {
-      await this.finalize(
-        principal,
-        preview.id,
-        "PREWRITE_READ_FAILED",
-        null,
-        null,
-      );
-      throw error;
-    }
-    if (snapshotHash(current) !== preview.snapshotDigest) {
-      await this.finalize(
-        principal,
-        preview.id,
-        "PREVIEW_STALE",
-        null,
-        current,
-      );
-      throw new PreviewError("preview_stale");
-    }
 
     const providerOperation =
       operation === "META_CAMPAIGN_RENAME"
@@ -432,6 +562,37 @@ export class McpPublicWriteService {
     }
   }
 
+  private async markPrewriteFailure(
+    principal: OAuthMcpPrincipal,
+    previewId: string,
+    status: "PREWRITE_READ_FAILED" | "PREVIEW_STALE",
+    observed: PublicSnapshot | null = null,
+  ) {
+    const now = new Date();
+    const result = await this.database.client.mcpPreview.updateMany({
+      where: { id: previewId, consumedAt: null, cancelledAt: null },
+      data: {
+        consumedAt: now,
+        commitStatus: status,
+        verificationRead:
+          observed === null
+            ? Prisma.JsonNull
+            : (observed as Prisma.InputJsonValue),
+      },
+    });
+    if (result.count === 1)
+      await this.audit.record({
+        eventType: "mcp_public_commit_finalized",
+        actorType: "HUMAN",
+        actorUserId: principal.userId,
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: previewId,
+        success: false,
+        metadata: { finalStatus: status },
+      });
+  }
+
   private result(
     id: string,
     operation: PublicOperation,
@@ -510,12 +671,14 @@ export class McpPublicWriteService {
     operation: string;
     expiresAt: Date;
     consumedAt: Date | null;
+    cancelledAt: Date | null;
   }) {
     if (
       preview.provider !== "META_ADS" ||
       !publicOperations.has(preview.operation)
     )
       throw new PreviewError("public_operation_not_available");
+    if (preview.cancelledAt) throw new PreviewError("preview_cancelled");
     if (preview.consumedAt) throw new PreviewError("preview_already_consumed");
     if (preview.expiresAt <= new Date())
       throw new PreviewError("preview_expired");
@@ -546,7 +709,11 @@ export class McpPublicWriteService {
       before.accountId !== account.externalAccountId ||
       typeof before.name !== "string" ||
       typeof before.status !== "string" ||
-      preview.snapshotDigest !== snapshotHash(before as PublicSnapshot) ||
+      preview.snapshotDigest !==
+        snapshotHash(
+          preview.operation as PublicOperation,
+          before as PublicSnapshot,
+        ) ||
       JSON.stringify(storedPayload) !== JSON.stringify(requested) ||
       (preview.operation === "META_CAMPAIGN_RENAME"
         ? typeof requested.name !== "string" ||
@@ -555,22 +722,6 @@ export class McpPublicWriteService {
           Object.keys(requested).length !== 1)
     )
       throw new PreviewError("confirmation_context_mismatch");
-  }
-
-  private confirmationView(preview: {
-    id: string;
-    operation: string;
-    confirmedAt: Date | null;
-    expiresAt: Date;
-  }) {
-    return {
-      status: "confirmed",
-      preview_id: preview.id,
-      operation: preview.operation,
-      confirmed_at: preview.confirmedAt?.toISOString() ?? null,
-      expires_at: preview.expiresAt.toISOString(),
-      provider_mutation_sent: false,
-    };
   }
 
   private onlyToken(args: Record<string, unknown>): string {

@@ -36,6 +36,7 @@ function copyFor(clientName: string) {
       chooseCompany: `К какой компании подключить ${clientName}?`,
       canTitle: `${clientName} сможет`,
       writeTitle: "Отдельное разрешение на изменение",
+      writeChoice: "Разрешить подтверждённые мной изменения",
       writeConsent:
         "Разрешить HolyMedia MCP выполнять подтверждённые вами изменения в подключённых рекламных аккаунтах. Каждое изменение требует отдельного просмотра и подтверждения.",
       can: [
@@ -50,6 +51,7 @@ function copyFor(clientName: string) {
         "данные других компаний.",
       ],
       allow: "Разрешить",
+      allowRead: "Разрешить только чтение",
       allowWrite: "Разрешить чтение и подтверждённые изменения",
       deny: "Отмена",
       working: "Подключаем…",
@@ -66,6 +68,7 @@ function copyFor(clientName: string) {
       chooseCompany: `Which company should ${clientName} connect to?`,
       canTitle: `${clientName} can`,
       writeTitle: "Separate permission to make changes",
+      writeChoice: "Allow changes I separately approve",
       writeConsent:
         "Allow HolyMedia MCP to make changes you confirm in connected advertising accounts. Each change requires its own preview and confirmation.",
       can: [
@@ -80,6 +83,7 @@ function copyFor(clientName: string) {
         "data from other companies.",
       ],
       allow: "Allow",
+      allowRead: "Allow read-only access",
       allowWrite: "Allow reading and confirmed changes",
       deny: "Cancel",
       working: "Connecting…",
@@ -93,17 +97,6 @@ function copyFor(clientName: string) {
 
 function verifiedClientLabel(context: AuthorizationContext | null): string {
   if (!context) return "AI-клиент";
-  try {
-    const hostname = new URL(context.client.id).hostname.toLowerCase();
-    if (hostname === "chatgpt.com" || hostname.endsWith(".chatgpt.com")) {
-      return "ChatGPT";
-    }
-    if (hostname === "claude.ai" || hostname.endsWith(".claude.ai")) {
-      return "Claude";
-    }
-  } catch {
-    // DCR client IDs are opaque; the verified server-side client name is safe.
-  }
   return context.client.name.trim().slice(0, 80) || "AI-клиент";
 }
 
@@ -122,6 +115,7 @@ export default function ClaudeConsentPage() {
   const [transactionId, setTransactionId] = useState("");
   const [context, setContext] = useState<AuthorizationContext | null>(null);
   const [workspaceId, setWorkspaceId] = useState("");
+  const [allowWrite, setAllowWrite] = useState(false);
   const [busy, setBusy] = useState<"allow" | "deny" | null>(null);
   const [error, setError] = useState("");
   const t = useMemo(
@@ -195,6 +189,10 @@ export default function ClaudeConsentPage() {
           transaction_id: transactionId,
           workspace_id: workspaceId,
           decision,
+          approved_scope:
+            writeRequested && allowWrite
+              ? "adforge:mcp:read adforge:mcp:write"
+              : "adforge:mcp:read",
         }),
       });
       if (!response.ok) throw new Error("consent_failed");
@@ -277,6 +275,14 @@ export default function ClaudeConsentPage() {
               <section className="oauth-write-permission">
                 <h2>{t.writeTitle}</h2>
                 <p>{t.writeConsent}</p>
+                <label className="oauth-write-choice">
+                  <input
+                    type="checkbox"
+                    checked={allowWrite}
+                    onChange={(event) => setAllowWrite(event.target.checked)}
+                  />
+                  <span>{t.writeChoice}</span>
+                </label>
               </section>
             )}
 
@@ -301,9 +307,11 @@ export default function ClaudeConsentPage() {
               >
                 {busy === "allow"
                   ? t.working
-                  : writeRequested
+                  : writeRequested && allowWrite
                     ? t.allowWrite
-                    : t.allow}
+                    : writeRequested
+                      ? t.allowRead
+                      : t.allow}
               </button>
             </div>
           </form>

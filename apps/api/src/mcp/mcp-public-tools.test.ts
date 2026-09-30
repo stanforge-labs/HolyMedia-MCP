@@ -11,14 +11,15 @@ import {
 const descriptors = McpService.prototype.tools.call({} as McpService);
 
 describe("public MCP tool registry", () => {
-  it("keeps the legacy 157-tool contract and exposes exactly the reviewed 43", () => {
+  it("keeps the legacy 157-tool contract and exposes exactly the reviewed 42", () => {
     expect(V1_COMPATIBLE_MCP_TOOLS).toHaveLength(157);
     expect(PUBLIC_READ_TOOLS).toHaveLength(38);
-    expect(PUBLIC_WRITE_TOOLS).toHaveLength(5);
+    expect(PUBLIC_WRITE_TOOLS).toHaveLength(4);
     const listed = publicTools(descriptors);
     expect(listed.map((tool) => tool.name)).toEqual([...PUBLIC_TOOL_NAMES]);
-    expect(new Set(listed.map((tool) => tool.name)).size).toBe(43);
+    expect(new Set(listed.map((tool) => tool.name)).size).toBe(42);
     for (const hidden of [
+      "confirm_preview",
       "commit_preview",
       "commit_meta_app_review_preview",
       "commit_meta_confirmed_write",
@@ -45,7 +46,10 @@ describe("public MCP tool registry", () => {
         expect(typeof tool.annotations[key], `${tool.name}.${key}`).toBe(
           "boolean",
         );
-      if (PUBLIC_READ_TOOLS.includes(tool.name as never)) {
+      if (
+        PUBLIC_READ_TOOLS.includes(tool.name as never) &&
+        tool.name !== "run_connection_diagnostics"
+      ) {
         expect(tool.annotations).toMatchObject({
           readOnlyHint: true,
           destructiveHint: false,
@@ -64,12 +68,14 @@ describe("public MCP tool registry", () => {
         idempotentHint: false,
       });
     }
-    expect(byName.get("confirm_preview")?.annotations).toMatchObject({
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
-      idempotentHint: true,
-    });
+    expect(byName.get("run_connection_diagnostics")?.annotations).toMatchObject(
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
+    );
     expect(byName.get("commit_confirmed_preview")?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,

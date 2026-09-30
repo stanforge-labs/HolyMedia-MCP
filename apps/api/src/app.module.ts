@@ -52,6 +52,7 @@ import { LegacyDiagnosticsController } from "./compat/legacy-diagnostics.control
 import { SearchConsoleController } from "./seo/search-console.controller.js";
 import { McpPreviewService } from "./mcp/mcp-preview.service.js";
 import { McpPublicWriteService } from "./mcp/mcp-public-write.service.js";
+import { McpPublicApprovalController } from "./mcp/mcp-public-approval.controller.js";
 import { LegacyMcpOAuthController } from "./compat/legacy-mcp-oauth.controller.js";
 import { McpOAuthClientService } from "./mcp/mcp-oauth-client.service.js";
 import { OAuthAuthorizationService } from "./mcp/oauth-authorization.service.js";
@@ -78,6 +79,7 @@ import { SupportRequestService } from "./support/support-request.service.js";
     ProviderController,
     ServiceTokenController,
     McpController,
+    McpPublicApprovalController,
     LegacyAuthController,
     LegacyMeController,
     LegacyMcpTokenController,

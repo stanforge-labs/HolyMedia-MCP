@@ -167,6 +167,7 @@ model User {
   oauthAuthorizationCodes  OAuthAuthorizationCode[]
   oauthAccessTokens        OAuthAccessToken[]
   oauthRefreshTokens       OAuthRefreshToken[]
+  publicMcpPreviews         McpPreview[]                    @relation("PublicMcpPreviewUser")
   serviceIdentities        ServiceIdentity[]
   directPermissionGrants   UserPermissionGrant[]           @relation("permission_grantee")
   issuedPermissionGrants   UserPermissionGrant[]           @relation("permission_grantor")
@@ -457,6 +458,7 @@ model OAuthPublicClient {
   authorizationCodes      OAuthAuthorizationCode[]
   accessTokens            OAuthAccessToken[]
   refreshTokens           OAuthRefreshToken[]
+  publicMcpPreviews        McpPreview[]
 
   @@map("oauth_public_clients")
 }
@@ -573,8 +575,12 @@ model McpPreview {
   requestedState     Json?           @map("requested_state")
   snapshotDigest     String?         @map("snapshot_digest") @db.VarChar(64)
   previewTokenDigest String          @unique @map("preview_token_digest") @db.VarChar(128)
+  approvalTokenDigest String?         @unique @map("approval_token_digest") @db.VarChar(128)
   expiresAt          DateTime        @map("expires_at")
   confirmedAt        DateTime?       @map("confirmed_at")
+  approvedByUserId   String?         @map("approved_by_user_id") @db.Uuid
+  approvalSessionId  String?         @map("approval_session_id") @db.Uuid
+  cancelledAt        DateTime?       @map("cancelled_at")
   consumedAt         DateTime?       @map("consumed_at")
   commitAttemptedAt  DateTime?       @map("commit_attempted_at")
   commitStatus       String?         @map("commit_status") @db.VarChar(40)
@@ -584,6 +590,8 @@ model McpPreview {
   workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   serviceToken       ServiceToken?   @relation(fields: [serviceTokenId], references: [id], onDelete: Cascade)
   account            ProviderAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  oauthUser          User?           @relation("PublicMcpPreviewUser", fields: [oauthUserId], references: [id], onDelete: Cascade)
+  oauthClient        OAuthPublicClient? @relation(fields: [oauthClientId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, expiresAt, consumedAt])
   @@index([serviceTokenId, createdAt])

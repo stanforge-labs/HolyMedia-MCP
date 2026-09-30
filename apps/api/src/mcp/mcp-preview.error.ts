@@ -5,6 +5,12 @@ const messages = {
     "Передайте preview_token из результата создания preview, а не ID или ключ доступа.",
   preview_not_found:
     "Preview не найден или недоступен этому ключу. Создайте новый preview тем же ключом.",
+  approval_not_found:
+    "Ссылка подтверждения недействительна или недоступна этой учётной записи.",
+  preview_cancelled:
+    "Этот preview отменён. Создайте новый preview для другого изменения.",
+  preview_already_confirmed:
+    "Это изменение уже подтверждено. Вернитесь в AI-клиент для выполнения.",
   preview_expired: "Срок действия preview истёк. Создайте новый preview.",
   preview_already_consumed:
     "Этот preview уже использован. Для нового изменения создайте новый preview.",
@@ -14,7 +20,8 @@ const messages = {
     "Подтверждение принимает только preview_token. Не передавайте provider, account_id, campaign_id или новое имя.",
   write_scope_required:
     "Для подтверждения изменения нужен ключ в режиме «Контролируемая запись».",
-  preview_not_confirmed: "Сначала явно подтвердите этот preview.",
+  preview_not_confirmed:
+    "Сначала подтвердите этот preview в HolyMedia через ссылку из результата preview.",
   preview_stale:
     "Кампания изменилась после preview. Создайте новый preview и подтвердите его.",
   public_write_disabled:

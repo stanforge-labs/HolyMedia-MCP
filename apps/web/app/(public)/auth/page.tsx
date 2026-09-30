@@ -94,6 +94,12 @@ function safeDashboardPath(value: string | null): string {
       )
     )
       return `${url.pathname}${url.search}${url.hash}`;
+    if (
+      url.origin === window.location.origin &&
+      /^\/(?:en\/)?mcp\/approve$/.test(url.pathname) &&
+      /^hmap_[A-Za-z0-9_-]{43}$/.test(url.searchParams.get("approval") ?? "")
+    )
+      return `${url.pathname}?approval=${encodeURIComponent(url.searchParams.get("approval")!)}`;
   } catch {
     // Use the safe dashboard default.
   }

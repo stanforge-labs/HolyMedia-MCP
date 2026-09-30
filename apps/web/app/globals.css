@@ -1306,6 +1306,81 @@ form {
 .oauth-consent-loading > p:last-child {
   color: var(--text-muted);
 }
+.oauth-write-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin-top: 16px;
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.oauth-write-choice input {
+  width: 19px;
+  height: 19px;
+  accent-color: var(--accent);
+}
+.oauth-write-choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.mcp-approval-card {
+  width: min(100%, 680px);
+}
+.mcp-approval-card h1 {
+  margin-bottom: 10px;
+}
+.mcp-approval-details {
+  display: grid;
+  gap: 13px;
+  margin: 24px 0;
+}
+.mcp-approval-details div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.45fr) 1fr;
+  gap: 14px;
+}
+.mcp-approval-details dt,
+.mcp-approval-diff span {
+  color: var(--text-muted);
+}
+.mcp-approval-details dd {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mcp-approval-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.mcp-approval-diff div {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-inset);
+}
+.mcp-approval-diff strong {
+  overflow-wrap: anywhere;
+  font-size: 1.1rem;
+}
+.mcp-approval-expiry,
+.mcp-approval-note,
+.mcp-approval-outcome p + p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.mcp-approval-outcome {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+.mcp-approval-outcome p {
+  margin: 0;
+}
 .onboarding-shell {
   min-height: 100vh;
   display: grid;
@@ -2231,6 +2306,10 @@ pre {
   }
   .oauth-consent-actions button {
     width: 100%;
+  }
+  .mcp-approval-details div,
+  .mcp-approval-diff {
+    grid-template-columns: 1fr;
   }
   .auth-card {
     margin-top: 18px;

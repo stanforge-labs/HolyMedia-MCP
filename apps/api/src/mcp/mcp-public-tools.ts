@@ -44,7 +44,6 @@ export const PUBLIC_WRITE_TOOLS = [
   "preview_change_campaign_name",
   "preview_pause_campaign",
   "preview_resume_campaign",
-  "confirm_preview",
   "commit_confirmed_preview",
 ] as const;
 
@@ -60,14 +59,24 @@ const workspaceOnlyReads = new Set<string>([
   "list_ad_accounts",
   "get_account_status",
 ]);
-// Preview performs a provider READ before persisting a local preview. Confirm
-// only changes local confirmation state. Commit performs a provider WRITE.
+// Preview performs a provider READ before persisting a local preview. Commit
+// performs a provider WRITE. Browser approval is not an MCP tool.
 const providerFacingWrites = new Set<string>([
   "preview_change_campaign_name",
   "preview_pause_campaign",
   "preview_resume_campaign",
   "commit_confirmed_preview",
 ]);
+const publicWriteDescriptions: Record<string, string> = {
+  preview_change_campaign_name:
+    "Create a Meta Ads campaign rename preview without changing the campaign. Return the before/requested name, expiry and a HolyMedia URL for the user to approve in their browser.",
+  preview_pause_campaign:
+    "Create a Meta Ads campaign pause preview without changing the campaign. Return the before/requested status, expiry and a HolyMedia URL for browser approval.",
+  preview_resume_campaign:
+    "Create a Meta Ads campaign resume preview without changing the campaign. Return the before/requested status, expiry and a HolyMedia URL for browser approval.",
+  commit_confirmed_preview:
+    "Execute a previously previewed Meta Ads campaign change only after separate HolyMedia browser approval. Accept only the exact preview_token; mutation fields cannot be supplied or changed here.",
+};
 
 export function isPublicReadTool(name: string): boolean {
   return publicReadSet.has(name);
@@ -95,7 +104,7 @@ function title(name: string): string {
 }
 
 function publicWriteSchema(name: string): Record<string, unknown> {
-  if (name === "confirm_preview" || name === "commit_confirmed_preview") {
+  if (name === "commit_confirmed_preview") {
     return {
       type: "object",
       additionalProperties: false,
@@ -125,22 +134,21 @@ export function publicTools(legacyTools: ToolDescriptor[]) {
     if (!legacy && !isPublicWriteTool(name))
       throw new Error(`Public MCP tool ${name} is not implemented.`);
     const read = isPublicReadTool(name);
+    const diagnostics = name === "run_connection_diagnostics";
     const commit = name === "commit_confirmed_preview";
     return {
       name,
       title: title(name),
-      description:
-        legacy?.description ??
-        "Commit the confirmed, stored Meta campaign preview after a fresh state check.",
+      description: read ? legacy!.description : publicWriteDescriptions[name]!,
       inputSchema: read ? legacy!.inputSchema : publicWriteSchema(name),
       annotations: {
         title: title(name),
-        readOnlyHint: read,
+        readOnlyHint: read && !diagnostics,
         destructiveHint: commit,
         openWorldHint: read
           ? !workspaceOnlyReads.has(name)
           : providerFacingWrites.has(name),
-        idempotentHint: read || name === "confirm_preview",
+        idempotentHint: read && !diagnostics,
       },
     };
   });

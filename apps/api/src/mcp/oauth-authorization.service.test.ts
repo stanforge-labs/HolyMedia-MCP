@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { McpController } from "./mcp.controller.js";
 import {
@@ -408,7 +408,31 @@ async function issueCode(context: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("OAuth authorization foundation", () => {
+  const previousWriteScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+  afterEach(() => {
+    if (previousWriteScopeFlag === undefined)
+      delete process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+    else process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = previousWriteScopeFlag;
+  });
+
+  it("rejects public write authorization while the scope gate is off, even for a declared client", async () => {
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    const context = await fixture("adforge:mcp:read adforge:mcp:write");
+    await expect(
+      context.oauth.beginAuthorization({
+        client_id: context.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        resource: MCP_PUBLIC_RESOURCE,
+        scope: "adforge:mcp:read adforge:mcp:write",
+        code_challenge: pkce(context.verifier),
+        code_challenge_method: "S256",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
   it("requires separate public write consent and retains exactly granted scopes across refresh", async () => {
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "true";
     const readClient = await fixture();
     await expect(
       readClient.oauth.beginAuthorization({
@@ -483,6 +507,31 @@ describe("OAuth authorization foundation", () => {
       await context.oauth.authenticate(readRefresh.access_token, MCP_RESOURCE),
     ).toBeNull();
 
+    const declinedWrite = await context.oauth.beginAuthorization({
+      ...input,
+      scope: "adforge:mcp:read adforge:mcp:write",
+    });
+    await context.oauth.continueAuthorization(
+      declinedWrite.transaction_id,
+      context.principal,
+    );
+    const readInstead = await context.oauth.decideAuthorization(
+      declinedWrite.transaction_id,
+      true,
+      context.principal,
+      undefined,
+      "adforge:mcp:read",
+    );
+    const downgraded = await context.oauth.exchangeToken({
+      grant_type: "authorization_code",
+      client_id: context.registered.client_id,
+      code: new URL(readInstead.url).searchParams.get("code"),
+      redirect_uri: input.redirect_uri,
+      code_verifier: context.verifier,
+      resource: MCP_PUBLIC_RESOURCE,
+    });
+    expect(downgraded.scope).toBe("adforge:mcp:read");
+
     const write = await context.oauth.beginAuthorization({
       ...input,
       scope: "adforge:mcp:read adforge:mcp:write",
@@ -496,10 +545,19 @@ describe("OAuth authorization foundation", () => {
       context.principal,
     );
     expect(writeConsent.scope).toContain("adforge:mcp:write");
+    await expect(
+      context.oauth.decideAuthorization(
+        write.transaction_id,
+        true,
+        context.principal,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
     const writeRedirect = await context.oauth.decideAuthorization(
       write.transaction_id,
       true,
       context.principal,
+      undefined,
+      "adforge:mcp:read adforge:mcp:write",
     );
     const writeTokens = await context.oauth.exchangeToken({
       grant_type: "authorization_code",
