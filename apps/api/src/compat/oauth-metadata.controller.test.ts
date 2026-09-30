@@ -14,6 +14,12 @@ describe("OAuth discovery metadata", () => {
     expect(controller.protectedMcpResource()).toEqual(
       controller.protectedResource(),
     );
+    expect(controller.protectedPublicMcpResource()).toEqual({
+      resource: "https://mcp.holymedia.kz/mcp/public",
+      authorization_servers: ["https://mcp.holymedia.kz"],
+      scopes_supported: ["adforge:mcp:read", "adforge:mcp:write"],
+      bearer_methods_supported: ["header"],
+    });
   });
 
   it("publishes matching public-client Authorization Code metadata", () => {
@@ -28,6 +34,7 @@ describe("OAuth discovery metadata", () => {
       code_challenge_methods_supported: ["S256"],
       token_endpoint_auth_methods_supported: expect.arrayContaining(["none"]),
       client_id_metadata_document_supported: true,
+      scopes_supported: ["adforge:mcp:read", "adforge:mcp:write"],
     });
   });
 });

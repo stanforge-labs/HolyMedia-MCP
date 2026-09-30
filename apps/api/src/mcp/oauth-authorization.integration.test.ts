@@ -157,6 +157,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
       oauth,
       { consumeMcpRequest: async () => undefined } as never,
       { record: async () => undefined } as never,
+      { call: async () => undefined } as never,
     );
     const initialize = await mcp.post(
       {

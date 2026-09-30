@@ -15,6 +15,18 @@ const messages = {
   write_scope_required:
     "Для подтверждения изменения нужен ключ в режиме «Контролируемая запись».",
   preview_not_confirmed: "Сначала явно подтвердите этот preview.",
+  preview_stale:
+    "Кампания изменилась после preview. Создайте новый preview и подтвердите его.",
+  public_write_disabled:
+    "Публичная контролируемая запись пока выключена. Preview можно создать и подтвердить, но изменение не будет отправлено в Meta.",
+  public_operation_not_available:
+    "Этот инструмент или операция недоступны через публичный MCP endpoint.",
+  preview_no_change:
+    "Запрошенное состояние уже установлено. Новое изменение не требуется.",
+  provider_outcome_uncertain:
+    "Результат изменения в Meta не удалось подтвердить. Не повторяйте commit; проверьте кампанию и обратитесь в поддержку.",
+  verification_mismatch:
+    "Meta ответила, но повторное чтение не подтвердило запрошенное состояние. Не повторяйте commit; создайте новый preview после проверки кампании.",
 } as const;
 
 export type PreviewErrorCode = keyof typeof messages;

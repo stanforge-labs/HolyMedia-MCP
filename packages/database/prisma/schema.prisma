@@ -557,24 +557,37 @@ model OAuthRefreshToken {
 model McpPreview {
   id                 String          @id @default(uuid()) @db.Uuid
   workspaceId        String          @map("workspace_id") @db.Uuid
-  serviceTokenId     String          @map("service_token_id") @db.Uuid
+  principalType      String          @default("SERVICE_TOKEN") @map("principal_type") @db.VarChar(24)
+  serviceTokenId     String?         @map("service_token_id") @db.Uuid
+  oauthUserId        String?         @map("oauth_user_id") @db.Uuid
+  oauthClientId      String?         @map("oauth_client_id") @db.Uuid
+  oauthGrantId       String?         @map("oauth_grant_id") @db.Uuid
   provider           ProviderId
   accountId          String          @map("account_id") @db.Uuid
+  connectionId       String?         @map("connection_id") @db.Uuid
   externalObjectId   String          @map("external_object_id") @db.VarChar(160)
   operation          String          @db.VarChar(80)
   payload            Json
   diff               Json
+  beforeState        Json?           @map("before_state")
+  requestedState     Json?           @map("requested_state")
+  snapshotDigest     String?         @map("snapshot_digest") @db.VarChar(64)
   previewTokenDigest String          @unique @map("preview_token_digest") @db.VarChar(128)
   expiresAt          DateTime        @map("expires_at")
   confirmedAt        DateTime?       @map("confirmed_at")
   consumedAt         DateTime?       @map("consumed_at")
+  commitAttemptedAt  DateTime?       @map("commit_attempted_at")
+  commitStatus       String?         @map("commit_status") @db.VarChar(40)
+  providerResult     Json?           @map("provider_result")
+  verificationRead   Json?           @map("verification_read")
   createdAt          DateTime        @default(now()) @map("created_at")
   workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  serviceToken       ServiceToken    @relation(fields: [serviceTokenId], references: [id], onDelete: Cascade)
+  serviceToken       ServiceToken?   @relation(fields: [serviceTokenId], references: [id], onDelete: Cascade)
   account            ProviderAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, expiresAt, consumedAt])
   @@index([serviceTokenId, createdAt])
+  @@index([oauthUserId, oauthClientId, oauthGrantId, createdAt], map: "mcp_previews_oauth_identity_created_at_idx")
   @@index([accountId, operation])
   @@map("mcp_previews")
 }
