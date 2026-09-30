@@ -359,7 +359,15 @@ function normalizeScope(value: string): string {
   if (!value || value === "adforge:mcp" || value === "adforge:mcp:read") {
     return "adforge:mcp:read";
   }
-  throw new BadRequestException("Only read-only MCP scope is available.");
+  const scopes = new Set(value.split(/\s+/).filter(Boolean));
+  if (
+    scopes.size === 2 &&
+    scopes.has("adforge:mcp:read") &&
+    scopes.has("adforge:mcp:write")
+  ) {
+    return "adforge:mcp:read adforge:mcp:write";
+  }
+  throw new BadRequestException("OAuth client scope is invalid.");
 }
 
 function metadataExpiry(cacheControl: string | null): Date {

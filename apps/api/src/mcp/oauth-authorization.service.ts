@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
-import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 import {
   OAuthClientMetadataService,
   registrationMetadata,
@@ -15,7 +15,9 @@ import {
 
 export const OAUTH_ISSUER = "https://mcp.holymedia.kz";
 export const MCP_RESOURCE = `${OAUTH_ISSUER}/mcp`;
+export const MCP_PUBLIC_RESOURCE = `${OAUTH_ISSUER}/mcp/public`;
 export const MCP_READ_SCOPE = "adforge:mcp:read";
+export const MCP_WRITE_SCOPE = "adforge:mcp:write";
 
 const TRANSACTION_TTL_MS = 10 * 60_000;
 const CODE_TTL_MS = 3 * 60_000;
@@ -91,14 +93,20 @@ export class OAuthAuthorizationService {
     if (method !== "S256" || !validPkceChallenge(codeChallenge)) {
       throw new BadRequestException("A valid S256 PKCE challenge is required.");
     }
-    if (resource !== MCP_RESOURCE) {
+    if (resource !== MCP_RESOURCE && resource !== MCP_PUBLIC_RESOURCE) {
       throw new BadRequestException("OAuth resource is invalid.");
     }
     const client = await this.publicClient(clientId);
     if (!client || !jsonStrings(client.redirectUris).includes(redirectUri)) {
       throw new BadRequestException("OAuth client or redirect URI is invalid.");
     }
-    const scope = normalizeScope(stringValue(input.scope));
+    const scope = normalizeScope(stringValue(input.scope), resource);
+    const clientScopes = new Set(client.scope.split(/\s+/).filter(Boolean));
+    if (scope.split(" ").some((item) => !clientScopes.has(item))) {
+      throw new BadRequestException(
+        "OAuth client has not declared the requested scope.",
+      );
+    }
     const availableWorkspaces = principal
       ? await this.workspacesForUser(principal.userId)
       : [];
@@ -313,8 +321,13 @@ export class OAuthAuthorizationService {
     const rawCode = required(input.code, "code");
     const redirectUri = required(input.redirect_uri, "redirect_uri");
     const verifier = required(input.code_verifier, "code_verifier");
-    const resource = stringValue(input.resource) || MCP_RESOURCE;
-    if (!validPkceVerifier(verifier) || resource !== MCP_RESOURCE) {
+    const requestedResource = stringValue(input.resource);
+    if (
+      !validPkceVerifier(verifier) ||
+      (requestedResource &&
+        requestedResource !== MCP_RESOURCE &&
+        requestedResource !== MCP_PUBLIC_RESOURCE)
+    ) {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
     const client = await this.publicClient(clientId);
@@ -330,7 +343,7 @@ export class OAuthAuthorizationService {
       code.usedAt ||
       code.expiresAt <= new Date() ||
       code.redirectUri !== redirectUri ||
-      code.resource !== resource ||
+      (requestedResource && code.resource !== requestedResource) ||
       !pkceMatches(verifier, code.codeChallenge)
     ) {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
@@ -397,8 +410,12 @@ export class OAuthAuthorizationService {
   public async exchangeRefreshToken(input: Record<string, unknown>) {
     const clientId = required(input.client_id, "client_id");
     const rawRefreshToken = required(input.refresh_token, "refresh_token");
-    const resource = stringValue(input.resource) || MCP_RESOURCE;
-    if (resource !== MCP_RESOURCE) {
+    const requestedResource = stringValue(input.resource);
+    if (
+      requestedResource &&
+      requestedResource !== MCP_RESOURCE &&
+      requestedResource !== MCP_PUBLIC_RESOURCE
+    ) {
       throw new UnauthorizedException("OAuth refresh token is invalid.");
     }
     const client = await this.publicClient(clientId);
@@ -417,7 +434,7 @@ export class OAuthAuthorizationService {
       client.tokenEndpointAuthMethod !== "none" ||
       !refresh ||
       refresh.clientId !== client.id ||
-      refresh.resource !== resource
+      (requestedResource && refresh.resource !== requestedResource)
     ) {
       throw new UnauthorizedException("OAuth refresh token is invalid.");
     }
@@ -507,7 +524,8 @@ export class OAuthAuthorizationService {
 
   public async authenticate(
     rawToken: string,
-  ): Promise<ServiceTokenPrincipal | null> {
+    resource: string = MCP_RESOURCE,
+  ): Promise<OAuthMcpPrincipal | null> {
     if (!rawToken.startsWith("hm_oauth_")) return null;
     const token = await this.database.client.oAuthAccessToken.findUnique({
       where: { tokenDigest: digest(rawToken) },
@@ -521,7 +539,8 @@ export class OAuthAuthorizationService {
       !token ||
       token.revokedAt ||
       token.expiresAt <= new Date() ||
-      token.resource !== MCP_RESOURCE ||
+      token.resource !== resource ||
+      (resource === MCP_PUBLIC_RESOURCE && !token.refreshFamilyId) ||
       token.client.status !== "active" ||
       token.client.revokedAt ||
       token.workspace.accessStatus !== "ACTIVE" ||
@@ -545,12 +564,16 @@ export class OAuthAuthorizationService {
       data: { lastUsedAt: new Date() },
     });
     return {
-      kind: "service",
+      kind: "oauth",
       tokenId: token.id,
-      serviceIdentityId: `oauth:${token.clientId}:${token.userId}`,
       workspaceId: token.workspaceId,
+      userId: token.userId,
+      clientId: token.clientId,
+      grantId: token.refreshFamilyId ?? token.id,
+      resource: token.resource,
       scopes: token.scope.split(/\s+/).filter(Boolean),
       accountIds: [],
+      resourceAccessMode: "ALL_CONNECTED",
     };
   }
 
@@ -682,11 +705,22 @@ function jsonStrings(value: unknown): string[] {
     : [];
 }
 
-function normalizeScope(value: string): string {
+function normalizeScope(value: string, resource: string): string {
   if (!value || value === "adforge:mcp" || value === MCP_READ_SCOPE) {
     return MCP_READ_SCOPE;
   }
-  throw new BadRequestException("Only read-only MCP scope is available.");
+  const scopes = new Set(value.split(/\s+/).filter(Boolean));
+  if (
+    resource === MCP_PUBLIC_RESOURCE &&
+    scopes.size === 2 &&
+    scopes.has(MCP_READ_SCOPE) &&
+    scopes.has(MCP_WRITE_SCOPE)
+  ) {
+    return `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`;
+  }
+  throw new BadRequestException(
+    "OAuth scope is invalid for this MCP resource.",
+  );
 }
 
 function validPkceChallenge(value: string): boolean {

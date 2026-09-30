@@ -20,6 +20,7 @@ type OAuthWorkspace = {
 type AuthorizationContext = {
   transactionId: string;
   client: { id: string; name: string };
+  scope: string;
   workspaces: OAuthWorkspace[];
   selectedWorkspaceId: string | null;
   expiresAt: string;
@@ -34,6 +35,9 @@ function copyFor(clientName: string) {
       company: "Компания",
       chooseCompany: `К какой компании подключить ${clientName}?`,
       canTitle: `${clientName} сможет`,
+      writeTitle: "Отдельное разрешение на изменение",
+      writeConsent:
+        "Разрешить HolyMedia MCP выполнять подтверждённые вами изменения в подключённых рекламных аккаунтах. Каждое изменение требует отдельного просмотра и подтверждения.",
       can: [
         "видеть подключённые рекламные кабинеты этой компании;",
         "читать доступные рекламные данные;",
@@ -46,6 +50,7 @@ function copyFor(clientName: string) {
         "данные других компаний.",
       ],
       allow: "Разрешить",
+      allowWrite: "Разрешить чтение и подтверждённые изменения",
       deny: "Отмена",
       working: "Подключаем…",
       loading: `Проверяем запрос ${clientName}…`,
@@ -60,6 +65,9 @@ function copyFor(clientName: string) {
       company: "Company",
       chooseCompany: `Which company should ${clientName} connect to?`,
       canTitle: `${clientName} can`,
+      writeTitle: "Separate permission to make changes",
+      writeConsent:
+        "Allow HolyMedia MCP to make changes you confirm in connected advertising accounts. Each change requires its own preview and confirmation.",
       can: [
         "see the connected advertising accounts of this company;",
         "read available advertising data;",
@@ -72,6 +80,7 @@ function copyFor(clientName: string) {
         "data from other companies.",
       ],
       allow: "Allow",
+      allowWrite: "Allow reading and confirmed changes",
       deny: "Cancel",
       working: "Connecting…",
       loading: `Checking ${clientName}’s request…`,
@@ -119,6 +128,8 @@ export default function ClaudeConsentPage() {
     () => copyFor(verifiedClientLabel(context))[language],
     [context, language],
   );
+  const writeRequested =
+    context?.scope.split(/\s+/).includes("adforge:mcp:write") ?? false;
 
   useEffect(() => {
     document.title = `${t.title} — HolyMedia MCP`;
@@ -262,6 +273,13 @@ export default function ClaudeConsentPage() {
               </section>
             </div>
 
+            {writeRequested && (
+              <section className="oauth-write-permission">
+                <h2>{t.writeTitle}</h2>
+                <p>{t.writeConsent}</p>
+              </section>
+            )}
+
             {error && (
               <p className="error" role="alert">
                 {error}
@@ -281,7 +299,11 @@ export default function ClaudeConsentPage() {
                 type="submit"
                 disabled={Boolean(busy) || !workspaceId}
               >
-                {busy === "allow" ? t.working : t.allow}
+                {busy === "allow"
+                  ? t.working
+                  : writeRequested
+                    ? t.allowWrite
+                    : t.allow}
               </button>
             </div>
           </form>

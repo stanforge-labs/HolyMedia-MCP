@@ -17,6 +17,16 @@ export class OAuthMetadataController {
     return this.protectedResource();
   }
 
+  @Get(".well-known/oauth-protected-resource/mcp/public")
+  public protectedPublicMcpResource() {
+    return {
+      resource: "https://mcp.holymedia.kz/mcp/public",
+      authorization_servers: ["https://mcp.holymedia.kz"],
+      scopes_supported: ["adforge:mcp:read", "adforge:mcp:write"],
+      bearer_methods_supported: ["header"],
+    };
+  }
+
   @Get(".well-known/oauth-authorization-server")
   public authorizationServer() {
     return {
@@ -28,7 +38,7 @@ export class OAuthMetadataController {
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
-      scopes_supported: ["adforge:mcp:read"],
+      scopes_supported: ["adforge:mcp:read", "adforge:mcp:write"],
       token_endpoint_auth_methods_supported: [
         "none",
         "client_secret_basic",

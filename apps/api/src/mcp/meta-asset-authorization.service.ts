@@ -1,6 +1,6 @@
 import type { DatabaseService } from "../infrastructure/database.service.js";
 import type { ProviderService } from "../providers/provider.service.js";
-import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import type { McpPrincipal as ServiceTokenPrincipal } from "./mcp-principal.js";
 import { MetaReadError, metaReadError } from "../providers/meta-read.error.js";
 
 export const META_ASSET_TOOLS = new Set([

@@ -10,6 +10,7 @@ function controller(authenticate = vi.fn().mockResolvedValue(null)) {
     { authenticate: vi.fn().mockResolvedValue(null) } as never,
     { consumeMcpRequest: vi.fn() } as never,
     { record: vi.fn() } as never,
+    { call: vi.fn() } as never,
   );
 }
 
@@ -48,6 +49,7 @@ describe("MCP bearer authentication", () => {
       { authenticate: vi.fn() } as never,
       { consumeMcpRequest: vi.fn() } as never,
       { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
     );
     const result = await instance.post(
       {
@@ -215,6 +217,7 @@ describe("MCP bearer authentication", () => {
       { authenticate: vi.fn().mockResolvedValue(null) } as never,
       { consumeMcpRequest: vi.fn() } as never,
       { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
     );
 
     const result = await instance.post(

@@ -92,6 +92,19 @@ describe("v2 configuration", () => {
     expect(config.writeAccountAllowlist).toEqual(["act_1", "act_2"]);
     expect(config.writeObjectAllowlist).toEqual(["campaign-1"]);
     expect(config.writeOperationAllowlist).toEqual(["change_name"]);
+    expect(config.publicMcpControlledWriteEnabled).toBe(false);
+  });
+
+  it("requires an independent explicit flag for public controlled writes", () => {
+    expect(
+      loadConfig({ NODE_ENV: "test" }).publicMcpControlledWriteEnabled,
+    ).toBe(false);
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true",
+      }).publicMcpControlledWriteEnabled,
+    ).toBe(true);
   });
 
   it("keeps the Meta App Review rename policy disabled unless explicitly configured", () => {

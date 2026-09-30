@@ -5,7 +5,8 @@ import type {
   ProviderMetricSummary,
 } from "@holymedia/contracts";
 import { ProviderService } from "../providers/provider.service.js";
-import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import type { ServiceTokenPrincipal as LegacyServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import type { McpPrincipal as ServiceTokenPrincipal } from "./mcp-principal.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ReportService } from "../reports/report.service.js";
 import { McpPreviewService } from "./mcp-preview.service.js";
@@ -329,6 +330,14 @@ export class McpService {
     private readonly siteAnalysis: SiteAnalysisService,
     @Inject(BillingService) private readonly billing: BillingService,
   ) {}
+
+  private servicePrincipal(
+    principal: ServiceTokenPrincipal,
+  ): LegacyServiceTokenPrincipal {
+    if (principal.kind !== "service")
+      throw new PreviewError("write_scope_required");
+    return principal;
+  }
 
   public tools() {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
@@ -1054,7 +1063,7 @@ export class McpService {
           throw new ForbiddenException(
             "Name-only preview does not accept additional fields.",
           );
-        return this.previews.create(principal, {
+        return this.previews.create(this.servicePrincipal(principal), {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
           objectId: text(args.campaign_id || args.campaignId),
@@ -1063,7 +1072,7 @@ export class McpService {
         });
       case "preview_pause_campaign":
       case "preview_resume_campaign":
-        return this.previews.create(principal, {
+        return this.previews.create(this.servicePrincipal(principal), {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
           objectId: text(args.campaign_id || args.campaignId),
@@ -1071,7 +1080,7 @@ export class McpService {
           payload: {},
         });
       case "preview_change_campaign_budget":
-        return this.previews.create(principal, {
+        return this.previews.create(this.servicePrincipal(principal), {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
           objectId: text(args.campaign_id || args.campaignId),
@@ -1087,7 +1096,7 @@ export class McpService {
         )
           throw new PreviewError("invalid_confirmation_arguments");
         return this.previews.confirm(
-          principal,
+          this.servicePrincipal(principal),
           text(args.preview_token || args.previewToken),
         );
       case "commit_preview":
@@ -1103,7 +1112,7 @@ export class McpService {
             "Commit accepts only the confirmed preview token, not replacement fields.",
           );
         return this.previews.commit(
-          principal,
+          this.servicePrincipal(principal),
           text(args.preview_token || args.previewToken),
         );
       default:
@@ -1509,7 +1518,7 @@ export class McpService {
         args.adId,
       "new",
     );
-    return this.previews.create(principal, {
+    return this.previews.create(this.servicePrincipal(principal), {
       provider,
       accountId,
       objectId,

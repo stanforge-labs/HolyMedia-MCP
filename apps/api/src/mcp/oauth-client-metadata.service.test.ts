@@ -140,6 +140,23 @@ describe("OAuth client metadata documents", () => {
       response_types: ["code"],
     });
   });
+
+  it("records write as an explicitly declared client capability, never as a default", () => {
+    const base = {
+      client_name: "Public MCP client",
+      redirect_uris: ["https://client.example.test/callback"],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    };
+    expect(registrationMetadata(base).scope).toBe("adforge:mcp:read");
+    expect(registrationMetadata({
+      ...base,
+      scope: "adforge:mcp:read adforge:mcp:write",
+    }).scope).toBe("adforge:mcp:read adforge:mcp:write");
+    expect(() => registrationMetadata({ ...base, scope: "adforge:mcp:write" }))
+      .toThrow();
+  });
 });
 
 describe("OAuth client metadata network boundary", () => {

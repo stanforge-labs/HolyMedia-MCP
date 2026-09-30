@@ -18,6 +18,13 @@ import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
 import { MetaReadError } from "../providers/meta-read.error.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
+import { MCP_PUBLIC_RESOURCE } from "./oauth-authorization.service.js";
+import { McpPublicWriteService } from "./mcp-public-write.service.js";
+import {
+  isPublicReadTool,
+  isPublicTool,
+  publicTools,
+} from "./mcp-public-tools.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
 type JsonRpcRequest = {
@@ -38,6 +45,8 @@ export class McpController {
     private readonly oauthTokens: OAuthAuthorizationService,
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(McpPublicWriteService)
+    private readonly publicWrites: McpPublicWriteService,
   ) {}
 
   @Get("mcp")
@@ -45,18 +54,36 @@ export class McpController {
     @Req() request: McpRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
+    return this.handleGet(request, reply, false);
+  }
+
+  @Get("mcp/public")
+  public async getPublic(
+    @Req() request: McpRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    return this.handleGet(request, reply, true);
+  }
+
+  private async handleGet(
+    request: McpRequest,
+    reply: FastifyReply,
+    publicRoute: boolean,
+  ) {
     const rawAuthorization = request.headers.authorization;
     const authorization = Array.isArray(rawAuthorization)
       ? rawAuthorization[0]
       : rawAuthorization;
     const token = bearerToken(authorization);
-    const principal = token ? await this.authenticate(token) : null;
+    const principal = token
+      ? await this.authenticate(token, publicRoute)
+      : null;
     if (!principal) {
       this.logger.warn(
         { authReason: "missing_invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply);
+      return mcpUnauthorized(reply, publicRoute);
     }
 
     // Server-to-client SSE is optional in Streamable HTTP. A valid MCP client
@@ -71,6 +98,22 @@ export class McpController {
     @Req() request: McpRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
+    return this.handlePost(request, reply, false);
+  }
+
+  @Post("mcp/public")
+  public async postPublic(
+    @Req() request: McpRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    return this.handlePost(request, reply, true);
+  }
+
+  private async handlePost(
+    request: McpRequest,
+    reply: FastifyReply,
+    publicRoute: boolean,
+  ) {
     const rawAuthorization = request.headers.authorization;
     const authorization = Array.isArray(rawAuthorization)
       ? rawAuthorization[0]
@@ -81,15 +124,17 @@ export class McpController {
         { authReason: "missing_or_malformed_bearer" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply);
+      return mcpUnauthorized(reply, publicRoute);
     }
-    const principal = token ? await this.authenticate(token) : null;
+    const principal = token
+      ? await this.authenticate(token, publicRoute)
+      : null;
     if (!principal) {
       this.logger.warn(
         { authReason: "invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply);
+      return mcpUnauthorized(reply, publicRoute);
     }
 
     const input = (request.body ?? {}) as JsonRpcRequest;
@@ -126,18 +171,40 @@ export class McpController {
       };
     }
     if (input.method === "tools/list") {
-      return { jsonrpc: "2.0", id, result: { tools: this.mcp.tools() } };
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          tools: publicRoute ? publicTools(this.mcp.tools()) : this.mcp.tools(),
+        },
+      };
     }
     if (input.method === "tools/call") {
       const params = input.params ?? {};
       const name = typeof params.name === "string" ? params.name : "";
       try {
+        if (publicRoute && !isPublicTool(name))
+          throw new PreviewError("public_operation_not_available");
         await this.billing.consumeMcpRequest(principal.workspaceId);
-        const result = await this.mcp.call(principal, name, params.arguments);
+        let result: unknown;
+        if (publicRoute && !isPublicReadTool(name)) {
+          if (principal.kind !== "oauth")
+            throw new PreviewError("write_scope_required");
+          result = await this.publicWrites.call(
+            principal,
+            name,
+            params.arguments,
+          );
+        } else {
+          result = await this.mcp.call(principal, name, params.arguments);
+        }
         await Promise.allSettled([
           this.audit.record({
             eventType: "mcp_tool_executed",
-            actorType: "SERVICE",
+            actorType: principal.kind === "oauth" ? "HUMAN" : "SERVICE",
+            ...(principal.kind === "oauth"
+              ? { actorUserId: principal.userId }
+              : {}),
             workspaceId: principal.workspaceId,
             targetType: "mcp_tool",
             targetId: name.slice(0, 255),
@@ -151,6 +218,31 @@ export class McpController {
           result: { content: [{ type: "text", text: JSON.stringify(result) }] },
         };
       } catch (error) {
+        if (publicRoute && isPublicTool(name) && !isPublicReadTool(name)) {
+          await Promise.allSettled([
+            this.audit.record({
+              eventType: "mcp_public_write_rejected",
+              actorType: principal.kind === "oauth" ? "HUMAN" : "SERVICE",
+              ...(principal.kind === "oauth"
+                ? { actorUserId: principal.userId }
+                : {}),
+              workspaceId: principal.workspaceId,
+              targetType: "mcp_tool",
+              targetId: name.slice(0, 160),
+              requestId: request.id,
+              success: false,
+              metadata: {
+                tool: name.slice(0, 120),
+                reason:
+                  error instanceof PreviewError
+                    ? error.code
+                    : error instanceof HttpException
+                      ? "policy_denied"
+                      : "provider_or_internal_error",
+              },
+            }),
+          ]);
+        }
         this.logger.warn(
           {
             tool: name.slice(0, 120),
@@ -176,8 +268,15 @@ export class McpController {
                 }
               : {}),
             workspaceId: principal.workspaceId,
-            serviceTokenId: principal.tokenId,
-            serviceIdentityId: principal.serviceIdentityId,
+            ...(principal.kind === "service"
+              ? {
+                  serviceTokenId: principal.tokenId,
+                  serviceIdentityId: principal.serviceIdentityId,
+                }
+              : {
+                  oauthClientId: principal.clientId,
+                  oauthGrantId: principal.grantId,
+                }),
             requestId: request.id,
             // Names only, never argument values or opaque tokens.
             argumentKeys:
@@ -248,11 +347,24 @@ export class McpController {
     };
   }
 
-  private async authenticate(token: string) {
-    return (
-      (await this.tokens.authenticate(token)) ??
-      (await this.oauthTokens.authenticate(token))
-    );
+  private async authenticate(token: string, publicRoute: boolean) {
+    if (publicRoute)
+      return this.oauthTokens.authenticate(token, MCP_PUBLIC_RESOURCE);
+    const service = await this.tokens.authenticate(token);
+    if (service) return service;
+    const oauth = await this.oauthTokens.authenticate(token);
+    // Preserve the existing /mcp principal shape and behavior. The new OAuth
+    // identity is used only on /mcp/public and never enables legacy writes.
+    return oauth
+      ? {
+          kind: "service" as const,
+          tokenId: oauth.tokenId,
+          serviceIdentityId: `oauth:${oauth.clientId}:${oauth.userId}`,
+          workspaceId: oauth.workspaceId,
+          scopes: oauth.scopes,
+          accountIds: oauth.accountIds,
+        }
+      : null;
   }
 }
 
@@ -288,12 +400,14 @@ export function mcpFailureMessage(error: unknown): string {
     : "Не удалось выполнить запрос HolyMedia. Попробуйте ещё раз.";
 }
 
-function mcpUnauthorized(reply: FastifyReply) {
+function mcpUnauthorized(reply: FastifyReply, publicRoute = false) {
   return reply
     .code(401)
     .header(
       "WWW-Authenticate",
-      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
+      publicRoute
+        ? 'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp/public", scope="adforge:mcp:read"'
+        : 'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
     )
     .send({ statusCode: 401, message: "MCP authorization required." });
 }
