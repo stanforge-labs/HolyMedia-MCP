@@ -27,6 +27,8 @@ export class CsrfGuard implements CanActivate {
     // protections are redirect URI binding, one-time codes and PKCE.
     const url = String((request as unknown as { url?: string }).url ?? "");
     const requestPath = url.split("?")[0];
+    const browserApproval =
+      method === "POST" && requestPath === "/api/v1/mcp/public/approval";
     if (
       method === "POST" &&
       (requestPath === "/mcp" ||
@@ -42,7 +44,14 @@ export class CsrfGuard implements CanActivate {
     // Their protection is the bearer token itself, CORS for browser callers,
     // and the endpoint's server-side authorization checks.
     const authorization = this.header(request, "authorization");
-    if (authorization && /^Bearer\s+\S+$/i.test(authorization)) return true;
+    if (browserApproval && authorization)
+      throw new ForbiddenException("Browser approval requires a web session.");
+    if (
+      !browserApproval &&
+      authorization &&
+      /^Bearer\s+\S+$/i.test(authorization)
+    )
+      return true;
 
     const origin = this.header(request, "origin");
     if (origin && !this.origins.includes(origin)) {

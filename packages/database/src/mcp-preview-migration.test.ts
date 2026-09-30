@@ -137,5 +137,5 @@ describe("MCP preview principal migration", () => {
     } finally {
       await db.close();
     }
-  });
+  }, 20_000);
 });

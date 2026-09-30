@@ -93,6 +93,7 @@ describe("v2 configuration", () => {
     expect(config.writeObjectAllowlist).toEqual(["campaign-1"]);
     expect(config.writeOperationAllowlist).toEqual(["change_name"]);
     expect(config.publicMcpControlledWriteEnabled).toBe(false);
+    expect(config.publicMcpWriteScopeEnabled).toBe(false);
   });
 
   it("requires an independent explicit flag for public controlled writes", () => {
@@ -105,6 +106,22 @@ describe("v2 configuration", () => {
         PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true",
       }).publicMcpControlledWriteEnabled,
     ).toBe(true);
+  });
+
+  it("requires a separate explicit flag before OAuth may grant public write scope", () => {
+    expect(loadConfig({ NODE_ENV: "test" }).publicMcpWriteScopeEnabled).toBe(
+      false,
+    );
+    expect(
+      loadConfig({ NODE_ENV: "test", PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true" })
+        .publicMcpWriteScopeEnabled,
+    ).toBe(true);
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true",
+      }).publicMcpWriteScopeEnabled,
+    ).toBe(false);
   });
 
   it("keeps the Meta App Review rename policy disabled unless explicitly configured", () => {

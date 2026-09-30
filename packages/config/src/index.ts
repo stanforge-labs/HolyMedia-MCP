@@ -71,6 +71,7 @@ const rawConfigSchema = z.object({
   PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED: booleanFromEnv.default(false),
   V2_PREVIEW_ONLY: booleanFromEnv.default(true),
   V2_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  PUBLIC_MCP_WRITE_SCOPE_ENABLED: booleanFromEnv.default(false),
   PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: booleanFromEnv.default(false),
   V2_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
   V2_WRITE_OBJECT_ALLOWLIST: z.string().default(""),
@@ -199,6 +200,7 @@ export type AppConfig = {
   providerMetaAdsManagementOauthEnabled: boolean;
   previewOnly: boolean;
   confirmedWriteEnabled: boolean;
+  publicMcpWriteScopeEnabled: boolean;
   publicMcpControlledWriteEnabled: boolean;
   writeAccountAllowlist: string[];
   writeObjectAllowlist: string[];
@@ -444,6 +446,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED,
     previewOnly: value.V2_PREVIEW_ONLY,
     confirmedWriteEnabled: value.V2_CONFIRMED_WRITE_ENABLED,
+    publicMcpWriteScopeEnabled: value.PUBLIC_MCP_WRITE_SCOPE_ENABLED,
     publicMcpControlledWriteEnabled: value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED,
     writeAccountAllowlist: value.V2_WRITE_ACCOUNT_ALLOWLIST.split(",")
       .map((item) => item.trim())
