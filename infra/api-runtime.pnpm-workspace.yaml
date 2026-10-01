@@ -1,0 +1,11 @@
+packages:
+  - apps/api
+  - packages/config
+  - packages/contracts
+  - packages/database
+  - packages/observability
+  - packages/site-audit
+
+# The production graph is frozen in api-prod-deps and runs as a non-root user.
+# pnpm 11 must not reinstall when this trimmed workspace starts a script.
+verifyDepsBeforeRun: false
