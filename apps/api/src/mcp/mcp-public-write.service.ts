@@ -9,7 +9,7 @@ import type { MetaControlledCampaignState } from "../providers/provider.types.js
 import { PreviewError } from "./mcp-preview.error.js";
 import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
-import { MCP_PUBLIC_RESOURCE } from "./oauth-authorization.service.js";
+import { oauthEndpoints } from "./oauth-endpoints.js";
 
 export const PUBLIC_PREVIEW_TTL_MS = 10 * 60_000;
 
@@ -81,6 +81,7 @@ function matchesRequested(
 @Injectable()
 export class McpPublicWriteService {
   private readonly config: AppConfig = loadConfig();
+  private readonly endpoints = oauthEndpoints(this.config.publicBaseUrl);
 
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
@@ -313,7 +314,7 @@ export class McpPublicWriteService {
           userId: principal.userId,
           workspaceId: preview.workspaceId,
           clientId: preview.oauthClientId,
-          resource: MCP_PUBLIC_RESOURCE,
+          resource: this.endpoints.publicResource,
           usedAt: null,
           revokedAt: null,
           expiresAt: { gt: new Date() },
@@ -732,7 +733,7 @@ export class McpPublicWriteService {
 
   private requireWrite(principal: OAuthMcpPrincipal) {
     if (
-      principal.resource !== "https://mcp.holymedia.kz/mcp/public" ||
+      principal.resource !== this.endpoints.publicResource ||
       !principal.scopes.includes("adforge:mcp:write") ||
       !principal.scopes.includes("adforge:mcp:read")
     )

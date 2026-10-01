@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { McpController } from "./mcp.controller.js";
-import {
-  MCP_PUBLIC_RESOURCE,
-  MCP_RESOURCE,
-  OAuthAuthorizationService,
-} from "./oauth-authorization.service.js";
+import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
+import { oauthEndpoints } from "./oauth-endpoints.js";
+
+const MCP_RESOURCE = oauthEndpoints("https://mcp.holymedia.kz").legacyResource;
+const MCP_PUBLIC_RESOURCE = oauthEndpoints(
+  "https://mcp.holymedia.kz",
+).publicResource;
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -362,7 +364,15 @@ async function fixture(clientScope = "adforge:mcp:read") {
     sessionId: randomUUID(),
   };
   const verifier = "v".repeat(64);
-  return { oauth, state, principal, workspaceId, registered, verifier };
+  return {
+    oauth,
+    database,
+    state,
+    principal,
+    workspaceId,
+    registered,
+    verifier,
+  };
 }
 
 it("discovers a previously unseen hosted CIMD client before authorization", async () => {
@@ -409,10 +419,17 @@ async function issueCode(context: Awaited<ReturnType<typeof fixture>>) {
 
 describe("OAuth authorization foundation", () => {
   const previousWriteScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+  const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  beforeEach(() => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+  });
   afterEach(() => {
     if (previousWriteScopeFlag === undefined)
       delete process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
     else process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = previousWriteScopeFlag;
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
   });
 
   it("rejects public write authorization while the scope gate is off, even for a declared client", async () => {
@@ -996,5 +1013,182 @@ describe("OAuth authorization foundation", () => {
       }),
     ).resolves.toEqual({ revoked: true });
     expect(await context.oauth.authenticate(token.access_token)).toBeNull();
+  });
+
+  it("isolates authorization codes, access tokens and refresh grants between production and staging", async () => {
+    const production = await fixture();
+    const productionCode = await issueCode(production);
+    const productionTokens = await production.oauth.exchangeAuthorizationCode({
+      grant_type: "authorization_code",
+      client_id: production.registered.client_id,
+      code: productionCode.code,
+      redirect_uri: "https://claude.example.test/callback",
+      code_verifier: production.verifier,
+    });
+    expect(production.state.accessTokens.at(-1)?.resource).toBe(MCP_RESOURCE);
+    expect(production.state.refreshTokens.at(-1)?.resource).toBe(MCP_RESOURCE);
+
+    const pendingProductionCode = await issueCode(production);
+    const pendingProductionTransaction =
+      await production.oauth.beginAuthorization(
+        {
+          client_id: production.registered.client_id,
+          redirect_uri: "https://claude.example.test/callback",
+          response_type: "code",
+          resource: MCP_RESOURCE,
+          code_challenge: pkce(production.verifier),
+          code_challenge_method: "S256",
+        },
+        production.principal,
+      );
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL =
+      "https://v2-staging-mcp.holymedia.kz";
+    const staging = new OAuthAuthorizationService(production.database, {
+      resolve: async () => null,
+    } as never);
+    const stagingEndpoints = oauthEndpoints(
+      "https://v2-staging-mcp.holymedia.kz",
+    );
+    await expect(
+      staging.continueAuthorization(
+        pendingProductionTransaction.transaction_id,
+        production.principal,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      staging.authorizationContext(
+        pendingProductionTransaction.transaction_id,
+        production.principal,
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      staging.decideAuthorization(
+        pendingProductionTransaction.transaction_id,
+        true,
+        production.principal,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      production.oauth.beginAuthorization({
+        client_id: production.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        resource: stagingEndpoints.legacyResource,
+        code_challenge: pkce(production.verifier),
+        code_challenge_method: "S256",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      staging.beginAuthorization({
+        client_id: production.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        resource: MCP_RESOURCE,
+        code_challenge: pkce(production.verifier),
+        code_challenge_method: "S256",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      staging.exchangeAuthorizationCode({
+        grant_type: "authorization_code",
+        client_id: production.registered.client_id,
+        code: pendingProductionCode.code,
+        redirect_uri: "https://claude.example.test/callback",
+        code_verifier: production.verifier,
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      staging.exchangeRefreshToken({
+        client_id: production.registered.client_id,
+        refresh_token: productionTokens.refresh_token,
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(
+      await staging.authenticate(
+        productionTokens.access_token,
+        stagingEndpoints.legacyResource,
+      ),
+    ).toBeNull();
+    expect(
+      await staging.authenticate(productionTokens.access_token, MCP_RESOURCE),
+    ).toBeNull();
+
+    const started = await staging.beginAuthorization({
+      client_id: production.registered.client_id,
+      redirect_uri: "https://claude.example.test/callback",
+      response_type: "code",
+      resource: stagingEndpoints.publicResource,
+      code_challenge: pkce(production.verifier),
+      code_challenge_method: "S256",
+    });
+    expect(started.url).toBe(
+      `${stagingEndpoints.login}?oauth_transaction=${started.transaction_id}`,
+    );
+    const alreadyLoggedIn = await staging.beginAuthorization(
+      {
+        client_id: production.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        resource: stagingEndpoints.legacyResource,
+        code_challenge: pkce(production.verifier),
+        code_challenge_method: "S256",
+      },
+      production.principal,
+    );
+    expect(alreadyLoggedIn.url).toBe(
+      `${stagingEndpoints.authorizationContinue}?transaction=${alreadyLoggedIn.transaction_id}`,
+    );
+    const continued = await staging.continueAuthorization(
+      started.transaction_id,
+      production.principal,
+    );
+    expect(continued.url).toBe(
+      `${stagingEndpoints.consent}?transaction=${started.transaction_id}`,
+    );
+    const stagedCode = await staging.decideAuthorization(
+      started.transaction_id,
+      true,
+      production.principal,
+    );
+    const stagedTokens = await staging.exchangeAuthorizationCode({
+      grant_type: "authorization_code",
+      client_id: production.registered.client_id,
+      code: new URL(stagedCode.url).searchParams.get("code"),
+      redirect_uri: "https://claude.example.test/callback",
+      code_verifier: production.verifier,
+      resource: stagingEndpoints.publicResource,
+    });
+    expect(production.state.accessTokens.at(-1)?.resource).toBe(
+      stagingEndpoints.publicResource,
+    );
+    expect(
+      await staging.authenticate(
+        stagedTokens.access_token,
+        stagingEndpoints.publicResource,
+      ),
+    ).toMatchObject({ resource: stagingEndpoints.publicResource });
+    expect(
+      await production.oauth.authenticate(
+        stagedTokens.access_token,
+        MCP_PUBLIC_RESOURCE,
+      ),
+    ).toBeNull();
+    await expect(
+      production.oauth.exchangeRefreshToken({
+        client_id: production.registered.client_id,
+        refresh_token: stagedTokens.refresh_token,
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+    const rotated = await staging.exchangeRefreshToken({
+      client_id: production.registered.client_id,
+      refresh_token: stagedTokens.refresh_token,
+    });
+    expect(rotated.access_token).toMatch(/^hm_oauth_/);
+    expect(production.state.accessTokens.at(-1)?.resource).toBe(
+      stagingEndpoints.publicResource,
+    );
+    expect(production.state.refreshTokens.at(-1)?.resource).toBe(
+      stagingEndpoints.publicResource,
+    );
   });
 });

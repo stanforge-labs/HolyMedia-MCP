@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { McpService } from "./mcp.service.js";
 
@@ -23,6 +23,15 @@ function request(method: string, name?: string) {
 }
 
 describe("public MCP transport", () => {
+  const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  beforeEach(() => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+  });
+  afterEach(() => {
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+  });
   it("registers POST and GET at /mcp/public while keeping /mcp", () => {
     expect(Reflect.getMetadata("path", McpController.prototype.post)).toBe(
       "mcp",

@@ -1,12 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { OAuthMetadataController } from "./oauth-metadata.controller.js";
 
 describe("OAuth discovery metadata", () => {
   const previous = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+  const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  beforeEach(() => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+  });
   afterEach(() => {
     if (previous === undefined)
       delete process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
     else process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = previous;
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
   });
 
   it("publishes absolute protected resource documents, without write while gated off", () => {
@@ -61,5 +68,39 @@ describe("OAuth discovery metadata", () => {
     expect(controller.protectedResource().scopes_supported).toEqual([
       "adforge:mcp:read",
     ]);
+  });
+
+  it("publishes only staging OAuth origins when configured for staging", () => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL =
+      "https://v2-staging-mcp.holymedia.kz";
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    const controller = new OAuthMetadataController();
+    const origin = "https://v2-staging-mcp.holymedia.kz";
+    expect(controller.protectedResource()).toMatchObject({
+      resource: `${origin}/mcp`,
+      authorization_servers: [origin],
+    });
+    expect(controller.protectedMcpResource()).toEqual(
+      controller.protectedResource(),
+    );
+    expect(controller.protectedPublicMcpResource()).toMatchObject({
+      resource: `${origin}/mcp/public`,
+      authorization_servers: [origin],
+      scopes_supported: ["adforge:mcp:read"],
+    });
+    expect(controller.authorizationServer()).toMatchObject({
+      issuer: origin,
+      authorization_endpoint: `${origin}/oauth/authorize`,
+      token_endpoint: `${origin}/oauth/token`,
+      registration_endpoint: `${origin}/oauth/register`,
+      revocation_endpoint: `${origin}/oauth/revoke`,
+    });
+    expect(
+      JSON.stringify([
+        controller.protectedResource(),
+        controller.protectedPublicMcpResource(),
+        controller.authorizationServer(),
+      ]),
+    ).not.toContain('"https://mcp.holymedia.kz');
   });
 });

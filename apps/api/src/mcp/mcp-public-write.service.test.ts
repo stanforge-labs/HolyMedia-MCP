@@ -1,11 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
 
 const oldCommitFlag = process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED;
 const oldScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+const oldBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+beforeEach(() => {
+  process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+});
 afterEach(() => {
+  if (oldBaseUrl === undefined) delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  else process.env.HOLYMEDIA_PUBLIC_BASE_URL = oldBaseUrl;
   if (oldCommitFlag === undefined)
     delete process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED;
   else process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED = oldCommitFlag;

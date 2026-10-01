@@ -2,7 +2,7 @@
 // Run on the isolated staging VM only. Never performs a provider call or write.
 import { execFileSync } from "node:child_process";
 
-const targetSha = "ac083f319304fe95272717a96804ce7349d0ccf4";
+const targetSha = process.env.STAGING_TARGET_SHA;
 const origin = "https://v2-staging-mcp.holymedia.kz";
 const containers = ["api", "web", "worker"].map(
   (service) => `hm-public-staging-${service}`,
@@ -27,6 +27,10 @@ function docker(...args) {
 }
 
 function inspectRuntime() {
+  check(
+    /^[0-9a-f]{40}$/.test(targetSha ?? ""),
+    "STAGING_TARGET_SHA must explicitly name the approved 40-character source commit",
+  );
   const images = new Set();
   for (const container of containers) {
     const revision = docker(
@@ -39,11 +43,13 @@ function inspectRuntime() {
     images.add(docker("inspect", "--format", "{{.Image}}", container));
   }
   check(images.size === 1, "API, Web and Worker must use one exact image");
-  const flagCheck = `const flags=${JSON.stringify(expectedFlags)};for(const [key,want] of Object.entries(flags)){if(process.env[key]!==want)process.exit(1)}`;
+  const flagCheck = `const flags=${JSON.stringify(expectedFlags)};for(const [key,want] of Object.entries(flags)){if(process.env[key]!==want)process.exit(1)};if(process.env.HOLYMEDIA_PUBLIC_BASE_URL!==${JSON.stringify(origin)}||process.env.CORS_ORIGINS!==${JSON.stringify(origin)}||process.env.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI!==${JSON.stringify(`${origin}/auth/google/callback`)})process.exit(1)`;
   for (const container of [containers[0], containers[2]]) {
     docker("exec", container, "node", "-e", flagCheck);
   }
-  console.log("PASS: exact source SHA, shared image, running write flags OFF");
+  console.log(
+    "PASS: exact source SHA, shared image, explicit staging origin and running write flags OFF",
+  );
 }
 
 async function request(path, options = {}) {

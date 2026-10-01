@@ -18,7 +18,7 @@ import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
 import { MetaReadError } from "../providers/meta-read.error.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
-import { MCP_PUBLIC_RESOURCE } from "./oauth-authorization.service.js";
+import { oauthEndpoints } from "./oauth-endpoints.js";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
 import {
   isPublicReadTool,
@@ -37,6 +37,7 @@ type JsonRpcRequest = {
 @Controller()
 export class McpController {
   private readonly logger = createLogger("holymedia-mcp-v2-mcp");
+  private readonly endpoints = oauthEndpoints();
 
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
@@ -83,7 +84,7 @@ export class McpController {
         { authReason: "missing_invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute);
+      return mcpUnauthorized(reply, publicRoute, this.endpoints);
     }
 
     // Server-to-client SSE is optional in Streamable HTTP. A valid MCP client
@@ -124,7 +125,7 @@ export class McpController {
         { authReason: "missing_or_malformed_bearer" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute);
+      return mcpUnauthorized(reply, publicRoute, this.endpoints);
     }
     const principal = token
       ? await this.authenticate(token, publicRoute)
@@ -134,7 +135,7 @@ export class McpController {
         { authReason: "invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute);
+      return mcpUnauthorized(reply, publicRoute, this.endpoints);
     }
 
     const input = (request.body ?? {}) as JsonRpcRequest;
@@ -349,7 +350,10 @@ export class McpController {
 
   private async authenticate(token: string, publicRoute: boolean) {
     if (publicRoute)
-      return this.oauthTokens.authenticate(token, MCP_PUBLIC_RESOURCE);
+      return this.oauthTokens.authenticate(
+        token,
+        this.endpoints.publicResource,
+      );
     const service = await this.tokens.authenticate(token);
     if (service) return service;
     const oauth = await this.oauthTokens.authenticate(token);
@@ -400,14 +404,18 @@ export function mcpFailureMessage(error: unknown): string {
     : "Не удалось выполнить запрос HolyMedia. Попробуйте ещё раз.";
 }
 
-function mcpUnauthorized(reply: FastifyReply, publicRoute = false) {
+function mcpUnauthorized(
+  reply: FastifyReply,
+  publicRoute: boolean,
+  endpoints: ReturnType<typeof oauthEndpoints>,
+) {
   return reply
     .code(401)
     .header(
       "WWW-Authenticate",
       publicRoute
-        ? 'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp/public", scope="adforge:mcp:read"'
-        : 'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
+        ? `Bearer resource_metadata="${endpoints.publicResourceMetadata}", scope="adforge:mcp:read"`
+        : `Bearer resource_metadata="${endpoints.legacyResourceMetadata}", scope="adforge:mcp:read"`,
     )
     .send({ statusCode: 401, message: "MCP authorization required." });
 }

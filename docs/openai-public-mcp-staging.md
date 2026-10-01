@@ -1,15 +1,11 @@
 # Public MCP staging package — not deployed
 
-Status: infrastructure files only. No separate staging VM has been supplied or
-verified, and nothing in this package authorizes production access. **Do not
-deploy the current target image for OAuth acceptance yet.** At source commit
-`ac083f319304fe95272717a96804ce7349d0ccf4`, OAuth issuer/resource,
-discovery endpoints, the `WWW-Authenticate` challenge and one public-write
-resource comparison still hardcode `https://mcp.holymedia.kz`. An isolated
-staging host would advertise production. The acceptance script fails closed on
-this. Fix the code in a separately approved commit and agree a new immutable
-target SHA before provisioning OAuth clients or serving staging traffic. Do
-not mask this with ingress response rewriting.
+Status: source package only; no separate staging VM has been supplied or
+verified. OAuth issuer/resource and discovery use the trusted
+`HOLYMEDIA_PUBLIC_BASE_URL` configuration. This source change has not been
+deployed. Before a future staging run, a human must approve the exact
+staging-build commit SHA, verify the image digest and configure isolated
+staging credentials. Nothing in this package authorizes production access.
 
 ## 1. Prerequisites and isolation
 
@@ -20,9 +16,8 @@ not mask this with ingress response rewriting.
   and GHCR. No workflow is triggered by this package itself.
 - A new staging-only Google Login OAuth client and a new test identity when
   interactive login is approved. Baseline has no provider credentials.
-- Before any deploy, resolve the hardcoded production OAuth origin above and
-  replace the fixed source SHA throughout this package through a reviewed
-  change. The SHA in this package is intentionally not floating.
+- Before any deploy, review the exact commit on the dedicated staging-build
+  branch and its immutable SHA image. No floating production tag is used.
 
 The earlier `staging-mcp.holymedia.kz` belongs to v1 staging. This v2 package
 uses only `v2-staging-mcp.holymedia.kz`, matching the v2 architecture runbook.
@@ -104,18 +99,22 @@ future** `codex/public-mcp-staging-image` branch, requiring an explicit
 `[build-staging-image]` commit marker. A push to the current feature branch
 does nothing; no staging-build branch or marker commit is created here. Once
 the file exists on the default branch, manual dispatch is also possible.
-The workflow checks out exactly
-`ac083f319304fe95272717a96804ce7349d0ccf4` as **application source**,
-copies only [the staging build recipe](../infra/Dockerfile.v2.staging)
-from the feature workflow revision, and builds Web with
+The workflow checks out the **exact commit that triggered the guarded
+staging-build branch run** (`github.sha`), verifies checkout HEAD against
+`GITHUB_SHA`, and builds the application and
+[staging build recipe](../infra/Dockerfile.v2.staging) from that same commit.
+To choose a new target, a human deliberately advances the dedicated
+staging-build branch to a reviewed commit containing this fix and adds the
+`[build-staging-image]` marker. The workflow builds Web with
 `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_PUBLIC_BASE_URL` both set to
 `https://v2-staging-mcp.holymedia.kz`. OCI labels retain both
 the exact application revision and the workflow/recipe revision. The image
 gets only `sha-<40-character-source-SHA>` in a separate
 `holymedia-mcp-v2-staging` GHCR package. Verify the resulting registry digest,
 labels and baked Web API origin before entering `STAGING_IMAGE`; preferably
-pin the digest as well as recording the SHA tag. Do not run this workflow until
-the OAuth-origin blocker is fixed and the target SHA is updated.
+pin the digest as well as recording the SHA tag. The acceptance script requires
+`STAGING_TARGET_SHA=<approved 40-character commit>` and fails if the running
+image or explicit `HOLYMEDIA_PUBLIC_BASE_URL` does not match.
 
 ## 4. PostgreSQL, migrations, backup and reset
 
@@ -213,14 +212,15 @@ needed for the infrastructure baseline.
 ## 6. Acceptance, logging and rollback rehearsal
 
 Run [the safe acceptance script](../scripts/staging_public_mcp_acceptance.mjs)
-on the staging VM only, with a newly issued staging read token supplied at
-runtime as `STAGING_OAUTH_READ_TOKEN` (never as a command argument or file in
-Git). It checks image labels, running flags, health/ready, auth boundary,
+on the staging VM only. Supply the reviewed image source SHA explicitly as
+`STAGING_TARGET_SHA` and a newly issued staging read token at runtime as
+`STAGING_OAUTH_READ_TOKEN` (never as a command argument or file in Git).
+It checks image labels, the explicit staging origin, running flags, health/ready, auth boundary,
 unprefixed public route, both OAuth metadata documents, read-only scope,
 42-tool allowlist, rejection of hidden legacy tools and a database-only
-OAuth read. It makes no provider calls or writes. Without a token it reports
-incomplete rather than claiming PASS. Against the current target commit it
-must fail on production-origin OAuth metadata/challenge.
+OAuth read. It makes no provider calls or writes. Without a SHA or token it
+reports incomplete rather than claiming PASS; any production-origin OAuth
+metadata/challenge fails acceptance.
 
 Nginx's custom staging access log retains only time, method, an allowlisted
 route label, status, duration and request ID; it omits raw URI, query, body,

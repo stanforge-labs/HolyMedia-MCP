@@ -49,7 +49,7 @@ export class GoogleLoginService {
     }
 
     const state = createOpaqueToken();
-    const safeNextPath = normalizeNextPath(nextPath);
+    const safeNextPath = normalizeNextPath(nextPath, this.config.publicBaseUrl);
     await this.database.client.googleLoginState.create({
       data: {
         stateDigest: digestToken(state, this.config.sessionHashSecret),
@@ -101,7 +101,9 @@ export class GoogleLoginService {
         "Google Login session is invalid or expired.",
       );
     }
-    return { nextPath: normalizeNextPath(record.nextPath) };
+    return {
+      nextPath: normalizeNextPath(record.nextPath, this.config.publicBaseUrl),
+    };
   }
 
   public async exchangeCode(code: string): Promise<GoogleLoginProfile> {
@@ -194,11 +196,11 @@ export class GoogleLoginService {
   }
 }
 
-function normalizeNextPath(value: string): string {
+function normalizeNextPath(value: string, baseUrl: string): string {
   try {
-    const approval = new URL(value, "https://mcp.holymedia.kz");
+    const approval = new URL(value, baseUrl);
     if (
-      approval.origin === "https://mcp.holymedia.kz" &&
+      approval.origin === baseUrl &&
       /^\/(?:en\/)?mcp\/approve$/.test(approval.pathname) &&
       !approval.search &&
       !approval.hash
@@ -208,9 +210,9 @@ function normalizeNextPath(value: string): string {
     // Continue with the existing dashboard and OAuth continuation checks.
   }
   try {
-    const dashboard = new URL(value, "https://mcp.holymedia.kz");
+    const dashboard = new URL(value, baseUrl);
     if (
-      dashboard.origin === "https://mcp.holymedia.kz" &&
+      dashboard.origin === baseUrl &&
       /^\/(?:en\/)?dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?$/.test(
         dashboard.pathname,
       )
@@ -221,10 +223,10 @@ function normalizeNextPath(value: string): string {
     // Continue with the non-dashboard continuation check below.
   }
   try {
-    const url = new URL(value, "https://mcp.holymedia.kz");
+    const url = new URL(value, baseUrl);
     const transaction = url.searchParams.get("transaction") ?? "";
     if (
-      url.origin === "https://mcp.holymedia.kz" &&
+      url.origin === baseUrl &&
       url.pathname === "/oauth/authorize/continue" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         transaction,

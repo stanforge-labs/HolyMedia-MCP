@@ -28,6 +28,15 @@ test("staging policy is OFF and credential examples are empty", () => {
     assert.match(app, new RegExp(`^${name}=false$`, "m"));
   }
   assert.match(app, /^V2_PREVIEW_ONLY=true$/m);
+  assert.match(
+    app,
+    /^HOLYMEDIA_PUBLIC_BASE_URL=https:\/\/v2-staging-mcp\.holymedia\.kz$/m,
+  );
+  assert.match(app, /^CORS_ORIGINS=https:\/\/v2-staging-mcp\.holymedia\.kz$/m);
+  assert.match(
+    app,
+    /^PROVIDER_GOOGLE_LOGIN_REDIRECT_URI=https:\/\/v2-staging-mcp\.holymedia\.kz\/auth\/google\/callback$/m,
+  );
   for (const name of [
     "SESSION_HASH_SECRET",
     "PROVIDER_CREDENTIAL_ENCRYPTION_KEYS",
@@ -46,10 +55,17 @@ test("staging policy is OFF and credential examples are empty", () => {
   );
 });
 
-test("image workflow is isolated and pinned to the approved source", () => {
-  assert.match(workflow, /ac083f319304fe95272717a96804ce7349d0ccf4/);
+test("image workflow is isolated and uses the exact selected staging-branch commit", () => {
+  assert.doesNotMatch(workflow, /ac083f319304fe95272717a96804ce7349d0ccf4/);
   assert.match(workflow, /branches: \[codex\/public-mcp-staging-image\]/);
   assert.match(workflow, /\[build-staging-image\]/);
+  assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /git -C source rev-parse HEAD.*GITHUB_SHA/);
+  assert.match(workflow, /sha-\$GITHUB_SHA/);
+  assert.match(
+    workflow,
+    /org\.opencontainers\.image\.revision=\$\{\{ github\.sha \}\}/,
+  );
   assert.doesNotMatch(workflow, /type=raw,value=production|branches: \[main/);
 });
 

@@ -1,5 +1,5 @@
 import { ForbiddenException } from "@nestjs/common";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { PreviewError } from "./mcp-preview.error.js";
 
@@ -27,6 +27,15 @@ function reply() {
 }
 
 describe("MCP bearer authentication", () => {
+  const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  beforeEach(() => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+  });
+  afterEach(() => {
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+  });
   it("returns a typed local confirmation error without exposing internal details", async () => {
     const instance = new McpController(
       {
@@ -178,6 +187,28 @@ describe("MCP bearer authentication", () => {
       invalid as never,
     );
     expect(invalid.code).toHaveBeenCalledWith(401);
+  });
+
+  it("uses staging protected-resource challenges for legacy and public MCP", async () => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL =
+      "https://v2-staging-mcp.holymedia.kz";
+    const instance = controller();
+    const legacy = reply();
+    const publicReply = reply();
+    await instance.get({ headers: {} } as never, legacy as never);
+    await instance.getPublic({ headers: {} } as never, publicReply as never);
+    for (const [response, suffix] of [
+      [legacy, "mcp"],
+      [publicReply, "mcp/public"],
+    ] as const) {
+      const challenge = response.header.mock.calls.find(
+        ([name]) => name === "WWW-Authenticate",
+      )?.[1];
+      expect(challenge).toBe(
+        `Bearer resource_metadata="https://v2-staging-mcp.holymedia.kz/.well-known/oauth-protected-resource/${suffix}", scope="adforge:mcp:read"`,
+      );
+      expect(challenge).not.toContain('"https://mcp.holymedia.kz');
+    }
   });
 
   it("authenticates a GET transport probe before returning the optional SSE response", async () => {

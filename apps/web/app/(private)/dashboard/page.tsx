@@ -32,7 +32,7 @@ import {
 } from "../../components/dashboard-routes";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-const MCP_URL = "https://mcp.holymedia.kz/mcp";
+const MCP_URL = `${new URL(API).origin}/mcp`;
 // Product pause only: audit services, history and private artifacts remain intact.
 const SITE_AUDIT_PRODUCT_ENABLED = false;
 
