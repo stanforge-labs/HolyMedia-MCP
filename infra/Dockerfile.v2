@@ -62,7 +62,8 @@ RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
 FROM base AS api-runtime
 ENV NODE_ENV=production
 
-COPY --from=api-prod-deps --chown=node:node /workspace/package.json /workspace/pnpm-workspace.yaml /workspace/.npmrc ./
+COPY --from=api-prod-deps --chown=node:node /workspace/package.json /workspace/pnpm-workspace.yaml ./
+COPY --chown=node:node infra/api-runtime.npmrc ./.npmrc
 COPY --from=api-prod-deps --chown=node:node /workspace/node_modules ./node_modules
 COPY --from=api-prod-deps --chown=node:node /workspace/apps/api ./apps/api
 COPY --from=api-prod-deps --chown=node:node /workspace/packages/config ./packages/config

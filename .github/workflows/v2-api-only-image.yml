@@ -128,6 +128,7 @@ jobs:
             test ! -e /root/.npmrc
             test ! -e /root/.ssh
             ! grep -Eq "(_authToken|_password|BEGIN .*PRIVATE KEY)" /workspace/.npmrc
+            test "$(pnpm config get verify-deps-before-run)" = false
             if find /workspace/apps /workspace/packages -path "*/node_modules" -prune -o -type f \
               \( -name "*.test.*" -o -name "*.spec.*" \) -print -quit | grep -q .; then
               echo "Compiled project test/spec file found"; exit 1
