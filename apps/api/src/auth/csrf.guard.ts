@@ -28,7 +28,11 @@ export class CsrfGuard implements CanActivate {
     const url = String((request as unknown as { url?: string }).url ?? "");
     const requestPath = url.split("?")[0];
     const browserApproval =
-      method === "POST" && requestPath === "/api/v1/mcp/public/approval";
+      method === "POST" &&
+      [
+        "/api/v1/mcp/public/approval",
+        "/api/v1/mcp/public/approval/view",
+      ].includes(requestPath ?? "");
     if (
       method === "POST" &&
       (requestPath === "/mcp" ||

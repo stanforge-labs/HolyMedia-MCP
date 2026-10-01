@@ -196,6 +196,18 @@ export class GoogleLoginService {
 
 function normalizeNextPath(value: string): string {
   try {
+    const approval = new URL(value, "https://mcp.holymedia.kz");
+    if (
+      approval.origin === "https://mcp.holymedia.kz" &&
+      /^\/(?:en\/)?mcp\/approve$/.test(approval.pathname) &&
+      !approval.search &&
+      !approval.hash
+    )
+      return approval.pathname;
+  } catch {
+    // Continue with the existing dashboard and OAuth continuation checks.
+  }
+  try {
     const dashboard = new URL(value, "https://mcp.holymedia.kz");
     if (
       dashboard.origin === "https://mcp.holymedia.kz" &&

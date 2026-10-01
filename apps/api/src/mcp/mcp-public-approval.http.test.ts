@@ -25,7 +25,9 @@ const view = vi.fn(async () => ({
   approved: false,
   expires_at: new Date(Date.now() + 60_000).toISOString(),
 }));
-const decide = vi.fn(async () => ({ status: "approved" }));
+const decide = vi.fn(async (_principal, _nonce, decision: string) => ({
+  status: decision === "approve" ? "approved" : "cancelled",
+}));
 
 @Module({
   controllers: [McpPublicApprovalController],
@@ -74,29 +76,42 @@ describe("browser approval HTTP boundary", () => {
     await app?.close();
   });
 
-  it("requires a web session and never approves on GET", async () => {
+  it("never accepts a nonce in GET query and keeps view display-only", async () => {
     const fastify = app.getHttpAdapter().getInstance();
     decide.mockClear();
-    const anonymous = await fastify.inject({
-      method: "GET",
-      url: `${url}?approval=${token}`,
-    });
-    expect(anonymous.statusCode).toBe(401);
-    const result = await fastify.inject({
+    const legacyGet = await fastify.inject({
       method: "GET",
       url: `${url}?approval=${token}`,
       headers: { cookie: cookies },
     });
+    expect(legacyGet.statusCode).toBe(404);
+    const anonymous = await fastify.inject({
+      method: "POST",
+      url: `${url}/view`,
+      payload: { approval_nonce: token },
+    });
+    expect([401, 403]).toContain(anonymous.statusCode);
+    const result = await fastify.inject({
+      method: "POST",
+      url: `${url}/view`,
+      headers: { cookie: cookies, "x-csrf-token": "csrf-test" },
+      payload: { approval_nonce: token },
+    });
     expect(result.statusCode).toBe(200);
     expect(result.json()).toMatchObject({ before: "ACTIVE", after: "PAUSED" });
     expect(result.headers["cache-control"]).toBe("no-store");
+    expect(result.headers["referrer-policy"]).toBe("no-referrer");
+    expect(view).toHaveBeenCalledWith(
+      { kind: "human", userId: "user-a", sessionId: "session-a" },
+      token,
+    );
     expect(decide).not.toHaveBeenCalled();
   });
 
   it("denies bearer-only, missing session, missing CSRF and wrong CSRF", async () => {
     const fastify = app.getHttpAdapter().getInstance();
     decide.mockClear();
-    const payload = { approval: token, decision: "approve" };
+    const payload = { approval_nonce: token, decision: "approve" };
     for (const headers of [
       { authorization: "Bearer oauth-access" },
       { "x-csrf-token": "csrf-test" },
@@ -108,13 +123,15 @@ describe("browser approval HTTP boundary", () => {
         origin: "https://evil.example",
       },
     ]) {
-      const result = await fastify.inject({
-        method: "POST",
-        url,
-        headers,
-        payload,
-      });
-      expect([401, 403]).toContain(result.statusCode);
+      for (const path of [url, `${url}/view`]) {
+        const result = await fastify.inject({
+          method: "POST",
+          url: path,
+          headers,
+          payload,
+        });
+        expect([401, 403]).toContain(result.statusCode);
+      }
     }
     expect(decide).not.toHaveBeenCalled();
   });
@@ -127,14 +144,35 @@ describe("browser approval HTTP boundary", () => {
         method: "POST",
         url,
         headers: { cookie: cookies, "x-csrf-token": "csrf-test" },
-        payload: { approval: token, decision: "approve" },
+        payload: { approval_nonce: token, decision: "approve" },
       });
     expect(result.statusCode).toBe(201);
     expect(result.json()).toEqual({ status: "approved" });
+    expect(result.headers["cache-control"]).toBe("no-store");
+    expect(result.headers["referrer-policy"]).toBe("no-referrer");
     expect(decide).toHaveBeenCalledWith(
       { kind: "human", userId: "user-a", sessionId: "session-a" },
       token,
       "approve",
+    );
+  });
+
+  it("requires the same session and CSRF for explicit cancellation", async () => {
+    const result = await app
+      .getHttpAdapter()
+      .getInstance()
+      .inject({
+        method: "POST",
+        url,
+        headers: { cookie: cookies, "x-csrf-token": "csrf-test" },
+        payload: { approval_nonce: token, decision: "cancel" },
+      });
+    expect(result.statusCode).toBe(201);
+    expect(result.json()).toEqual({ status: "cancelled" });
+    expect(decide).toHaveBeenCalledWith(
+      { kind: "human", userId: "user-a", sessionId: "session-a" },
+      token,
+      "cancel",
     );
   });
 });

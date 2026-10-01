@@ -4,12 +4,37 @@ import pino, { type Logger } from "pino";
 
 export type { Logger };
 
-export function createLogger(service: string, level: string = "info"): Logger {
-  return pino({
+export function createLogger(
+  service: string,
+  level: string = "info",
+  destination?: pino.DestinationStream,
+): Logger {
+  const options = {
     level,
     base: { service },
     redact: {
       paths: [
+        // Do not log complete request bodies or headers: approval nonces,
+        // preview tokens, cookies and CSRF proofs may appear in either.
+        "req.body",
+        "request.body",
+        "body",
+        "req",
+        "request",
+        "req.headers",
+        "request.headers",
+        "headers",
+        "authorization",
+        "cookie",
+        "csrfToken",
+        "csrf_token",
+        "approval_nonce",
+        "approvalNonce",
+        "approvalToken",
+        "nonce",
+        "approval",
+        "preview_token",
+        "previewToken",
         "req.headers.authorization",
         "headers.authorization",
         "accessToken",
@@ -20,7 +45,8 @@ export function createLogger(service: string, level: string = "info"): Logger {
       ],
       censor: "[REDACTED]",
     },
-  });
+  };
+  return destination ? pino(options, destination) : pino(options);
 }
 
 export function requestId(value?: string): string {

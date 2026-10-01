@@ -188,7 +188,7 @@ export class McpPublicWriteService {
       before,
       requested,
       expires_at: expiresAt.toISOString(),
-      approval_url: `${this.config.publicBaseUrl}/mcp/approve?approval=${encodeURIComponent(approvalToken)}`,
+      approval_url: `${this.config.publicBaseUrl}/mcp/approve#${approvalToken}`,
       provider_mutation_sent: false,
       user_action:
         "Open the HolyMedia approval URL and explicitly approve this change in your browser before calling commit_confirmed_preview.",

@@ -78,12 +78,20 @@ and a notice that no mutation was sent. Both tokens are stored as SHA-256
 digests. The nonce is single-purpose, expires within the ten-minute preview,
 and is not sufficient to approve anything by possession alone.
 
-The user opens `/mcp/approve?approval=...` or its `/en` equivalent. GET only
-shows provider, account, campaign, operation, before, after and expiry; it
-never sets `confirmedAt`. The page omits credentials, preview tokens, grant
-IDs and policy details. Locale switching preserves only a validated approval
-nonce. Authentication redirects use a same-origin allowlist; approval success
-does not redirect to a query-provided destination.
+The user opens `/mcp/approve#hmap_...` or its `/en` equivalent. The fragment
+is not sent in the initial HTTP GET. The page immediately stores the nonce in
+per-tab `sessionStorage` and removes the fragment with `history.replaceState`.
+An authenticated, CSRF-protected `POST /api/v1/mcp/public/approval/view`
+passes the nonce in a JSON body and only shows provider, account, campaign,
+operation, before, after and expiry; it never sets `confirmedAt`. The page
+omits credentials, preview tokens, grant IDs and policy details. Locale
+switching uses only the safe path and recovers the nonce from the same tab.
+Login return URLs are restricted to the fixed `/mcp/approve` or
+`/en/mcp/approve` path, without a nonce in query, path or fragment. Approval
+success does not redirect to a query-provided destination. Approval/cancel
+POSTs also pass the nonce in a JSON body and clear it from sessionStorage on
+success. Both approval pages respond with `Referrer-Policy: no-referrer`,
+`Cache-Control: no-store` and noindex headers/metadata.
 
 An explicit Confirm or Cancel POST uses the HolyMedia cookie session and
 existing CSRF protection. An MCP bearer token alone cannot authorize it. The
@@ -151,3 +159,11 @@ downloads are not exposed through MCP; file delivery needs separate design.
    designated test campaign and direct read-back/audit/uncertainty drills.
 5. Review monitoring and rollback before any production rollout. This
    document authorizes neither production deploy nor provider write.
+
+Before enabling `PUBLIC_MCP_WRITE_SCOPE_ENABLED` in any environment, verify
+the actual ingress configuration and access logs. They must not record
+sensitive query, body or header values, including Authorization, Cookie,
+CSRF proofs, approval nonces and preview tokens. The approval route itself
+must not carry a nonce in its requested URL, and the staging acceptance must
+confirm that Web/API/ingress logs and telemetry contain none of these values.
+Application-level redaction does not prove ingress-level redaction.
