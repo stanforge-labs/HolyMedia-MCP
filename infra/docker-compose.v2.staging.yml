@@ -1,0 +1,151 @@
+name: holymedia-public-mcp-staging
+
+# This is intentionally independent of docker-compose.v2.production.yml.
+# That file hardcodes production env files and host volumes and cannot be
+# safely overridden into an isolated staging deployment.
+x-runtime: &runtime
+  image: ${STAGING_IMAGE:?Set the exact SHA-tagged staging image}
+  init: true
+  restart: unless-stopped
+  env_file:
+    - ${STAGING_APP_ENV_FILE:?Set an isolated staging app.env path}
+  networks:
+    - staging
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: hm-public-staging-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: holymedia_public_staging
+      POSTGRES_USER: holymedia_staging
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?Set a staging-only DB password}
+    volumes:
+      - staging-postgres:/var/lib/postgresql
+    networks:
+      - staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: hm-public-staging-redis
+    restart: unless-stopped
+    environment:
+      STAGING_REDIS_PASSWORD: ${STAGING_REDIS_PASSWORD:?Set a staging-only Redis password}
+      REDISCLI_AUTH: ${STAGING_REDIS_PASSWORD:?Set a staging-only Redis password}
+    command:
+      [
+        "sh",
+        "-c",
+        'exec redis-server --appendonly yes --requirepass "$$STAGING_REDIS_PASSWORD"',
+      ]
+    volumes:
+      - staging-redis:/data
+    networks:
+      - staging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  api:
+    <<: *runtime
+    container_name: hm-public-staging-api
+    # Migrations are a separate, backup-gated runbook step, not startup work.
+    command: ["pnpm", "--filter", "@holymedia/api", "start"]
+    ports:
+      - "127.0.0.1:14000:4000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *runtime
+    container_name: hm-public-staging-worker
+    working_dir: /workspace/apps/worker
+    command: ["pnpm", "--filter", "@holymedia/worker", "start"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "import('ioredis').then(async({default:Redis})=>{const r=new Redis(process.env.REDIS_URL);await r.ping();await r.quit()}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: ${STAGING_IMAGE:?Set the exact SHA-tagged staging image}
+    container_name: hm-public-staging-web
+    init: true
+    restart: unless-stopped
+    working_dir: /workspace/apps/web
+    env_file:
+      - ${STAGING_WEB_ENV_FILE:?Set an isolated staging web.env path}
+    command: ["./node_modules/.bin/next", "start"]
+    ports:
+      - "127.0.0.1:13000:3000"
+    networks:
+      - staging
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logging
+
+networks:
+  staging:
+    name: holymedia-public-mcp-staging-net
+    driver: bridge
+
+volumes:
+  staging-postgres:
+    name: holymedia-public-mcp-staging-postgres
+  staging-redis:
+    name: holymedia-public-mcp-staging-redis

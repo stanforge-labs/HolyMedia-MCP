@@ -1,0 +1,93 @@
+# Install only on the separate staging VM after DNS and TLS certificate exist.
+# Included from nginx's http context. Never include this on production.
+# No query string, headers, body or raw URI are written to the access log.
+map $uri $hm_public_staging_safe_path {
+    default other;
+    =/health health;
+    =/ready ready;
+    =/mcp mcp;
+    =/mcp/public mcp_public;
+    =/mcp/approve approval_ru;
+    =/en/mcp/approve approval_en;
+    =/.well-known/oauth-authorization-server oauth_metadata;
+    =/.well-known/oauth-protected-resource/mcp/public resource_metadata;
+    ~^/oauth/ oauth;
+    ~^/auth/google/ google_login;
+    ~^/api/v1/ api_v1;
+}
+log_format hm_public_staging_safe '$time_iso8601 $request_method $hm_public_staging_safe_path $status $request_time $request_id';
+
+server {
+    listen 80;
+    server_name v2-staging-mcp.holymedia.kz;
+    access_log /var/log/nginx/holymedia-public-staging.access.log hm_public_staging_safe;
+    error_log /var/log/nginx/holymedia-public-staging.error.log crit;
+    # Drop query data on accidental HTTP requests. OAuth callbacks must use HTTPS.
+    return 308 https://v2-staging-mcp.holymedia.kz$uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name v2-staging-mcp.holymedia.kz;
+    ssl_certificate /etc/letsencrypt/live/v2-staging-mcp.holymedia.kz/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/v2-staging-mcp.holymedia.kz/privkey.pem;
+    access_log /var/log/nginx/holymedia-public-staging.access.log hm_public_staging_safe;
+    error_log /var/log/nginx/holymedia-public-staging.error.log crit;
+    client_max_body_size 2m;
+    add_header Strict-Transport-Security 'max-age=86400' always;
+    add_header X-Content-Type-Options nosniff always;
+
+    # Exact approval locations take precedence over /mcp API routing.
+    location = /mcp/approve {
+        proxy_pass http://127.0.0.1:13000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header X-Robots-Tag;
+        add_header Referrer-Policy no-referrer always;
+        add_header Cache-Control no-store always;
+        add_header X-Robots-Tag 'noindex, nofollow, noarchive' always;
+    }
+
+    location = /en/mcp/approve {
+        proxy_pass http://127.0.0.1:13000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header X-Robots-Tag;
+        add_header Referrer-Policy no-referrer always;
+        add_header Cache-Control no-store always;
+        add_header X-Robots-Tag 'noindex, nofollow, noarchive' always;
+    }
+
+    location ~ ^/(health|ready|mcp(?:/public)?|\.well-known/oauth-[^/]+(?:/.*)?|oauth/.*|auth/google/.*|api/v1/.*)$ {
+        proxy_pass http://127.0.0.1:14000;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:13000;
+        proxy_http_version 1.1;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+    }
+}
