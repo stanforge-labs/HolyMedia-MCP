@@ -74,7 +74,8 @@ export type ProviderErrorCode =
   | "google_ads_manager_metrics_unsupported"
   | "provider_response_invalid"
   | "provider_not_configured"
-  | "invalid_oauth_state";
+  | "invalid_oauth_state"
+  | "not_supported_for_google_ads";
 
 export type ProviderRegistryEntry = {
   definition: ProviderDefinition;
@@ -112,6 +113,7 @@ export interface ProviderReadAdapter {
     range?: ProviderDateRange,
     limit?: number,
     cursor?: string,
+    statuses?: readonly string[],
   ): Promise<{ items: ProviderCampaign[]; nextCursor?: string }>;
   getMetrics(
     context: ProviderReadContext,

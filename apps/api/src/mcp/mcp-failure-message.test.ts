@@ -3,6 +3,13 @@ import { ProviderError } from "../providers/provider.errors.js";
 import { mcpFailureMessage } from "./mcp.controller.js";
 
 describe("MCP provider error messages", () => {
+  it("returns a typed, non-generic Google preview limitation", () => {
+    expect(
+      mcpFailureMessage(
+        new ProviderError("not_supported_for_google_ads", "internal detail"),
+      ),
+    ).toContain("пока не поддерживается для Google Ads");
+  });
   it("does not call a denied Google Ads customer a Meta permission error", () => {
     expect(
       mcpFailureMessage(

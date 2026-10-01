@@ -4,6 +4,7 @@ export async function providerJson<T>(
   url: string,
   init: RequestInit,
   timeoutMs: number,
+  mapError?: (payload: unknown, response: Response) => Error | undefined,
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -16,6 +17,8 @@ export async function providerJson<T>(
       payload = null;
     }
     if (!response.ok) {
+      const mapped = mapError?.(payload, response);
+      if (mapped) throw mapped;
       const error = safeProviderError(payload);
       if (error.code === "google_ads_manager_metrics_unsupported") {
         throw new ProviderError(

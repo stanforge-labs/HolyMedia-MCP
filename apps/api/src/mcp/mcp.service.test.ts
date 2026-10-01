@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { McpService } from "./mcp.service.js";
 
-function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
+function serviceWithAccounts(
+  accounts: Array<Record<string, unknown>>,
+  providerOverrides: Record<string, unknown> = {},
+  previewOverrides: Record<string, unknown> = {},
+) {
   const database = {
     client: {
       providerAccount: {
@@ -42,6 +46,8 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
   } as never;
   const providers = {
     listProviders: () => [{ id: "GOOGLE_ADS", displayName: "Google Ads" }],
+    readCampaigns: vi.fn(async () => ({ items: [] })),
+    metaInsights: vi.fn(async () => ({ data: [{ campaign_id: "meta-1" }] })),
     metaPermissions: vi.fn(async () => ({
       requested: ["ads_read"],
       granted: ["ads_read"],
@@ -105,6 +111,7 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
         rows: [],
       }),
     ),
+    ...providerOverrides,
   } as never;
   const reports = {
     performance: vi.fn(async (_workspaceId: string, input: unknown) => ({
@@ -116,6 +123,7 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
     create: async () => ({ status: "preview" }),
     confirm: async () => ({ status: "confirmed" }),
     commit: async () => ({ status: "blocked" }),
+    ...previewOverrides,
   } as never;
   const siteAnalysis = { analyze: async () => ({ status: 200 }) } as never;
   const billing = {
@@ -132,6 +140,17 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
     siteAnalysis,
     billing,
   );
+}
+
+function principal() {
+  return {
+    kind: "service" as const,
+    tokenId: "token",
+    serviceIdentityId: "identity",
+    workspaceId: "workspace-a",
+    scopes: ["adforge:mcp:read"],
+    accountIds: [],
+  };
 }
 
 describe("MCP V1-compatible policy", () => {
@@ -341,6 +360,164 @@ describe("MCP V1-compatible policy", () => {
         },
       ),
     ).rejects.toThrow("must not contain credentials");
+  });
+
+  it("returns one Google campaign insight row per campaign and honors explicit dates", async () => {
+    const readCampaigns = vi.fn(async (..._args: unknown[]) => ({
+      items: [
+        {
+          id: "123",
+          name: "Search",
+          status: "ENABLED",
+          budget: { amount: "5", currency: "USD" },
+          budgetDetails: {
+            resourceName: "customers/1234567890/campaignBudgets/9",
+            explicitlyShared: false,
+            period: "DAILY",
+          },
+          metrics: {
+            spend: { amount: "1015.6", currency: "USD" },
+            impressions: 1000,
+            clicks: 100,
+            ctr: 10,
+            cpc: { amount: "10.156", currency: "USD" },
+            conversions: 20,
+            costPerConversion: { amount: "50.78", currency: "USD" },
+            conversionValue: "2000",
+          },
+        },
+      ],
+    }));
+    const service = serviceWithAccounts([account], { readCampaigns });
+    const result = (await service.call(principal(), "get_flexible_insights", {
+      provider: "google_ads",
+      account_id: "1234567890",
+      level: "campaign",
+      since: "2026-08-30",
+      until: "2026-09-28",
+    })) as { items: Array<Record<string, unknown>> };
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      campaignId: "123",
+      name: "Search",
+      status: "ENABLED",
+      currency: "USD",
+      spend: { amount: "1015.6", currency: "USD" },
+      budgetDetails: { period: "DAILY" },
+    });
+    expect(readCampaigns.mock.calls[0]?.[3]).toEqual({
+      startDate: "2026-08-30",
+      endDate: "2026-09-28",
+    });
+  });
+
+  it("keeps Google account insights aggregate and supports date_preset", async () => {
+    const readMetrics = vi.fn(async (..._args: unknown[]) => ({
+      spend: { amount: "100", currency: "USD" },
+    }));
+    const service = serviceWithAccounts([account], { readMetrics });
+    const result = await service.call(principal(), "get_flexible_insights", {
+      provider: "google_ads",
+      account_id: "1234567890",
+      level: "account",
+      date_preset: "last_30d",
+    });
+    expect(result).toEqual({ spend: { amount: "100", currency: "USD" } });
+    const dates = readMetrics.mock.calls[0]?.[3] as {
+      startDate: string;
+      endDate: string;
+    };
+    expect(
+      (Date.parse(dates.endDate) - Date.parse(dates.startDate)) / 86_400_000,
+    ).toBe(29);
+    await expect(
+      service.call(principal(), "get_flexible_insights", {
+        provider: "google_ads",
+        account_id: "1234567890",
+        level: "account",
+        since: "2026-08-30",
+        until: "2026-09-28",
+        date_preset: "last_30d",
+      }),
+    ).rejects.toThrow("either since/until or date_preset");
+  });
+
+  it("passes Google status to the read adapter without changing Meta list semantics", async () => {
+    const readCampaigns = vi.fn(async (..._args: unknown[]) => ({ items: [] }));
+    const service = serviceWithAccounts([account, metaAccount], {
+      readCampaigns,
+    });
+    await service.call(principal(), "list_campaigns", {
+      provider: "google_ads",
+      account_id: "1234567890",
+      status: "ENABLED",
+    });
+    await service.call(principal(), "list_campaigns", {
+      provider: "meta_ads",
+      account_id: metaAccount.externalAccountId,
+      status: "ENABLED",
+    });
+    expect(readCampaigns.mock.calls[0]?.[6]).toEqual(["ENABLED"]);
+    expect(readCampaigns.mock.calls[1]?.[6]).toBeUndefined();
+  });
+
+  it("rejects unsupported Google previews before shared preview storage", async () => {
+    const create = vi.fn();
+    const service = serviceWithAccounts([account], {}, { create });
+    for (const tool of [
+      "update_entity_status_preview",
+      "pause_entities_preview",
+      "preview_pause_campaign",
+    ]) {
+      await expect(
+        service.call(principal(), tool, {
+          provider: "google_ads",
+          account_id: "1234567890",
+          entity_type: "keyword",
+          entity_ids: ["test"],
+          status: "PAUSED",
+        }),
+      ).rejects.toMatchObject({ code: "not_supported_for_google_ads" });
+    }
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("leaves Meta compatibility preview routing unchanged", async () => {
+    const create = vi.fn(async () => ({ status: "preview" }));
+    const service = serviceWithAccounts([metaAccount], {}, { create });
+    await expect(
+      service.call(principal(), "update_entity_status_preview", {
+        provider: "meta_ads",
+        account_id: metaAccount.externalAccountId,
+        entity_type: "campaign",
+        campaign_id: "123",
+        status: "PAUSED",
+      }),
+    ).resolves.toEqual({ status: "preview" });
+    expect(create).toHaveBeenCalledWith(
+      principal(),
+      expect.objectContaining({
+        provider: "META_ADS",
+        accountId: metaAccount.externalAccountId,
+        objectId: "123",
+      }),
+    );
+  });
+
+  it("preserves Meta flexible insights routing", async () => {
+    const metaInsights = vi.fn(async () => ({
+      data: [{ campaign_id: "meta-1" }],
+    }));
+    const service = serviceWithAccounts([metaAccount], { metaInsights });
+    await expect(
+      service.call(principal(), "get_flexible_insights", {
+        provider: "meta_ads",
+        account_id: metaAccount.externalAccountId,
+        level: "campaign",
+        date_preset: "last_30d",
+      }),
+    ).resolves.toEqual({ data: [{ campaign_id: "meta-1" }] });
+    expect(metaInsights).toHaveBeenCalledTimes(1);
   });
 
   it("does not allow an account outside a service-token restriction", async () => {

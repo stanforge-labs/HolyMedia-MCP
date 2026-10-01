@@ -133,6 +133,11 @@ export type ProviderCampaign = {
   status: string | null;
   objective: string | null;
   budget: ProviderMoney | null;
+  budgetDetails?: {
+    resourceName: string | null;
+    explicitlyShared: boolean | null;
+    period: string | null;
+  };
   metrics?: ProviderMetricSummary;
   metadata?: Record<string, string | number | boolean | null>;
   provenance: ProviderProvenance;

@@ -16,6 +16,8 @@ import {
 } from "./meta-asset-authorization.service.js";
 import { metaInsightsParameters } from "../providers/meta-insights.parameters.js";
 import { metaReadSchema } from "./meta-read.schema.js";
+import { ProviderError } from "../providers/provider.errors.js";
+import { validateDateRange } from "../providers/provider-normalization.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
 
@@ -318,6 +320,68 @@ function range(args: JsonObject) {
   return startDate && endDate ? { startDate, endDate } : undefined;
 }
 
+// Google uses the same conflict rule as Meta: explicit dates and a preset
+// cannot be combined. Keep this separate from the existing Meta parser.
+function googleInsightsRange(args: JsonObject) {
+  const since = text(args.since ?? args.start_date ?? args.startDate);
+  const until = text(args.until ?? args.end_date ?? args.endDate);
+  const preset = text(args.date_preset ?? args.preset);
+  if (preset && (since || until))
+    throw new ForbiddenException("Use either since/until or date_preset.");
+  if (since || until) {
+    if (!since || !until)
+      throw new ForbiddenException(
+        "since and until must be supplied together.",
+      );
+    const dates = validateDateRange({ startDate: since, endDate: until });
+    if (
+      [dates.startDate, dates.endDate].some((value) => {
+        const parsed = Date.parse(`${value}T00:00:00.000Z`);
+        return (
+          !Number.isFinite(parsed) ||
+          new Date(parsed).toISOString().slice(0, 10) !== value
+        );
+      })
+    )
+      throw new ForbiddenException("Invalid Google Ads date range.");
+    return dates;
+  }
+  if (!preset) return defaultReportRange();
+  const days = (
+    { last_7d: 7, last_14d: 14, last_30d: 30 } as Record<string, number>
+  )[preset];
+  if (!days) throw new ForbiddenException("Unsupported date_preset.");
+  const end = new Date(Date.now() - 86_400_000);
+  const start = new Date(end.getTime() - (days - 1) * 86_400_000);
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
+}
+
+function googleCampaignStatuses(value: unknown): string[] | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const statuses =
+    typeof value === "string"
+      ? value.split(",")
+      : Array.isArray(value)
+        ? value
+        : null;
+  if (
+    !statuses ||
+    !statuses.length ||
+    statuses.some(
+      (status) =>
+        typeof status !== "string" ||
+        !["ENABLED", "PAUSED", "REMOVED"].includes(status.trim().toUpperCase()),
+    )
+  )
+    throw new ForbiddenException("Invalid Google campaign status.");
+  return [
+    ...new Set(statuses.map((status: string) => status.trim().toUpperCase())),
+  ];
+}
+
 @Injectable()
 export class McpService {
   public constructor(
@@ -357,6 +421,24 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    // No Google write-preview exists before stages 6–8. Reject before the
+    // shared preview store, without changing Meta's preview/commit path.
+    if (
+      text(args.provider).toLowerCase() === "google_ads" &&
+      (COMPAT_PREVIEW_OPERATIONS[name] ||
+        [
+          "preview_change_campaign_name",
+          "preview_pause_campaign",
+          "preview_resume_campaign",
+          "preview_change_campaign_budget",
+        ].includes(name))
+    ) {
+      if (COMPAT_PREVIEW_OPERATIONS[name]) safePreviewPayload(args);
+      throw new ProviderError(
+        "not_supported_for_google_ads",
+        "This Google Ads write preview is not supported yet.",
+      );
+    }
     if (
       [
         "get_campaign",
@@ -609,6 +691,9 @@ export class McpService {
           range(args),
           typeof args.limit === "number" ? args.limit : undefined,
           text(args.cursor) || undefined,
+          account.provider === "GOOGLE_ADS"
+            ? googleCampaignStatuses(args.status ?? args.statuses)
+            : undefined,
         );
       }
       case "get_campaign": {
@@ -1199,7 +1284,59 @@ export class McpService {
     }
     if (name === "get_flexible_insights") {
       const account = await this.account(principal, args);
-      const dates = range(args) ?? defaultReportRange();
+      if (
+        account.provider === "GOOGLE_ADS" &&
+        !["", "account", "campaign"].includes(text(args.level).toLowerCase())
+      )
+        throw new ForbiddenException(
+          "Google Ads insights supports account or campaign level.",
+        );
+      const dates =
+        account.provider === "GOOGLE_ADS"
+          ? googleInsightsRange(args)
+          : (range(args) ?? defaultReportRange());
+      if (
+        account.provider === "GOOGLE_ADS" &&
+        text(args.level).toLowerCase() === "campaign"
+      ) {
+        const result = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+          typeof args.limit === "number" ? args.limit : 100,
+          text(args.cursor) || undefined,
+        );
+        return {
+          handled: true,
+          value: {
+            items: result.items.map((campaign) => ({
+              id: campaign.id,
+              campaignId: campaign.id,
+              name: campaign.name,
+              status: campaign.status,
+              objective: campaign.objective,
+              spend: campaign.metrics?.spend ?? null,
+              impressions: campaign.metrics?.impressions ?? null,
+              clicks: campaign.metrics?.clicks ?? null,
+              ctr: campaign.metrics?.ctr ?? null,
+              cpc: campaign.metrics?.cpc ?? null,
+              cpm: campaign.metrics?.cpm ?? null,
+              conversions: campaign.metrics?.conversions ?? null,
+              costPerConversion: campaign.metrics?.costPerConversion ?? null,
+              currency:
+                campaign.metrics?.spend?.currency ??
+                campaign.budget?.currency ??
+                account.currency,
+              conversionValue: campaign.metrics?.conversionValue ?? null,
+              budget: campaign.budget,
+              budgetDetails: campaign.budgetDetails,
+              provenance: campaign.provenance,
+            })),
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+          },
+        };
+      }
       return {
         handled: true,
         value: await this.providers.readMetrics(

@@ -85,7 +85,8 @@ describe("Google Ads v2 adapter", () => {
   it("normalizes campaign budgets from micros and keeps read responses source-backed", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(jsonResponse(googleCampaignFixture));
+      .mockResolvedValueOnce(jsonResponse(googleCampaignFixture))
+      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture));
     vi.stubGlobal("fetch", fetchMock);
     const adapter = new GoogleAdsAdapter(config);
     const result = await adapter.listCampaigns(
@@ -99,6 +100,17 @@ describe("Google Ads v2 adapter", () => {
       { startDate: "2026-01-01", endDate: "2026-01-07" },
     );
     expect(result.items[0]?.budget).toEqual({ amount: "2.5", currency: "USD" });
+    expect(result.items[0]?.budgetDetails).toEqual({
+      resourceName: "customers/1234567890/campaignBudgets/500",
+      explicitlyShared: false,
+      period: "DAILY",
+    });
+    expect(result.items[0]?.metrics).toMatchObject({
+      spend: { amount: "1.25", currency: "USD" },
+      cpc: { amount: "0.025", currency: "USD" },
+      costPerConversion: { amount: "0.625", currency: "USD" },
+      conversionValue: "300",
+    });
     expect(result.items[0]?.provenance).toMatchObject({
       provider: "GOOGLE_ADS",
       realData: true,
@@ -110,6 +122,218 @@ describe("Google Ads v2 adapter", () => {
     expect(
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
     ).not.toContain("campaign_budget.currency_code");
+    const campaignQuery = String(
+      (fetchMock.mock.calls[0]?.[1] as RequestInit).body,
+    );
+    expect(campaignQuery).toContain("campaign.status != 'REMOVED'");
+    expect(campaignQuery).toContain("campaign_budget.period");
+    expect(campaignQuery).toContain("campaign_budget.explicitly_shared");
+    expect(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit).body),
+    ).toContain("customer.currency_code");
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit)
+      .headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer access");
+    expect(headers["login-customer-id"]).toBe("1234567890");
+    expect(headers).not.toHaveProperty("developer-token");
+  });
+
+  it("works without a developer token and normalizes account metrics once", async () => {
+    const withoutToken = loadConfig({
+      NODE_ENV: "test",
+      PROVIDER_GOOGLE_CLIENT_ID: "client",
+      PROVIDER_GOOGLE_CLIENT_SECRET: "secret",
+      PROVIDER_GOOGLE_REDIRECT_URI: "https://example.test/oauth",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            results: [
+              {
+                metrics: {
+                  costMicros: "5184189430",
+                  impressions: "1000",
+                  clicks: "100",
+                  conversions: 570.971158,
+                  conversionsValue: 6200,
+                },
+              },
+            ],
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAdsAdapter(withoutToken);
+    expect(adapter.definition.status).toBe("available");
+    const metrics = await adapter.getMetrics(
+      {
+        credentials: { accessToken: "access", scopes: [] },
+        accountId: "1234567890",
+      },
+      { startDate: "2026-08-30", endDate: "2026-09-28" },
+    );
+    expect(metrics.spend).toEqual({ amount: "5184.18943", currency: "USD" });
+    expect(metrics.costPerConversion?.amount).toBe("9.079599");
+    expect(metrics.conversionValue).toBe("6200");
+    expect(
+      (fetchMock.mock.calls[0]?.[1] as RequestInit).headers,
+    ).not.toHaveProperty("developer-token");
+  });
+
+  it("normalizes the PPC campaign cost-per-conversion example exactly once", async () => {
+    const ppcCampaign = [
+      {
+        results: [
+          {
+            campaign: {
+              id: "22623539698",
+              name: "PPC reference",
+              status: "ENABLED",
+            },
+            campaignBudget: {
+              amountMicros: "5000000",
+              period: "DAILY",
+              explicitlyShared: false,
+            },
+            metrics: {
+              costMicros: "5184189430",
+              impressions: "10000",
+              clicks: "1000",
+              averageCpc: "5184189.43",
+              conversions: 570.971158,
+              costPerConversion: "9079599.481275",
+              conversionsValue: 6000,
+            },
+          },
+        ],
+      },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(ppcCampaign))
+      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await new GoogleAdsAdapter(config).listCampaigns(
+      {
+        credentials: { accessToken: "access", scopes: [] },
+        accountId: "1234567890",
+      },
+      { startDate: "2026-08-30", endDate: "2026-09-28" },
+    );
+    expect(result.items[0]?.metrics).toMatchObject({
+      spend: { amount: "5184.18943", currency: "USD" },
+      costPerConversion: { amount: "9.079599", currency: "USD" },
+      cpc: { amount: "5.184189", currency: "USD" },
+    });
+    expect(result.items[0]?.budget).toEqual({ amount: "5", currency: "USD" });
+    expect(result.items[0]?.budgetDetails?.period).toBe("DAILY");
+  });
+
+  it("reuses customer.currency_code persisted in account context without a per-campaign request", async () => {
+    const rows = [
+      {
+        results: [
+          {
+            campaign: { id: "1", name: "A", status: "ENABLED" },
+            campaignBudget: { amountMicros: "1000000" },
+          },
+          {
+            campaign: { id: "2", name: "B", status: "ENABLED" },
+            campaignBudget: { amountMicros: "2000000" },
+          },
+        ],
+      },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(rows));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await new GoogleAdsAdapter(config).listCampaigns({
+      credentials: { accessToken: "access", scopes: [] },
+      accountId: "1234567890",
+      currency: "KZT",
+    });
+    expect(result.items.map((item) => item.budget?.currency)).toEqual([
+      "KZT",
+      "KZT",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters statuses in GAQL before cursor pagination", async () => {
+    const filtered = [
+      {
+        results: [
+          { campaign: { id: "1", name: "One", status: "ENABLED" } },
+          { campaign: { id: "2", name: "Two", status: "ENABLED" } },
+          { campaign: { id: "3", name: "Three", status: "ENABLED" } },
+        ],
+      },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(filtered))
+      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture))
+      .mockResolvedValueOnce(jsonResponse(filtered))
+      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAdsAdapter(config);
+    const context = {
+      credentials: { accessToken: "access", scopes: [] },
+      accountId: "1234567890",
+    };
+    const first = await adapter.listCampaigns(
+      context,
+      undefined,
+      2,
+      undefined,
+      ["ENABLED"],
+    );
+    const second = await adapter.listCampaigns(
+      context,
+      undefined,
+      2,
+      first.nextCursor,
+      ["ENABLED"],
+    );
+    expect(first.items.map((item) => item.id)).toEqual(["1", "2"]);
+    expect(first.nextCursor).toBe("2");
+    expect(second.items.map((item) => item.id)).toEqual(["3"]);
+    expect(second.nextCursor).toBeUndefined();
+    for (const call of [fetchMock.mock.calls[0], fetchMock.mock.calls[2]])
+      expect(String((call?.[1] as RequestInit).body)).toContain(
+        "campaign.status = 'ENABLED'",
+      );
+  });
+
+  it("accepts multiple safe statuses and rejects malformed cursor/status", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(googleCampaignFixture))
+      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAdsAdapter(config);
+    const context = {
+      credentials: { accessToken: "access", scopes: [] },
+      accountId: "1234567890",
+    };
+    await adapter.listCampaigns(context, undefined, 100, undefined, [
+      "ENABLED",
+      "PAUSED",
+    ]);
+    expect(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ).toContain("campaign.status IN ('ENABLED', 'PAUSED')");
+    await expect(
+      adapter.listCampaigns(context, undefined, 100, "NaN", ["ENABLED"]),
+    ).rejects.toMatchObject({ code: "provider_response_invalid" });
+    await expect(
+      adapter.listCampaigns(context, undefined, 100, undefined, [
+        "ENABLED'; DROP TABLE",
+      ]),
+    ).rejects.toMatchObject({ code: "provider_response_invalid" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("keeps an OAuth refresh rejection safe and diagnosable", async () => {

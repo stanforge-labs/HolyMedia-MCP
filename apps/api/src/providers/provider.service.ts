@@ -712,6 +712,7 @@ export class ProviderService {
     range: ProviderDateRange | undefined,
     limit?: number,
     cursor?: string,
+    statuses?: readonly string[],
   ) {
     return this.withReadFailure(
       workspaceId,
@@ -728,6 +729,7 @@ export class ProviderService {
           range,
           limit,
           cursor,
+          statuses,
         );
       },
     );

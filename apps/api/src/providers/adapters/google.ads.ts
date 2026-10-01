@@ -9,6 +9,7 @@ import type {
 } from "@holymedia/contracts";
 import { ProviderError } from "../provider.errors.js";
 import { providerJson } from "../provider-http.js";
+import { googleAdsApiError } from "../google-ads.error.js";
 import {
   metricsFromRaw,
   money,
@@ -57,8 +58,7 @@ export class GoogleAdsAdapter
       Boolean(
         config.providerGoogleClientId &&
         config.providerGoogleClientSecret &&
-        config.providerGoogleRedirectUri &&
-        config.providerGoogleDeveloperToken,
+        config.providerGoogleRedirectUri,
       ),
     );
   }
@@ -243,45 +243,59 @@ export class GoogleAdsAdapter
     range?: ProviderDateRange,
     limit = 100,
     cursor?: string,
+    statuses?: readonly string[],
   ) {
     const customerId = assertCustomerId(context.accountId);
     const safeLimit = Math.max(1, Math.min(limit, 500));
-    const rows = await this.searchStream(
-      context.credentials.accessToken,
-      customerId,
-      this.contextLoginCustomerId(context),
-      `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign_budget.amount_micros${range ? ", metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion" : ""} FROM campaign${range ? ` WHERE segments.date BETWEEN '${validateDateRange(range).startDate}' AND '${validateDateRange(range).endDate}'` : ""} ORDER BY campaign.id`,
-    );
-    const items = rows
-      .slice(
-        cursor ? Number(cursor) || 0 : 0,
-        (cursor ? Number(cursor) || 0 : 0) + safeLimit,
-      )
-      .map((row) => {
-        const campaign = object(row.campaign);
-        const budget = object(row.campaignBudget);
-        const metrics = object(row.metrics);
-        const currency = stringOrNull(budget.currencyCode);
-        return {
-          id: String(campaign.id || ""),
-          name: String(campaign.name || ""),
-          status: stringOrNull(campaign.status),
-          objective: stringOrNull(campaign.advertisingChannelType),
-          budget: money(microsToAmount(budget.amountMicros), currency),
-          ...(range
-            ? {
-                metrics: metricsFromRaw(
-                  metrics,
-                  currency,
-                  microsToAmount(metrics.costMicros),
-                ),
-              }
-            : {}),
-          metadata: { source: "Google Ads API" },
-          provenance: provenance("GOOGLE_ADS", "Google Ads API campaign"),
-        } satisfies ProviderCampaign;
-      });
-    const offset = cursor ? Number(cursor) || 0 : 0;
+    const offset = campaignCursorOffset(cursor);
+    const loginCustomerId = this.contextLoginCustomerId(context);
+    const statusFilter = campaignStatusFilter(statuses);
+    const dates = range ? validateDateRange(range) : undefined;
+    const filters = [
+      statusFilter,
+      ...(dates
+        ? [`segments.date BETWEEN '${dates.startDate}' AND '${dates.endDate}'`]
+        : []),
+    ];
+    const [rows, customer] = await Promise.all([
+      this.searchStream(
+        context.credentials.accessToken,
+        customerId,
+        loginCustomerId,
+        `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign_budget.amount_micros, campaign_budget.resource_name, campaign_budget.explicitly_shared, campaign_budget.period${dates ? ", metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion" : ""} FROM campaign WHERE ${filters.join(" AND ")} ORDER BY campaign.id`,
+      ),
+      context.currency
+        ? Promise.resolve([])
+        : this.customerRows(context.credentials, customerId, loginCustomerId),
+    ]);
+    const currency = context.currency ?? customer[0]?.currency ?? null;
+    const items = rows.slice(offset, offset + safeLimit).map((row) => {
+      const campaign = object(row.campaign);
+      const budget = object(row.campaignBudget);
+      const metrics = object(row.metrics);
+      return {
+        id: String(campaign.id || ""),
+        name: String(campaign.name || ""),
+        status: stringOrNull(campaign.status),
+        objective: stringOrNull(campaign.advertisingChannelType),
+        budget: money(microsToAmount(budget.amountMicros), currency),
+        budgetDetails: {
+          resourceName: stringOrNull(budget.resourceName),
+          explicitlyShared:
+            typeof budget.explicitlyShared === "boolean"
+              ? budget.explicitlyShared
+              : null,
+          period: stringOrNull(budget.period),
+        },
+        ...(range
+          ? {
+              metrics: googleMetricsFromRaw(metrics, currency),
+            }
+          : {}),
+        metadata: { source: "Google Ads API" },
+        provenance: provenance("GOOGLE_ADS", "Google Ads API campaign"),
+      } satisfies ProviderCampaign;
+    });
     return {
       items,
       ...(offset + items.length < rows.length
@@ -309,19 +323,24 @@ export class GoogleAdsAdapter
       `SELECT ${entity}segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion FROM ${resource} WHERE ${filter}segments.date BETWEEN '${normalized.startDate}' AND '${normalized.endDate}'`,
     );
     const currency =
+      context.currency ??
       (
         await this.customerRows(
           context.credentials,
           customerId,
-          context.loginCustomerId ?? customerId,
+          this.contextLoginCustomerId(context),
         )
-      )[0]?.currency ?? null;
+      )[0]?.currency ??
+      null;
     return sumMetrics(
-      rows.map((row) => ({
-        raw: object(row.metrics),
-        spend: microsToAmount(object(row.metrics).costMicros),
-      })),
-      context.currency ?? currency,
+      rows.map((row) => {
+        const raw = object(row.metrics);
+        return {
+          raw: { ...raw, conversionValue: raw.conversionsValue },
+          spend: microsToAmount(raw.costMicros),
+        };
+      }),
+      currency,
     );
   }
 
@@ -376,6 +395,7 @@ export class GoogleAdsAdapter
       `${this.apiBase()}/customers:listAccessibleCustomers`,
       { method: "GET", headers: this.headers(accessToken) },
       this.config.providerHttpTimeoutMs,
+      googleAdsApiError,
     );
     const names = Array.isArray(data.resourceNames) ? data.resourceNames : [];
     return names
@@ -457,6 +477,7 @@ export class GoogleAdsAdapter
         body: JSON.stringify({ query }),
       },
       this.config.providerHttpTimeoutMs,
+      googleAdsApiError,
     );
     if (!Array.isArray(data))
       throw new ProviderError(
@@ -485,9 +506,6 @@ export class GoogleAdsAdapter
   ): Record<string, string> {
     return {
       authorization: `Bearer ${accessToken}`,
-      "developer-token": this.required(
-        this.config.providerGoogleDeveloperToken,
-      ),
       ...(loginCustomerId
         ? { "login-customer-id": assertCustomerId(loginCustomerId) }
         : {}),
@@ -580,6 +598,54 @@ function stringOrUndefined(value: unknown): string | undefined {
 function microsToAmount(value: unknown): number | null {
   const n = numberValue(value);
   return n === null ? null : n / 1_000_000;
+}
+function googleMetricsFromRaw(
+  raw: Record<string, unknown>,
+  currency: string | null,
+) {
+  return metricsFromRaw(
+    {
+      ...raw,
+      cpc: microsToAmount(raw.averageCpc),
+      costPerConversion: microsToAmount(raw.costPerConversion),
+      conversionValue: raw.conversionsValue,
+    },
+    currency,
+    microsToAmount(raw.costMicros),
+  );
+}
+function campaignStatusFilter(statuses?: readonly string[]): string {
+  if (!statuses?.length) return "campaign.status != 'REMOVED'";
+  const normalized = [
+    ...new Set(statuses.map((status) => status.toUpperCase())),
+  ];
+  if (
+    normalized.some(
+      (status) => !["ENABLED", "PAUSED", "REMOVED"].includes(status),
+    )
+  )
+    throw new ProviderError(
+      "provider_response_invalid",
+      "Invalid Google campaign status.",
+    );
+  return normalized.length === 1
+    ? `campaign.status = '${normalized[0]}'`
+    : `campaign.status IN (${normalized.map((status) => `'${status}'`).join(", ")})`;
+}
+function campaignCursorOffset(cursor?: string): number {
+  if (!cursor) return 0;
+  if (!/^(0|[1-9]\d*)$/.test(cursor))
+    throw new ProviderError(
+      "provider_response_invalid",
+      "Invalid Google campaign cursor.",
+    );
+  const offset = Number(cursor);
+  if (!Number.isSafeInteger(offset))
+    throw new ProviderError(
+      "provider_response_invalid",
+      "Invalid Google campaign cursor.",
+    );
+  return offset;
 }
 function normalizeGoogleStatus(value: unknown): string {
   const status = String(value || "UNKNOWN").toUpperCase();

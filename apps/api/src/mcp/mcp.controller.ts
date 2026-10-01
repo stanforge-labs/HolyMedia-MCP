@@ -14,6 +14,7 @@ import { ServiceTokenService } from "../service-tokens/service-token.service.js"
 import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
+import { GoogleAdsApiError } from "../providers/google-ads.error.js";
 import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
 import { MetaReadError } from "../providers/meta-read.error.js";
@@ -223,6 +224,11 @@ export class McpController {
                   ...(error instanceof PreviewError
                     ? { code: error.code }
                     : {}),
+                  ...googleAdsMcpErrorFields(error),
+                  ...(error instanceof ProviderError &&
+                  error.code === "not_supported_for_google_ads"
+                    ? { code: error.code, provider: "GOOGLE_ADS" }
+                    : {}),
                   ...(error instanceof ProviderError &&
                   error.code === "google_ads_manager_metrics_unsupported"
                     ? {
@@ -258,6 +264,12 @@ export class McpController {
 
 export function mcpFailureMessage(error: unknown): string {
   if (error instanceof PreviewError) return error.publicMessage;
+  if (error instanceof GoogleAdsApiError) return error.message;
+  if (
+    error instanceof ProviderError &&
+    error.code === "not_supported_for_google_ads"
+  )
+    return "Эта операция предварительного изменения пока не поддерживается для Google Ads.";
   if (
     error instanceof ProviderError &&
     error.code === "insufficient_permissions"
@@ -286,6 +298,19 @@ export function mcpFailureMessage(error: unknown): string {
   return error instanceof ProviderError
     ? "Запрос к рекламной платформе не выполнен."
     : "Не удалось выполнить запрос HolyMedia. Попробуйте ещё раз.";
+}
+
+export function googleAdsMcpErrorFields(error: unknown) {
+  if (!(error instanceof GoogleAdsApiError)) return {};
+  return {
+    provider: "GOOGLE_ADS" as const,
+    error_code: error.errors[0]?.error_code,
+    ...(error.errors[0]?.field_path
+      ? { field_path: error.errors[0].field_path }
+      : {}),
+    ...(error.requestId ? { request_id: error.requestId } : {}),
+    errors: error.errors,
+  };
 }
 
 function mcpUnauthorized(reply: FastifyReply) {

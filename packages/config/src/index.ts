@@ -34,6 +34,8 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_CLIENT_ID: z.string().optional(),
   PROVIDER_GOOGLE_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_REDIRECT_URI: z.string().url().optional(),
+  // Deprecated after Google Ads API developer-token sunset. Accepted for
+  // backward-compatible env loading, but the V2 REST adapter never sends it.
   PROVIDER_GOOGLE_DEVELOPER_TOKEN: z.string().optional(),
   PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID: z
     .string()
