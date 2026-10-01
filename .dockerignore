@@ -1,5 +1,8 @@
 .git
+.github
 .venv
+docs
+e2e
 node_modules
 **/node_modules
 .next
@@ -7,6 +10,7 @@ node_modules
 dist
 **/dist
 outputs
+screenshots
 logs
 secrets
 tokens

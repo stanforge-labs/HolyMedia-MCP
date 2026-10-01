@@ -101,8 +101,11 @@ jobs:
             test ! -d /workspace/apps/web/app
             test ! -d /workspace/node_modules/.cache
             test ! -d /pnpm/store
-            if find /workspace/apps /workspace/packages -path "*/dist/*" -type f \
-              \( -name "*.test.*" -o -name "*.spec.*" \) | grep -q .; then exit 1; fi
+            if [ -n "$(find /workspace/apps /workspace/packages -path '*/dist/*' -type f \
+              \( -name '*.test.*' -o -name '*.spec.*' \) -print -quit)" ]; then
+              echo "::error::Compiled tests were included in the runtime image"
+              exit 1
+            fi
             test ! -e /workspace/.env
             test ! -e /root/.npmrc
             test ! -e /root/.ssh
