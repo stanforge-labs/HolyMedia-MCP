@@ -66,11 +66,10 @@ export function languageSwitchHref(href: string, locale: Locale): string {
     const token = url.searchParams.get("token");
     if (token && /^[A-Za-z0-9_-]{43}$/.test(token)) safe.set("token", token);
   }
-  if (withoutLocale(url.pathname) === "/mcp/approve") {
-    const approval = url.searchParams.get("approval");
-    if (approval && /^hmap_[A-Za-z0-9_-]{43}$/.test(approval))
-      safe.set("approval", approval);
-  }
+  // The approval secret lives only in per-tab sessionStorage. Never copy a
+  // fragment or legacy query nonce to the next locale URL.
+  if (withoutLocale(url.pathname) === "/mcp/approve")
+    return localizedHref(url.pathname, locale);
   // HolyMedia UI continuation IDs are not provider OAuth state/code. Keep only
   // validated internal UUIDs so switching the consent/login UI cannot lose it.
   for (const key of ["oauth_transaction", "transaction"]) {

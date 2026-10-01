@@ -9,6 +9,16 @@ import {
 import { localizedHref } from "../../components/locale-routing";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const APPROVAL_SESSION_KEY = "holymedia:mcp:approval-nonce";
+const APPROVAL_NONCE_PATTERN = /^hmap_[A-Za-z0-9_-]{43}$/;
+
+function clearApprovalNonce(): void {
+  try {
+    window.sessionStorage.removeItem(APPROVAL_SESSION_KEY);
+  } catch {
+    // Fail closed if browser storage is unavailable.
+  }
+}
 
 type ApprovalView = {
   provider: string;
@@ -99,37 +109,84 @@ export default function McpApprovalPage() {
   }, [t.title]);
 
   useEffect(() => {
-    const approval =
-      new URLSearchParams(window.location.search).get("approval") ?? "";
-    if (!/^hmap_[A-Za-z0-9_-]{43}$/.test(approval)) {
+    let approval = "";
+    try {
+      const fragment = window.location.hash.slice(1);
+      const hasQuery = Boolean(window.location.search);
+      // Store a valid fragment before clearing the address bar. Even if
+      // storage fails, clear the URL before any API or login navigation.
+      try {
+        if (!hasQuery && APPROVAL_NONCE_PATTERN.test(fragment)) {
+          window.sessionStorage.setItem(APPROVAL_SESSION_KEY, fragment);
+          approval = fragment;
+        } else if (!fragment && !hasQuery) {
+          approval = window.sessionStorage.getItem(APPROVAL_SESSION_KEY) ?? "";
+        }
+      } finally {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          window.location.pathname,
+        );
+      }
+      if (hasQuery) {
+        clearApprovalNonce();
+        setError("invalid");
+        return;
+      }
+      if (fragment && !APPROVAL_NONCE_PATTERN.test(fragment)) {
+        clearApprovalNonce();
+        setError("invalid");
+        return;
+      }
+    } catch {
+      setError("invalid");
+      return;
+    }
+    if (!APPROVAL_NONCE_PATTERN.test(approval)) {
+      clearApprovalNonce();
       setError("invalid");
       return;
     }
     setNonce(approval);
     const controller = new AbortController();
-    void fetch(
-      `${API}/api/v1/mcp/public/approval?approval=${encodeURIComponent(approval)}`,
-      {
-        credentials: "include",
-        cache: "no-store",
-        signal: controller.signal,
-      },
-    )
+    void csrf()
+      .then((csrfToken) =>
+        fetch(`${API}/api/v1/mcp/public/approval/view`, {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          body: JSON.stringify({ approval_nonce: approval }),
+          signal: controller.signal,
+        }),
+      )
       .then(async (response) => {
         if (response.status === 401) {
-          const next = `${window.location.pathname}${window.location.search}`;
+          const next = localizedHref("/mcp/approve", language);
           window.location.assign(
             localizedHref(`/auth?next=${encodeURIComponent(next)}`, language),
           );
           return null;
         }
-        if (!response.ok) throw new Error("approval_unavailable");
+        if (!response.ok) {
+          if (response.status >= 400 && response.status < 500)
+            clearApprovalNonce();
+          throw new Error("approval_unavailable");
+        }
         return (await response.json()) as ApprovalView;
       })
       .then((result) => {
         if (!controller.signal.aborted && result) {
           setView(result);
-          if (result.approved) setOutcome("approved");
+          if (result.approved) {
+            setOutcome("approved");
+            clearApprovalNonce();
+            setNonce("");
+          }
         }
       })
       .catch(() => {
@@ -151,13 +208,15 @@ export default function McpApprovalPage() {
           "content-type": "application/json",
           "x-csrf-token": await csrf(),
         },
-        body: JSON.stringify({ approval: nonce, decision }),
+        body: JSON.stringify({ approval_nonce: nonce, decision }),
       });
       if (!response.ok) throw new Error("approval_failed");
       const result = (await response.json()) as { status?: string };
       if (result.status !== "approved" && result.status !== "cancelled")
         throw new Error("approval_failed");
       setOutcome(result.status);
+      clearApprovalNonce();
+      setNonce("");
     } catch {
       setError("failed");
     } finally {

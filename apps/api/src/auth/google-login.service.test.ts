@@ -99,6 +99,30 @@ describe("GoogleLoginService", () => {
     });
   });
 
+  it("returns from Google Login only to fixed approval paths without a nonce", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    const database = databaseMock();
+    const service = new GoogleLoginService(database as never);
+    for (const path of ["/mcp/approve", "/en/mcp/approve"]) {
+      await service.start(path);
+      expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+        data: expect.objectContaining({ nextPath: path }),
+      });
+    }
+    for (const path of [
+      `/mcp/approve?approval=hmap_${"a".repeat(43)}`,
+      `/mcp/approve#hmap_${"a".repeat(43)}`,
+      "https://evil.example/mcp/approve",
+    ]) {
+      await service.start(path);
+      expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+        data: expect.objectContaining({ nextPath: "/dashboard" }),
+      });
+    }
+  });
+
   it("exchanges the code and returns only a normalized verified profile", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");

@@ -229,7 +229,7 @@ async function preview(
   >;
 }
 function nonce(result: Record<string, unknown>): string {
-  return new URL(result.approval_url as string).searchParams.get("approval")!;
+  return new URL(result.approval_url as string).hash.slice(1);
 }
 async function approve(
   test: ReturnType<typeof fixture>,
@@ -257,9 +257,8 @@ describe("public Meta controlled writes (mock provider only)", () => {
       requested: { name: "Updated" },
       provider_mutation_sent: false,
     });
-    expect(result.approval_url).toMatch(
-      /^https?:\/\/.+\/mcp\/approve\?approval=hmap_/,
-    );
+    expect(result.approval_url).toMatch(/^https?:\/\/.+\/mcp\/approve#hmap_/);
+    expect(new URL(result.approval_url as string).search).toBe("");
     expect(result.preview_token).toMatch(/^hmpp_/);
     expect(test.row).toMatchObject({
       principalType: "OAUTH_USER",
@@ -304,7 +303,7 @@ describe("public Meta controlled writes (mock provider only)", () => {
     expect(test.providers.mutateCampaign).not.toHaveBeenCalled();
   });
 
-  it("requires matching human, workspace, OAuth grant and resource; GET is display-only", async () => {
+  it("requires matching human, workspace, OAuth grant and resource; view is display-only", async () => {
     const test = fixture(true);
     const result = await preview(test);
     const token = nonce(result);

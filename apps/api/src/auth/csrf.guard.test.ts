@@ -74,6 +74,25 @@ describe("CsrfGuard", () => {
     ).toBe(true);
   });
 
+  it("requires browser CSRF proof for approval view and decision even with a bearer", () => {
+    const guard = new CsrfGuard();
+    for (const url of [
+      "/api/v1/mcp/public/approval/view",
+      "/api/v1/mcp/public/approval",
+    ]) {
+      expect(() =>
+        guard.canActivate(
+          context({
+            method: "POST",
+            url,
+            headers: { authorization: "Bearer test" },
+            cookies: {},
+          }),
+        ),
+      ).toThrow("Browser approval requires a web session.");
+    }
+  });
+
   it("rejects an origin outside the configured allowlist", () => {
     const guard = new CsrfGuard();
     expect(() =>
