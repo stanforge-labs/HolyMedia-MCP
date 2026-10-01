@@ -12,6 +12,10 @@ import { providerJson } from "../provider-http.js";
 import { googleAdsApiError } from "../google-ads.error.js";
 import { keywordOptions, listGoogleKeywords } from "../google-ads-keywords.js";
 import {
+  listGoogleSearchTerms,
+  searchTermOptions,
+} from "../google-ads-search-terms.js";
+import {
   metricsFromRaw,
   money,
   numberValue,
@@ -28,6 +32,7 @@ import type {
   ProviderReadAdapter,
   ProviderReadContext,
   GoogleKeywordOptions,
+  GoogleSearchTermOptions,
 } from "../provider.types.js";
 
 const GOOGLE_SCOPE = "https://www.googleapis.com/auth/adwords";
@@ -382,6 +387,39 @@ export class GoogleAdsAdapter
           loginCustomerId,
           query,
         ),
+    );
+  }
+
+  public async listSearchTerms(
+    context: ProviderReadContext,
+    options: GoogleSearchTermOptions,
+  ) {
+    const customerId = assertCustomerId(context.accountId);
+    const validated = searchTermOptions(options);
+    const loginCustomerId = this.contextLoginCustomerId(context);
+    const currency =
+      context.currency ??
+      (
+        await this.customerRows(
+          context.credentials,
+          customerId,
+          loginCustomerId,
+        )
+      )[0]?.currency ??
+      null;
+    return listGoogleSearchTerms(
+      customerId,
+      validated,
+      currency,
+      (query, token) =>
+        this.searchPage(
+          context.credentials.accessToken,
+          customerId,
+          loginCustomerId,
+          query,
+          token,
+        ),
+      this.config.sessionHashSecret,
     );
   }
 

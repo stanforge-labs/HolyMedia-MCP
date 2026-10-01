@@ -188,7 +188,7 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(158);
+    expect(service.tools()).toHaveLength(159);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
@@ -229,7 +229,14 @@ describe("MCP V1-compatible policy", () => {
         provider: "GOOGLE_ADS",
       }),
     ).toMatchObject({
-      items: ["account", "campaign", "metrics", "keyword", "ad_group"],
+      items: [
+        "account",
+        "campaign",
+        "metrics",
+        "keyword",
+        "ad_group",
+        "search_term",
+      ],
     });
     expect(
       await service.call(principal(), "list_supported_objects", {
@@ -280,6 +287,107 @@ describe("MCP V1-compatible policy", () => {
       service.call(principal(), "google_ads_list_keywords", {
         account_id: account.externalAccountId,
         since: "",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
+  it("registers a Search-only, date-required search-term read tool without changing Meta capabilities", async () => {
+    const readGoogleSearchTerms = vi.fn(async () => ({
+      items: [],
+      metadata: { pmaxSupported: false },
+    }));
+    const service = serviceWithAccounts([account, metaAccount], {
+      readGoogleSearchTerms,
+      listProviders: () => [
+        { id: "GOOGLE_ADS", read: true, write: false },
+        { id: "META_ADS", read: true, write: true },
+      ],
+    });
+    const schema = service
+      .tools()
+      .find((tool) => tool.name === "google_ads_search_terms")?.inputSchema;
+    expect(schema).toMatchObject({
+      required: ["account_id", "since", "until"],
+      additionalProperties: false,
+    });
+    expect(
+      await service.call(principal(), "list_supported_objects", {
+        provider: "GOOGLE_ADS",
+      }),
+    ).toMatchObject({
+      items: [
+        "account",
+        "campaign",
+        "metrics",
+        "keyword",
+        "ad_group",
+        "search_term",
+      ],
+    });
+    expect(
+      await service.call(principal(), "list_supported_objects", {
+        provider: "META_ADS",
+      }),
+    ).toMatchObject({ items: ["account", "campaign", "metrics"] });
+    expect(
+      await service.call(principal(), "get_provider_capabilities", {
+        provider: "GOOGLE_ADS",
+      }),
+    ).toMatchObject({ write: false });
+    await service.call(principal(), "google_ads_search_terms", {
+      account_id: account.externalAccountId,
+      since: "2026-03-01",
+      until: "2026-09-28",
+      campaign_ids: ["123"],
+      min_cost: 1,
+      contains: "приват",
+      only_not_added: true,
+      limit: 25,
+      format: "json",
+    });
+    expect(readGoogleSearchTerms).toHaveBeenCalledWith(
+      "workspace-a",
+      "connection-a",
+      "internal-account-a",
+      {
+        range: { startDate: "2026-03-01", endDate: "2026-09-28" },
+        campaignIds: ["123"],
+        minCost: 1,
+        contains: "приват",
+        onlyNotAdded: true,
+        limit: 25,
+      },
+    );
+    for (const invalid of [
+      { until: "2026-09-28" },
+      { since: "2026-03-01" },
+      { since: "2026-02-30", until: "2026-09-28" },
+      { since: "2026-10-01", until: "2026-09-28" },
+    ])
+      await expect(
+        service.call(principal(), "google_ads_search_terms", {
+          account_id: account.externalAccountId,
+          ...invalid,
+        }),
+      ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      service.call(principal(), "google_ads_search_terms", {
+        account_id: account.externalAccountId,
+        since: "2026-03-01",
+        until: "2026-09-28",
+        format: "csv",
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_request",
+      message: expect.stringContaining("CSV file delivery"),
+    });
+    expect(readGoogleSearchTerms).toHaveBeenCalledTimes(1);
+    await expect(
+      service.call(principal(), "google_ads_search_terms", {
+        provider: "META_ADS",
+        account_id: account.externalAccountId,
+        since: "2026-03-01",
+        until: "2026-09-28",
       }),
     ).rejects.toMatchObject({ code: "invalid_request" });
   });

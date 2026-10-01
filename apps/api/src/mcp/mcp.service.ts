@@ -192,6 +192,7 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "google_analytics_list_google_ads_links",
   "google_analytics_get_custom_dimensions_metrics",
   "google_ads_list_keywords",
+  "google_ads_search_terms",
 ] as const;
 
 const COMPAT_PREVIEW_OPERATIONS: Record<string, string> = {
@@ -815,6 +816,125 @@ export class McpService {
             ...(statuses ? { statuses } : {}),
             range: metricRange,
             ...(minCost !== undefined ? { minCost } : {}),
+            limit,
+            ...(args.cursor ? { cursor: args.cursor } : {}),
+          },
+        );
+      }
+      case "google_ads_search_terms": {
+        if (args.provider !== undefined && args.provider !== "GOOGLE_ADS")
+          throw new ProviderError(
+            "invalid_request",
+            "google_ads_search_terms supports GOOGLE_ADS only.",
+          );
+        const requested = args.account_id;
+        if (
+          typeof requested !== "string" ||
+          !/^\d{10}$/.test(requested.replace(/-/g, ""))
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "account_id must be a 10-digit Google Ads customer ID.",
+          );
+        if (
+          typeof args.since !== "string" ||
+          typeof args.until !== "string" ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(args.since) ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(args.until) ||
+          !Number.isFinite(Date.parse(`${args.since}T00:00:00.000Z`)) ||
+          !Number.isFinite(Date.parse(`${args.until}T00:00:00.000Z`)) ||
+          new Date(`${args.since}T00:00:00.000Z`).toISOString().slice(0, 10) !==
+            args.since ||
+          new Date(`${args.until}T00:00:00.000Z`).toISOString().slice(0, 10) !==
+            args.until
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "since and until are required ISO dates (YYYY-MM-DD).",
+          );
+        if (args.since > args.until)
+          throw new ProviderError(
+            "invalid_request",
+            "since must be on or before until.",
+          );
+        if (
+          args.format !== undefined &&
+          args.format !== "json" &&
+          args.format !== "csv"
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "format must be json or csv.",
+          );
+        if (args.format === "csv")
+          throw new ProviderError(
+            "invalid_request",
+            "CSV file delivery is unavailable in the current MCP architecture; use format=json with pagination.",
+          );
+        const campaignIds = googleKeywordIds(args.campaign_ids, "campaign_ids");
+        const limit = args.limit === undefined ? 100 : args.limit;
+        if (
+          typeof limit !== "number" ||
+          !Number.isInteger(limit) ||
+          limit < 1 ||
+          limit > 500
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "limit must be between 1 and 500.",
+          );
+        if (
+          args.min_cost !== undefined &&
+          (typeof args.min_cost !== "number" ||
+            !Number.isFinite(args.min_cost) ||
+            args.min_cost < 0)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "min_cost must be a non-negative number.",
+          );
+        if (
+          args.contains !== undefined &&
+          (typeof args.contains !== "string" ||
+            !args.contains.trim() ||
+            args.contains.length > 200)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "contains must be a non-empty string of at most 200 characters.",
+          );
+        if (
+          args.only_not_added !== undefined &&
+          typeof args.only_not_added !== "boolean"
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "only_not_added must be a boolean.",
+          );
+        if (
+          args.cursor !== undefined &&
+          (typeof args.cursor !== "string" || !args.cursor)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "Invalid Google search term cursor.",
+          );
+        const account = await this.account(principal, {
+          provider: "GOOGLE_ADS",
+          account_id: requested.replace(/-/g, ""),
+        });
+        return this.providers.readGoogleSearchTerms(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          {
+            range: { startDate: args.since, endDate: args.until },
+            ...(campaignIds ? { campaignIds } : {}),
+            ...(args.min_cost !== undefined ? { minCost: args.min_cost } : {}),
+            ...(args.contains !== undefined ? { contains: args.contains } : {}),
+            ...(args.only_not_added !== undefined
+              ? { onlyNotAdded: args.only_not_added }
+              : {}),
             limit,
             ...(args.cursor ? { cursor: args.cursor } : {}),
           },
@@ -2027,7 +2147,9 @@ export class McpService {
             "account",
             "campaign",
             ...(definition.read ? ["metrics"] : []),
-            ...(provider === "GOOGLE_ADS" ? ["keyword", "ad_group"] : []),
+            ...(provider === "GOOGLE_ADS"
+              ? ["keyword", "ad_group", "search_term"]
+              : []),
           ]
         : definition.read
           ? [
@@ -2145,6 +2267,8 @@ export class McpService {
 function toolDescription(name: string): string {
   if (name === "google_ads_list_keywords")
     return "Read-only Google Ads keyword inventory and period metrics, including zero-traffic keywords. Never changes ads.";
+  if (name === "google_ads_search_terms")
+    return "Read-only paginated search_term_view rows with triggered keyword attribution when Google provides it. Google Ads may withhold some queries, so visible term cost need not equal campaign spend. Performance Max and CSV file delivery are not supported in this implementation.";
   if (name === "list_connected_resources")
     return "List all currently enabled resources in the caller's workspace, grouped as advertising accounts, Google Analytics properties and Search Console properties. Use this for a complete connection inventory.";
   if (name === "list_ad_accounts")
@@ -2173,6 +2297,30 @@ function toolDescription(name: string): string {
 function googleKeywordToolSchema(
   name: string,
 ): Record<string, unknown> | undefined {
+  if (name === "google_ads_search_terms")
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["account_id", "since", "until"],
+      properties: {
+        provider: { type: "string", enum: ["GOOGLE_ADS"] },
+        account_id: { type: "string", pattern: "^[0-9-]{10,13}$" },
+        since: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        until: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        campaign_ids: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          items: { type: "string", pattern: "^[0-9]{1,20}$" },
+        },
+        min_cost: { type: "number", minimum: 0 },
+        contains: { type: "string", minLength: 1, maxLength: 200 },
+        only_not_added: { type: "boolean" },
+        limit: { type: "integer", minimum: 1, maximum: 500 },
+        cursor: { type: "string", minLength: 1 },
+        format: { type: "string", enum: ["json", "csv"] },
+      },
+    };
   if (name !== "google_ads_list_keywords") return undefined;
   return {
     type: "object",

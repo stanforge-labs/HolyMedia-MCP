@@ -488,6 +488,107 @@ describe("Google Ads v2 adapter", () => {
       ],
     });
   });
+
+  it("reads a search-term page in one Google Search request with keyword attribution and no write", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        results: [
+          {
+            searchTermView: {
+              searchTerm: "приват клиника алматы",
+              status: "NONE",
+            },
+            segments: {
+              keyword: {
+                info: { text: "проктолог алматы", matchType: "BROAD" },
+              },
+              searchTermMatchType: "BROAD",
+            },
+            campaign: { id: "1", name: "Search" },
+            adGroup: { id: "2", name: "Group" },
+            metrics: {
+              impressions: "10",
+              clicks: "2",
+              costMicros: "2500000",
+              conversions: "1",
+            },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await new GoogleAdsAdapter(config).listSearchTerms(
+      {
+        credentials: { accessToken: "access", scopes: [] },
+        accountId: "1234567890",
+        currency: "USD",
+      },
+      { range: { startDate: "2026-03-01", endDate: "2026-09-28" }, limit: 100 },
+    );
+    expect(result.items[0]).toMatchObject({
+      search_term: "приват клиника алматы",
+      triggered_keyword: "проктолог алматы",
+      triggered_keyword_match_type: "BROAD",
+      cost: 2.5,
+      currency: "USD",
+      cost_per_conversion: 2.5,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/v24/customers/1234567890/googleAds:search",
+    );
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe("POST");
+    expect(String(request.body)).toContain("FROM search_term_view");
+    expect(String(request.body)).not.toContain("mutate");
+  });
+
+  it("preserves structured Google Ads errors on the search-term read path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: 400,
+              status: "INVALID_ARGUMENT",
+              details: [
+                {
+                  "@type":
+                    "type.googleapis.com/google.ads.googleads.v24.errors.GoogleAdsFailure",
+                  requestId: "terms-req-1",
+                  errors: [
+                    {
+                      errorCode: { queryError: "INVALID_FIELD_NAME" },
+                      message: "Invalid field",
+                      location: { fieldPathElements: [{ fieldName: "query" }] },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          400,
+        ),
+      ),
+    );
+    await expect(
+      new GoogleAdsAdapter(config).listSearchTerms(
+        {
+          credentials: { accessToken: "access", scopes: [] },
+          accountId: "1234567890",
+          currency: "USD",
+        },
+        {
+          range: { startDate: "2026-03-01", endDate: "2026-09-28" },
+          limit: 100,
+        },
+      ),
+    ).rejects.toMatchObject({
+      requestId: "terms-req-1",
+      errors: [{ error_code: "INVALID_FIELD_NAME", field_path: "query" }],
+    });
+  });
 });
 
 describe("Google Analytics GA4 adapter", () => {

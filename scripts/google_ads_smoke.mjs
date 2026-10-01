@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 
-// Stages 2–3: MCP read tools only. No mutate or validate_only path.
+// Stages 2–4: MCP read tools only. No mutate or validate_only path.
 const PERIOD = { start_date: "2026-08-30", end_date: "2026-09-28" };
 const TOKEN = process.env.GOOGLE_ADS_SMOKE_BEARER_TOKEN;
 const ENDPOINT = process.env.GOOGLE_ADS_SMOKE_MCP_URL;
@@ -252,6 +252,70 @@ async function main() {
           items.every((item) => item.currency === "USD") &&
           withinTwoPercent(spend, 31287) &&
           withinTwoPercent(keywordSpend, 2998),
+      };
+    },
+  );
+
+  await run(
+    "F. Google Ads search term attribution",
+    "приват клиника алматы triggered by проктолог алматы (BROAD)",
+    async () => {
+      const data = await call("google_ads_search_terms", {
+        account_id: "9458996580",
+        since: "2026-03-01",
+        until: "2026-09-28",
+        contains: "приват клиника алматы",
+        limit: 100,
+        format: "json",
+      });
+      const matches =
+        data.items?.filter(
+          (item) => item.search_term === "приват клиника алматы",
+        ) ?? [];
+      const attributed = matches.find((item) =>
+        item.triggered_keyword?.includes("проктолог алматы"),
+      );
+      return {
+        actual: `${matches.length} rows; keyword=${attributed?.triggered_keyword ?? "unavailable"}; keyword match type=${attributed?.triggered_keyword_match_type ?? "unavailable"}; term match type=${attributed?.search_term_match_type ?? "unavailable"}`,
+        pass: Boolean(
+          attributed && attributed.triggered_keyword_match_type === "BROAD",
+        ),
+      };
+    },
+  );
+
+  await run(
+    "G. Google Ads visible search-term cost",
+    "about 23,500 USD (±2%); Google Ads may withhold search terms; this value is not expected to equal total campaign spend",
+    async () => {
+      let cursor;
+      let sum = 0;
+      let count = 0;
+      let currency;
+      for (let page = 0; page < 1000; page++) {
+        const data = await call("google_ads_search_terms", {
+          account_id: "9458996580",
+          since: "2026-03-01",
+          until: "2026-09-28",
+          limit: 500,
+          format: "json",
+          ...(cursor ? { cursor } : {}),
+        });
+        if (!Array.isArray(data.items))
+          throw new Error("invalid search-term page");
+        for (const item of data.items) {
+          sum += Number(item.cost ?? 0);
+          count++;
+          currency = item.currency ?? currency;
+        }
+        cursor = data.next_cursor;
+        if (!cursor) break;
+        if (page === 999)
+          throw new Error("search-term pagination exceeded 1000 pages");
+      }
+      return {
+        actual: `${count} visible rows; ${sum} ${currency ?? "null"}. Google Ads may withhold search terms; this value is not expected to equal total campaign spend`,
+        pass: withinTwoPercent(sum, 23500) && currency === "USD",
       };
     },
   );

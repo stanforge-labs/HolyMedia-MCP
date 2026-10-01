@@ -126,7 +126,49 @@ export interface ProviderReadAdapter {
     context: ProviderReadContext,
     options: GoogleKeywordOptions,
   ): Promise<GoogleKeywordPage>;
+  listSearchTerms?(
+    context: ProviderReadContext,
+    options: GoogleSearchTermOptions,
+  ): Promise<GoogleSearchTermPage>;
 }
+
+export type GoogleSearchTermOptions = {
+  range: ProviderDateRange;
+  campaignIds?: string[];
+  minCost?: number;
+  contains?: string;
+  onlyNotAdded?: boolean;
+  limit: number;
+  cursor?: string;
+};
+
+export type GoogleSearchTerm = {
+  search_term: string;
+  search_term_status: string;
+  triggered_keyword: string | null;
+  triggered_keyword_match_type: string | null;
+  search_term_match_type: string | null;
+  campaign_id: string;
+  campaign_name: string;
+  ad_group_id: string;
+  ad_group_name: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  currency: string | null;
+  conversions: number;
+  cost_per_conversion: number | null;
+};
+
+export type GoogleSearchTermPage = {
+  items: GoogleSearchTerm[];
+  next_cursor: string | null;
+  metadata: {
+    source: "search_term_view";
+    privacyNotice: string;
+    pmaxSupported: false;
+  };
+};
 
 export type GoogleKeywordOptions = {
   campaignIds?: string[] | undefined;
