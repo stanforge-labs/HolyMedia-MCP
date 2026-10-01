@@ -1,0 +1,16 @@
+services:
+  api:
+    image: ${V2_IMAGE:?V2_IMAGE is required}
+    build: !reset null
+    environment:
+      NODE_ENV: production
+
+  worker:
+    image: ${V2_IMAGE:?V2_IMAGE is required}
+    build: !reset null
+    environment:
+      NODE_ENV: production
+
+  web:
+    image: ${V2_IMAGE:?V2_IMAGE is required}
+    build: !reset null
