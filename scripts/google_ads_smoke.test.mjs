@@ -2,7 +2,38 @@ import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { check, moneyAmount, visitNegativePages, withinTwoPercent } from "./google_ads_smoke.mjs";
+import {
+  check,
+  isReferenceExactKeyword,
+  moneyAmount,
+  visitNegativePages,
+  withinTwoPercent,
+} from "./google_ads_smoke.mjs";
+
+test("exact keyword reference accepts Google text plus separate match type", () => {
+  assert.equal(
+    isReferenceExactKeyword({ text: "приват клиника", match_type: "EXACT" }),
+    true,
+  );
+  assert.equal(
+    isReferenceExactKeyword({
+      text: "  ПРИВАТ   КЛИНИКА ",
+      match_type: "EXACT",
+    }),
+    true,
+  );
+  assert.equal(
+    isReferenceExactKeyword({ text: "приват клиника", match_type: "BROAD" }),
+    false,
+  );
+  assert.equal(
+    isReferenceExactKeyword({
+      text: "приват клиника алматы",
+      match_type: "EXACT",
+    }),
+    false,
+  );
+});
 
 test("numeric tolerance and money parsing", () => {
   assert.equal(withinTwoPercent(9.08, 9.08), true);
@@ -47,16 +78,29 @@ test("check emits EXPECTED, ACTUAL and PASS/FAIL", () => {
 test("negative smoke visitor follows cursor with read tool only", async () => {
   const calls = [];
   const seen = [];
-  await visitNegativePages(async (name, args) => {
-    calls.push([name, args]);
-    return {
-      campaign: { campaigns: [] }, ad_group: { campaigns: [] }, shared_list: { lists: [] },
-      next_cursor: args.cursor ? null : "page-two",
-    };
-  }, "9458996580", (data) => seen.push(data), ["123"]);
+  await visitNegativePages(
+    async (name, args) => {
+      calls.push([name, args]);
+      return {
+        campaign: { campaigns: [] },
+        ad_group: { campaigns: [] },
+        shared_list: { lists: [] },
+        next_cursor: args.cursor ? null : "page-two",
+      };
+    },
+    "9458996580",
+    (data) => seen.push(data),
+    ["123"],
+  );
   assert.equal(seen.length, 2);
-  assert.deepEqual(calls.map(([name]) => name), ["google_ads_list_negatives", "google_ads_list_negatives"]);
+  assert.deepEqual(
+    calls.map(([name]) => name),
+    ["google_ads_list_negatives", "google_ads_list_negatives"],
+  );
   assert.deepEqual(calls[1][1], {
-    account_id: "9458996580", campaign_ids: ["123"], limit: 500, cursor: "page-two",
+    account_id: "9458996580",
+    campaign_ids: ["123"],
+    limit: 500,
+    cursor: "page-two",
   });
 });

@@ -739,6 +739,36 @@ export class ProviderService {
     );
   }
 
+  public async readGoogleCampaign(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    campaignId: string,
+    range?: ProviderDateRange,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "google_campaign",
+      async () => {
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        if (
+          context.account.provider !== "GOOGLE_ADS" ||
+          !context.adapter.getCampaign
+        )
+          throw new ProviderError(
+            "invalid_account",
+            "Google Ads account is required.",
+          );
+        return context.adapter.getCampaign(context.read, campaignId, range);
+      },
+    );
+  }
+
   public async readGoogleKeywords(
     workspaceId: string,
     connectionId: string,
@@ -779,9 +809,19 @@ export class ProviderService {
       connectionId,
       "google_negatives",
       async () => {
-        const context = await this.readContext(workspaceId, connectionId, accountId);
-        if (context.account.provider !== "GOOGLE_ADS" || !context.adapter.listNegatives)
-          throw new ProviderError("invalid_account", "Google Ads account is required.");
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        if (
+          context.account.provider !== "GOOGLE_ADS" ||
+          !context.adapter.listNegatives
+        )
+          throw new ProviderError(
+            "invalid_account",
+            "Google Ads account is required.",
+          );
         return context.adapter.listNegatives(context.read, options);
       },
     );
@@ -798,9 +838,19 @@ export class ProviderService {
       connectionId,
       "google_negative_conflicts",
       async () => {
-        const context = await this.readContext(workspaceId, connectionId, accountId);
-        if (context.account.provider !== "GOOGLE_ADS" || !context.adapter.checkNegativeConflicts)
-          throw new ProviderError("invalid_account", "Google Ads account is required.");
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        if (
+          context.account.provider !== "GOOGLE_ADS" ||
+          !context.adapter.checkNegativeConflicts
+        )
+          throw new ProviderError(
+            "invalid_account",
+            "Google Ads account is required.",
+          );
         return context.adapter.checkNegativeConflicts(context.read, options);
       },
     );

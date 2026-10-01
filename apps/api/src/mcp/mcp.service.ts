@@ -741,34 +741,67 @@ export class McpService {
       case "google_ads_list_negatives":
       case "google_ads_check_negative_conflicts": {
         if (args.provider !== undefined && args.provider !== "GOOGLE_ADS")
-          throw new ProviderError("invalid_request", `${name} supports GOOGLE_ADS only.`);
+          throw new ProviderError(
+            "invalid_request",
+            `${name} supports GOOGLE_ADS only.`,
+          );
         const requested = args.account_id;
-        if (typeof requested !== "string" || !/^\d{10}$/.test(requested.replace(/-/g, "")))
-          throw new ProviderError("invalid_request", "account_id must be a 10-digit Google Ads customer ID.");
+        if (
+          typeof requested !== "string" ||
+          !/^\d{10}$/.test(requested.replace(/-/g, ""))
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "account_id must be a 10-digit Google Ads customer ID.",
+          );
         const account = await this.account(principal, {
-          provider: "GOOGLE_ADS", account_id: requested.replace(/-/g, ""),
+          provider: "GOOGLE_ADS",
+          account_id: requested.replace(/-/g, ""),
         });
         const campaignIds = googleKeywordIds(args.campaign_ids, "campaign_ids");
         const limit = args.limit === undefined ? 100 : args.limit;
-        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 500)
-          throw new ProviderError("invalid_request", "limit must be between 1 and 500.");
-        if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor))
-          throw new ProviderError("invalid_request", "Invalid Google negative cursor.");
+        if (
+          typeof limit !== "number" ||
+          !Number.isInteger(limit) ||
+          limit < 1 ||
+          limit > 500
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "limit must be between 1 and 500.",
+          );
+        if (
+          args.cursor !== undefined &&
+          (typeof args.cursor !== "string" || !args.cursor)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "Invalid Google negative cursor.",
+          );
         if (name === "google_ads_list_negatives") {
           return this.providers.readGoogleNegatives(
-            principal.workspaceId, account.connectionId, account.id,
+            principal.workspaceId,
+            account.connectionId,
+            account.id,
             {
               ...(campaignIds ? { campaignIds } : {}),
-              ...(args.levels !== undefined ? { levels: args.levels as GoogleNegativeLevel[] } : {}),
+              ...(args.levels !== undefined
+                ? { levels: args.levels as GoogleNegativeLevel[] }
+                : {}),
               limit,
               ...(args.cursor ? { cursor: args.cursor } : {}),
             },
           );
         }
         if (!campaignIds)
-          throw new ProviderError("invalid_request", "campaign_ids is required for conflict checks.");
+          throw new ProviderError(
+            "invalid_request",
+            "campaign_ids is required for conflict checks.",
+          );
         return this.providers.readGoogleNegativeConflicts(
-          principal.workspaceId, account.connectionId, account.id,
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
           {
             campaignIds,
             negatives: args.negatives as GoogleNegativeInput[],
@@ -990,6 +1023,14 @@ export class McpService {
         const campaignId = text(args.campaign_id || args.campaignId);
         if (!campaignId)
           throw new ForbiddenException("campaign_id is required.");
+        if (account.provider === "GOOGLE_ADS")
+          return this.providers.readGoogleCampaign(
+            principal.workspaceId,
+            account.connectionId,
+            account.id,
+            campaignId,
+            range(args),
+          );
         const result = await this.providers.readCampaigns(
           principal.workspaceId,
           account.connectionId,
@@ -1736,6 +1777,42 @@ export class McpService {
         threshold_percent: 15,
       };
     }
+    const campaignsPromise = (async () => {
+      if (name !== "audit_account" || account.provider !== "GOOGLE_ADS")
+        return this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+          500,
+        );
+      const items: ProviderCampaign[] = [];
+      const seenCursors = new Set<string>();
+      let cursor: string | undefined;
+      for (let page = 0; page < 20; page++) {
+        const result = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+          500,
+          cursor,
+        );
+        items.push(...result.items);
+        if (!result.nextCursor) return { items };
+        if (seenCursors.has(result.nextCursor))
+          throw new ProviderError(
+            "provider_response_invalid",
+            "Google campaign pagination repeated a cursor.",
+          );
+        seenCursors.add(result.nextCursor);
+        cursor = result.nextCursor;
+      }
+      throw new ProviderError(
+        "invalid_request",
+        "Google audit exceeded the 20-page safety limit; no partial audit was returned.",
+      );
+    })();
     const [metrics, campaigns, health] = await Promise.all([
       this.providers.readMetrics(
         principal.workspaceId,
@@ -1743,13 +1820,7 @@ export class McpService {
         account.id,
         dates,
       ),
-      this.providers.readCampaigns(
-        principal.workspaceId,
-        account.connectionId,
-        account.id,
-        dates,
-        500,
-      ),
+      campaignsPromise,
       this.providers.readHealth(
         principal.workspaceId,
         account.connectionId,
@@ -2193,7 +2264,13 @@ export class McpService {
             "campaign",
             ...(definition.read ? ["metrics"] : []),
             ...(provider === "GOOGLE_ADS"
-              ? ["keyword", "ad_group", "search_term", "negative_keyword", "shared_negative_list"]
+              ? [
+                  "keyword",
+                  "ad_group",
+                  "search_term",
+                  "negative_keyword",
+                  "shared_negative_list",
+                ]
               : []),
           ]
         : definition.read
@@ -2348,33 +2425,62 @@ function googleKeywordToolSchema(
 ): Record<string, unknown> | undefined {
   if (name === "google_ads_list_negatives")
     return {
-      type: "object", additionalProperties: false, required: ["account_id"],
+      type: "object",
+      additionalProperties: false,
+      required: ["account_id"],
       properties: {
         provider: { type: "string", enum: ["GOOGLE_ADS"] },
         account_id: { type: "string", pattern: "^[0-9-]{10,13}$" },
-        campaign_ids: { type: "array", minItems: 1, maxItems: 200,
-          items: { type: "string", pattern: "^[0-9]{1,20}$" } },
-        levels: { type: "array", minItems: 1, uniqueItems: true,
-          items: { type: "string", enum: ["campaign", "ad_group", "shared_list"] } },
+        campaign_ids: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          items: { type: "string", pattern: "^[0-9]{1,20}$" },
+        },
+        levels: {
+          type: "array",
+          minItems: 1,
+          uniqueItems: true,
+          items: {
+            type: "string",
+            enum: ["campaign", "ad_group", "shared_list"],
+          },
+        },
         limit: { type: "integer", minimum: 1, maximum: 500 },
         cursor: { type: "string", minLength: 1 },
       },
     };
   if (name === "google_ads_check_negative_conflicts")
     return {
-      type: "object", additionalProperties: false,
+      type: "object",
+      additionalProperties: false,
       required: ["account_id", "campaign_ids", "negatives"],
       properties: {
         provider: { type: "string", enum: ["GOOGLE_ADS"] },
         account_id: { type: "string", pattern: "^[0-9-]{10,13}$" },
-        campaign_ids: { type: "array", minItems: 1, maxItems: 200,
-          items: { type: "string", pattern: "^[0-9]{1,20}$" } },
-        negatives: { type: "array", minItems: 1, maxItems: 100,
-          items: { type: "object", additionalProperties: false, required: ["text"],
+        campaign_ids: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          items: { type: "string", pattern: "^[0-9]{1,20}$" },
+        },
+        negatives: {
+          type: "array",
+          minItems: 1,
+          maxItems: 100,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["text"],
             properties: {
               text: { type: "string", minLength: 1, maxLength: 202 },
-              match_type: { type: "string", enum: ["BROAD", "PHRASE", "EXACT"] },
-            } } },
+              match_type: {
+                type: "string",
+                enum: ["BROAD", "PHRASE", "EXACT"],
+              },
+            },
+          },
+        },
         limit: { type: "integer", minimum: 1, maximum: 500 },
         cursor: { type: "string", minLength: 1 },
       },

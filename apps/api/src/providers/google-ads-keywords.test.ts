@@ -4,7 +4,7 @@ import {
   keywordInventoryQuery,
   keywordMetricsQuery,
   keywordOptions,
-  listGoogleKeywords,
+  listGoogleKeywords as listGoogleKeywordsSigned,
   normalizeKeywordText,
 } from "./google-ads-keywords.js";
 import { ProviderError } from "./provider.errors.js";
@@ -13,6 +13,20 @@ import type { GoogleKeywordOptions } from "./provider.types.js";
 const accountId = "9458996580";
 const range = { startDate: "2026-03-01", endDate: "2026-09-28" };
 const options: GoogleKeywordOptions = { range, limit: 100 };
+type KeywordArgs = Parameters<typeof listGoogleKeywordsSigned>;
+const listGoogleKeywords = (
+  ...args: [
+    KeywordArgs[0],
+    KeywordArgs[1],
+    KeywordArgs[2],
+    KeywordArgs[3],
+    KeywordArgs[4],
+  ]
+) => listGoogleKeywordsSigned(...args, "test-cursor-secret");
+const tamperPayload = (cursor: string) => {
+  const [payload, mac] = cursor.split(".");
+  return `${payload![0] === "A" ? "B" : "A"}${payload!.slice(1)}.${mac}`;
+};
 const name = (id: number) => `customers/${accountId}/adGroupCriteria/10~${id}`;
 function keyword(
   id: number,
@@ -259,6 +273,7 @@ describe("Google keyword read", () => {
     );
     expect(first.items.map((item) => item.text)).toEqual(["first"]);
     expect(first.nextCursor).toBeTruthy();
+    expect(first.nextCursor).toContain(".");
     const second = await listGoogleKeywords(
       accountId,
       { ...options, limit: 1, minCost: 1, cursor: first.nextCursor },
@@ -277,6 +292,35 @@ describe("Google keyword read", () => {
         mock.stream,
       ),
     ).rejects.toMatchObject({ code: "invalid_request" });
+    for (const [id, changed] of [
+      [
+        accountId,
+        {
+          ...options,
+          limit: 1,
+          minCost: 1,
+          cursor: tamperPayload(first.nextCursor!),
+        },
+      ],
+      [
+        "1111111111",
+        { ...options, limit: 1, minCost: 1, cursor: first.nextCursor },
+      ],
+      [
+        accountId,
+        {
+          ...options,
+          limit: 1,
+          minCost: 1,
+          statuses: ["ENABLED"],
+          cursor: first.nextCursor,
+        },
+      ],
+    ] as Array<[string, GoogleKeywordOptions]>) {
+      await expect(
+        listGoogleKeywords(id, changed, "USD", mock.search, mock.stream),
+      ).rejects.toMatchObject({ code: "invalid_request" });
+    }
   });
 
   it("normalizes only Google syntax and reports other ENABLED campaigns", async () => {

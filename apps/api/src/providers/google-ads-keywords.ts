@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ProviderDateRange } from "@holymedia/contracts";
 import { ProviderError } from "./provider.errors.js";
+import { decodeGoogleCursor, encodeGoogleCursor } from "./google-ads-cursor.js";
 import { validateDateRange } from "./provider-normalization.js";
 import type {
   GoogleKeyword,
@@ -116,12 +117,19 @@ function invalid(message: string): ProviderError {
   return new ProviderError("invalid_request", message);
 }
 
-function filters(options: GoogleKeywordOptions): string[] {
+function filters(
+  options: GoogleKeywordOptions,
+  activeHierarchy = false,
+): string[] {
   const values = [
     "ad_group_criterion.type = 'KEYWORD'",
     "ad_group_criterion.negative = FALSE",
-    "campaign.status != 'REMOVED'",
-    "ad_group.status != 'REMOVED'",
+    activeHierarchy
+      ? "campaign.status = 'ENABLED'"
+      : "campaign.status != 'REMOVED'",
+    activeHierarchy
+      ? "ad_group.status = 'ENABLED'"
+      : "ad_group.status != 'REMOVED'",
   ];
   if (!options.statuses) values.push("ad_group_criterion.status != 'REMOVED'");
   else
@@ -135,8 +143,11 @@ function filters(options: GoogleKeywordOptions): string[] {
   return values;
 }
 
-export function keywordInventoryQuery(options: GoogleKeywordOptions): string {
-  return `SELECT ${INVENTORY_FIELDS} FROM ad_group_criterion WHERE ${filters(options).join(" AND ")} ORDER BY ad_group.id, ad_group_criterion.criterion_id`;
+export function keywordInventoryQuery(
+  options: GoogleKeywordOptions,
+  activeHierarchy = false,
+): string {
+  return `SELECT ${INVENTORY_FIELDS} FROM ad_group_criterion WHERE ${filters(options, activeHierarchy).join(" AND ")} ORDER BY ad_group.id, ad_group_criterion.criterion_id`;
 }
 
 export function keywordMetricsQuery(
@@ -223,6 +234,7 @@ function cursorFingerprint(
         adGroupIds: [...(options.adGroupIds ?? [])].sort(),
         statuses: [...(options.statuses ?? [])].sort(),
         minCost: options.minCost ?? 0,
+        limit: options.limit,
       }),
     )
     .digest("hex")
@@ -231,21 +243,17 @@ function cursorFingerprint(
 function decodeCursor(
   cursor: string | undefined,
   fingerprint: string,
+  secret: string,
 ): Position {
   if (!cursor) return { index: 0 };
   try {
-    if (cursor.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw Error();
-    const value = JSON.parse(
-      Buffer.from(cursor, "base64url").toString("utf8"),
-    ) as Row;
+    const value = decodeGoogleCursor(cursor, fingerprint, secret, "keywords");
     if (
-      value.v !== 1 ||
-      value.f !== fingerprint ||
       !Number.isInteger(value.i) ||
       numeric(value.i) < 0 ||
       numeric(value.i) >= 10000 ||
       (value.t !== undefined &&
-        (typeof value.t !== "string" || value.t.length > 2048))
+        (typeof value.t !== "string" || !value.t || value.t.length > 2048))
     )
       throw Error();
     return {
@@ -256,15 +264,17 @@ function decodeCursor(
     throw invalid("Invalid Google keyword cursor.");
   }
 }
-function encodeCursor(position: Position, fingerprint: string): string {
-  return Buffer.from(
-    JSON.stringify({
-      v: 1,
-      f: fingerprint,
-      i: position.index,
-      ...(position.token ? { t: position.token } : {}),
-    }),
-  ).toString("base64url");
+function encodeCursor(
+  position: Position,
+  fingerprint: string,
+  secret: string,
+): string {
+  return encodeGoogleCursor(
+    { i: position.index, ...(position.token ? { t: position.token } : {}) },
+    fingerprint,
+    secret,
+    "keywords",
+  );
 }
 
 function toKeyword(
@@ -307,10 +317,11 @@ export async function listGoogleKeywords(
   currency: string | null,
   search: Search,
   stream: SearchStream,
+  cursorSecret: string,
 ): Promise<GoogleKeywordPage> {
   const options = keywordOptions(rawOptions);
   const fingerprint = cursorFingerprint(accountId, options);
-  let position = decodeCursor(options.cursor, fingerprint);
+  let position = decodeCursor(options.cursor, fingerprint, cursorSecret);
   const query = keywordInventoryQuery(options);
   const selected: GoogleKeyword[] = [];
   let nextCursor: string | undefined;
@@ -355,6 +366,7 @@ export async function listGoogleKeywords(
               index: index + local,
             },
             fingerprint,
+            cursorSecret,
           );
           break;
         }

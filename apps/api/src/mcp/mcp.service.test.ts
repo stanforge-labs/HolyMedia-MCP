@@ -294,53 +294,103 @@ describe("MCP V1-compatible policy", () => {
   });
 
   it("registers read-only negative inventory and conflict tools with scoped inputs", async () => {
-    const readGoogleNegatives = vi.fn(async () => ({ account_id: "9458996580", next_cursor: null }));
-    const readGoogleNegativeConflicts = vi.fn(async () => ({ account_id: "9458996580", conflicts: [] }));
+    const readGoogleNegatives = vi.fn(async () => ({
+      account_id: "9458996580",
+      next_cursor: null,
+    }));
+    const readGoogleNegativeConflicts = vi.fn(async () => ({
+      account_id: "9458996580",
+      conflicts: [],
+    }));
     const service = serviceWithAccounts([account, metaAccount], {
-      readGoogleNegatives, readGoogleNegativeConflicts,
+      readGoogleNegatives,
+      readGoogleNegativeConflicts,
       listProviders: () => [
         { id: "GOOGLE_ADS", read: true, write: false },
         { id: "META_ADS", read: true, write: true },
       ],
     });
-    expect(service.tools().find((tool) => tool.name === "google_ads_list_negatives")?.inputSchema)
-      .toMatchObject({ required: ["account_id"], additionalProperties: false });
-    expect(service.tools().find((tool) => tool.name === "google_ads_check_negative_conflicts")?.inputSchema)
-      .toMatchObject({ required: ["account_id", "campaign_ids", "negatives"], additionalProperties: false });
+    expect(
+      service.tools().find((tool) => tool.name === "google_ads_list_negatives")
+        ?.inputSchema,
+    ).toMatchObject({ required: ["account_id"], additionalProperties: false });
+    expect(
+      service
+        .tools()
+        .find((tool) => tool.name === "google_ads_check_negative_conflicts")
+        ?.inputSchema,
+    ).toMatchObject({
+      required: ["account_id", "campaign_ids", "negatives"],
+      additionalProperties: false,
+    });
     await service.call(principal(), "google_ads_list_negatives", {
-      account_id: account.externalAccountId, campaign_ids: ["123"], levels: ["shared_list"], limit: 25,
+      account_id: account.externalAccountId,
+      campaign_ids: ["123"],
+      levels: ["shared_list"],
+      limit: 25,
     });
     expect(readGoogleNegatives).toHaveBeenCalledWith(
-      "workspace-a", "connection-a", "internal-account-a",
+      "workspace-a",
+      "connection-a",
+      "internal-account-a",
       { campaignIds: ["123"], levels: ["shared_list"], limit: 25 },
     );
     await service.call(principal(), "google_ads_check_negative_conflicts", {
-      account_id: account.externalAccountId, campaign_ids: ["123"],
-      negatives: [{ text: "приват", match_type: "BROAD" }], limit: 25,
+      account_id: account.externalAccountId,
+      campaign_ids: ["123"],
+      negatives: [{ text: "приват", match_type: "BROAD" }],
+      limit: 25,
     });
     expect(readGoogleNegativeConflicts).toHaveBeenCalledWith(
-      "workspace-a", "connection-a", "internal-account-a",
-      { campaignIds: ["123"], negatives: [{ text: "приват", match_type: "BROAD" }], limit: 25 },
+      "workspace-a",
+      "connection-a",
+      "internal-account-a",
+      {
+        campaignIds: ["123"],
+        negatives: [{ text: "приват", match_type: "BROAD" }],
+        limit: 25,
+      },
     );
-    expect(await service.call(principal(), "get_provider_capabilities", { provider: "GOOGLE_ADS" }))
-      .toMatchObject({ write: false });
-    expect(await service.call(principal(), "list_supported_objects", { provider: "GOOGLE_ADS" }))
-      .toMatchObject({ items: expect.arrayContaining(["negative_keyword", "shared_negative_list"]) });
-    expect(await service.call(principal(), "list_supported_objects", { provider: "META_ADS" }))
-      .toMatchObject({ items: ["account", "campaign", "metrics"] });
+    expect(
+      await service.call(principal(), "get_provider_capabilities", {
+        provider: "GOOGLE_ADS",
+      }),
+    ).toMatchObject({ write: false });
+    expect(
+      await service.call(principal(), "list_supported_objects", {
+        provider: "GOOGLE_ADS",
+      }),
+    ).toMatchObject({
+      items: expect.arrayContaining([
+        "negative_keyword",
+        "shared_negative_list",
+      ]),
+    });
+    expect(
+      await service.call(principal(), "list_supported_objects", {
+        provider: "META_ADS",
+      }),
+    ).toMatchObject({ items: ["account", "campaign", "metrics"] });
     for (const args of [
       { account_id: "bad" },
       { account_id: account.externalAccountId, campaign_ids: ["not-an-id"] },
       { account_id: account.externalAccountId, cursor: "" },
     ])
-      await expect(service.call(principal(), "google_ads_list_negatives", args))
-        .rejects.toMatchObject({ code: "invalid_request" });
-    await expect(service.call(principal(), "google_ads_check_negative_conflicts", {
-      account_id: account.externalAccountId, negatives: [{ text: "x" }],
-    })).rejects.toMatchObject({ code: "invalid_request" });
-    await expect(service.call(principal(), "google_ads_list_negatives", {
-      provider: "META_ADS", account_id: account.externalAccountId,
-    })).rejects.toMatchObject({ code: "invalid_request" });
+      await expect(
+        service.call(principal(), "google_ads_list_negatives", args),
+      ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      service.call(principal(), "google_ads_check_negative_conflicts", {
+        account_id: account.externalAccountId,
+        negatives: [{ text: "x" }],
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      service.call(principal(), "google_ads_list_negatives", {
+        provider: "META_ADS",
+        account_id: account.externalAccountId,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
   });
 
   it("registers a Search-only, date-required search-term read tool without changing Meta capabilities", async () => {
@@ -702,6 +752,87 @@ describe("MCP V1-compatible policy", () => {
     });
     expect(readCampaigns.mock.calls[0]?.[6]).toEqual(["ENABLED"]);
     expect(readCampaigns.mock.calls[1]?.[6]).toBeUndefined();
+  });
+
+  it("audits all 501 Google campaigns without silently dropping the second page", async () => {
+    const rows = Array.from({ length: 501 }, (_, index) => ({
+      id: String(index + 1),
+    }));
+    const readCampaigns = vi.fn(async (...args: unknown[]) =>
+      args[5] === "page-two"
+        ? { items: rows.slice(500) }
+        : { items: rows.slice(0, 500), nextCursor: "page-two" },
+    );
+    const service = serviceWithAccounts([account], {
+      readCampaigns,
+      readHealth: vi.fn(async () => ({ status: "healthy" })),
+    });
+    const result = (await service.call(principal(), "audit_account", {
+      provider: "google_ads",
+      account_id: account.externalAccountId,
+    })) as { campaigns: Array<{ id: string }> };
+    expect(result.campaigns).toHaveLength(501);
+    expect(result.campaigns[500]?.id).toBe("501");
+    expect(readCampaigns).toHaveBeenCalledTimes(2);
+    expect(readCampaigns.mock.calls[1]?.[5]).toBe("page-two");
+  });
+
+  it("returns a typed audit error instead of a partial result at the safety cap", async () => {
+    let page = 0;
+    const readCampaigns = vi.fn(async () => ({
+      items: [{ id: String(++page) }],
+      nextCursor: `page-${page}`,
+    }));
+    const service = serviceWithAccounts([account], {
+      readCampaigns,
+      readHealth: vi.fn(async () => ({ status: "healthy" })),
+    });
+    await expect(
+      service.call(principal(), "audit_account", {
+        provider: "google_ads",
+        account_id: account.externalAccountId,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    expect(readCampaigns).toHaveBeenCalledTimes(20);
+  });
+
+  it("uses a direct Google campaign lookup beyond the first 500 and keeps Meta unchanged", async () => {
+    const readGoogleCampaign = vi.fn(async (...args: unknown[]) =>
+      args[3] === "501" ? { id: "501", name: "Target" } : null,
+    );
+    const readCampaigns = vi.fn(async () => ({
+      items: [{ id: "meta-1", name: "Meta" }],
+    }));
+    const metaEntity = vi.fn(async () => ({ id: "meta-1", name: "Meta" }));
+    const service = serviceWithAccounts([account, metaAccount], {
+      readGoogleCampaign,
+      readCampaigns,
+      metaEntity,
+    });
+    expect(
+      await service.call(principal(), "get_campaign", {
+        provider: "google_ads",
+        account_id: account.externalAccountId,
+        campaign_id: "501",
+      }),
+    ).toMatchObject({ id: "501" });
+    expect(
+      await service.call(principal(), "get_campaign", {
+        provider: "google_ads",
+        account_id: account.externalAccountId,
+        campaign_id: "999",
+      }),
+    ).toBeNull();
+    expect(readCampaigns).not.toHaveBeenCalled();
+    expect(
+      await service.call(principal(), "get_campaign", {
+        provider: "meta_ads",
+        account_id: metaAccount.externalAccountId,
+        campaign_id: "meta-1",
+      }),
+    ).toMatchObject({ id: "meta-1" });
+    expect(metaEntity).toHaveBeenCalledTimes(1);
+    expect(readCampaigns).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported Google previews before shared preview storage", async () => {

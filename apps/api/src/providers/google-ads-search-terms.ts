@@ -1,4 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
+import { decodeGoogleCursor, encodeGoogleCursor } from "./google-ads-cursor.js";
 import { ProviderError } from "./provider.errors.js";
 import type {
   GoogleSearchTerm,
@@ -152,26 +153,17 @@ function fingerprint(
     )
     .digest("hex");
 }
-function signature(payload: string, secret: string): Buffer {
-  return createHmac("sha256", secret)
-    .update("google-search-terms:v1:")
-    .update(payload)
-    .digest();
-}
 function encodeCursor(
   position: Position,
   context: string,
   secret: string,
 ): string {
-  const payload = Buffer.from(
-    JSON.stringify({
-      v: 1,
-      f: context,
-      i: position.index,
-      ...(position.token ? { t: position.token } : {}),
-    }),
-  ).toString("base64url");
-  return `${payload}.${signature(payload, secret).toString("base64url")}`;
+  return encodeGoogleCursor(
+    { i: position.index, ...(position.token ? { t: position.token } : {}) },
+    context,
+    secret,
+    "search-terms",
+  );
 }
 function decodeCursor(
   cursor: string | undefined,
@@ -180,25 +172,8 @@ function decodeCursor(
 ): Position {
   if (cursor === undefined) return { index: 0 };
   try {
+    const decoded = decodeGoogleCursor(cursor, context, secret, "search-terms");
     if (
-      cursor.length > 4096 ||
-      !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(cursor)
-    )
-      throw Error();
-    const [payload, mac] = cursor.split(".") as [string, string];
-    const supplied = Buffer.from(mac, "base64url");
-    const expected = signature(payload, secret);
-    if (
-      supplied.length !== expected.length ||
-      !timingSafeEqual(supplied, expected)
-    )
-      throw Error();
-    const decoded = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as Row;
-    if (
-      decoded.v !== 1 ||
-      decoded.f !== context ||
       !Number.isInteger(decoded.i) ||
       numeric(decoded.i) < 0 ||
       numeric(decoded.i) >= 10000 ||

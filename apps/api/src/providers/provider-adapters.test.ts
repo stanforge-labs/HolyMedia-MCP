@@ -262,26 +262,23 @@ describe("Google Ads v2 adapter", () => {
   });
 
   it("filters statuses in GAQL before cursor pagination", async () => {
-    const filtered = [
-      {
-        results: [
-          { campaign: { id: "1", name: "One", status: "ENABLED" } },
-          { campaign: { id: "2", name: "Two", status: "ENABLED" } },
-          { campaign: { id: "3", name: "Three", status: "ENABLED" } },
-        ],
-      },
+    const rows = [
+      { campaign: { id: "1", name: "One", status: "ENABLED" } },
+      { campaign: { id: "2", name: "Two", status: "ENABLED" } },
+      { campaign: { id: "3", name: "Three", status: "ENABLED" } },
     ];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(filtered))
-      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture))
-      .mockResolvedValueOnce(jsonResponse(filtered))
-      .mockResolvedValueOnce(jsonResponse(googleCustomerHierarchyFixture));
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const query = String(JSON.parse(String(init.body)).query);
+      return jsonResponse([
+        { results: query.includes("campaign.id > 2") ? rows.slice(2) : rows },
+      ]);
+    });
     vi.stubGlobal("fetch", fetchMock);
     const adapter = new GoogleAdsAdapter(config);
     const context = {
       credentials: { accessToken: "access", scopes: [] },
       accountId: "1234567890",
+      currency: "USD",
     };
     const first = await adapter.listCampaigns(
       context,
@@ -298,13 +295,168 @@ describe("Google Ads v2 adapter", () => {
       ["ENABLED"],
     );
     expect(first.items.map((item) => item.id)).toEqual(["1", "2"]);
-    expect(first.nextCursor).toBe("2");
+    expect(first.nextCursor).toContain(".");
     expect(second.items.map((item) => item.id)).toEqual(["3"]);
     expect(second.nextCursor).toBeUndefined();
-    for (const call of [fetchMock.mock.calls[0], fetchMock.mock.calls[2]])
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls)
       expect(String((call?.[1] as RequestInit).body)).toContain(
         "campaign.status = 'ENABLED'",
       );
+    expect(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ).toContain("LIMIT 3");
+    expect(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit).body),
+    ).toContain("campaign.id > 2");
+    await expect(
+      adapter.listCampaigns(context, undefined, 2, first.nextCursor, [
+        "PAUSED",
+      ]),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      adapter.listCampaigns(
+        { ...context, accountId: "1111111111" },
+        undefined,
+        2,
+        first.nextCursor,
+        ["ENABLED"],
+      ),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    const [payload, mac] = first.nextCursor!.split(".");
+    await expect(
+      adapter.listCampaigns(
+        context,
+        undefined,
+        2,
+        `${payload![0] === "A" ? "B" : "A"}${payload!.slice(1)}.${mac}`,
+        ["ENABLED"],
+      ),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
+  it("pages a 501-campaign account without duplicates, skipped rows, or repeated full-account reads", async () => {
+    const all = [
+      ...Array.from({ length: 501 }, (_, index) => ({
+        campaign: {
+          id: String(index + 1),
+          name: `Campaign ${index + 1}`,
+          status: "ENABLED",
+        },
+      })),
+      { campaign: { id: "502", name: "Removed", status: "REMOVED" } },
+    ];
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const query = String(JSON.parse(String(init.body)).query);
+      const after = Number(query.match(/campaign\.id > (\d+)/)?.[1] ?? 0);
+      const limit = Number(query.match(/LIMIT (\d+)/)?.[1]);
+      const results = all
+        .filter(
+          (row) =>
+            Number(row.campaign.id) > after &&
+            row.campaign.status !== "REMOVED",
+        )
+        .slice(0, limit);
+      return jsonResponse([{ results }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAdsAdapter(config);
+    const context = {
+      credentials: { accessToken: "access", scopes: [] },
+      accountId: "1234567890",
+      currency: "USD",
+    };
+    const first = await adapter.listCampaigns(context, undefined, 500);
+    const second = await adapter.listCampaigns(
+      context,
+      undefined,
+      500,
+      first.nextCursor,
+    );
+    const ids = [...first.items, ...second.items].map((item) => item.id);
+    expect(ids).toHaveLength(501);
+    expect(new Set(ids).size).toBe(501);
+    expect(ids[500]).toBe("501");
+    expect(second.nextCursor).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls) {
+      const body = String((call[1] as RequestInit).body);
+      expect(body).toContain("campaign.status != 'REMOVED'");
+      expect(body).toContain("LIMIT 501");
+    }
+    expect(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit).body),
+    ).toContain("campaign.id > 500");
+  });
+
+  it("looks up campaign 501 directly, regardless of list position, and returns null when absent", async () => {
+    const all = Array.from({ length: 501 }, (_, index) => ({
+      campaign: {
+        id: String(index + 1),
+        name: `Campaign ${index + 1}`,
+        status: "ENABLED",
+      },
+    }));
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const query = String(JSON.parse(String(init.body)).query);
+      const target = query.includes("campaign.id = 501") ? all[500] : undefined;
+      return jsonResponse([{ results: target ? [target] : [] }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAdsAdapter(config);
+    const context = {
+      credentials: { accessToken: "access", scopes: [] },
+      accountId: "1234567890",
+      currency: "USD",
+    };
+    expect(await adapter.getCampaign(context, "501")).toMatchObject({
+      id: "501",
+      name: "Campaign 501",
+    });
+    expect(await adapter.getCampaign(context, "999")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ).toContain("campaign.id = 501");
+    expect(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ).toContain("LIMIT 1");
+  });
+
+  it("reads metrics for a directly found campaign whose ID is not ten digits", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const query = String(JSON.parse(String(init.body)).query);
+      return jsonResponse([
+        {
+          results: query.includes("metrics.cost_micros")
+            ? [{ metrics: { costMicros: "2000000", conversions: 1 } }]
+            : [
+                {
+                  campaign: {
+                    id: "22623539698",
+                    name: "Target",
+                    status: "ENABLED",
+                  },
+                },
+              ],
+        },
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await new GoogleAdsAdapter(config).getCampaign(
+      {
+        credentials: { accessToken: "access", scopes: [] },
+        accountId: "1234567890",
+        currency: "USD",
+      },
+      "22623539698",
+      { startDate: "2026-08-30", endDate: "2026-09-28" },
+    );
+    expect(result?.metrics?.spend).toEqual({ amount: "2", currency: "USD" });
+    expect(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit).body),
+    ).toContain("campaign.id = 22623539698");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("accepts multiple safe statuses and rejects malformed cursor/status", async () => {
@@ -327,7 +479,7 @@ describe("Google Ads v2 adapter", () => {
     ).toContain("campaign.status IN ('ENABLED', 'PAUSED')");
     await expect(
       adapter.listCampaigns(context, undefined, 100, "NaN", ["ENABLED"]),
-    ).rejects.toMatchObject({ code: "provider_response_invalid" });
+    ).rejects.toMatchObject({ code: "invalid_request" });
     await expect(
       adapter.listCampaigns(context, undefined, 100, undefined, [
         "ENABLED'; DROP TABLE",
@@ -490,34 +642,63 @@ describe("Google Ads v2 adapter", () => {
   });
 
   it("routes Stage 5 inventory and conflict checks through read-only Google Search", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ results: [{
-        campaign: { id: "1", name: "Search" },
-        campaignCriterion: { resourceName: "customers/1234567890/campaignCriteria/1~5",
-          criterionId: "5", keyword: { text: "clinic", matchType: "BROAD" }, status: "ENABLED" },
-      }] }))
-      .mockResolvedValueOnce(jsonResponse({ results: [{
-        campaign: { id: "1", name: "Search", status: "ENABLED" },
-        adGroup: { id: "2", name: "Group", status: "ENABLED" },
-        adGroupCriterion: { resourceName: "customers/1234567890/adGroupCriteria/2~6",
-          criterionId: "6", keyword: { text: "[private clinic]", matchType: "EXACT" },
-          status: "ENABLED", negative: false },
-      }] }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [
+            {
+              campaign: { id: "1", name: "Search" },
+              campaignCriterion: {
+                resourceName: "customers/1234567890/campaignCriteria/1~5",
+                criterionId: "5",
+                keyword: { text: "clinic", matchType: "BROAD" },
+                status: "ENABLED",
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [
+            {
+              campaign: { id: "1", name: "Search", status: "ENABLED" },
+              adGroup: { id: "2", name: "Group", status: "ENABLED" },
+              adGroupCriterion: {
+                resourceName: "customers/1234567890/adGroupCriteria/2~6",
+                criterionId: "6",
+                keyword: { text: "[private clinic]", matchType: "EXACT" },
+                status: "ENABLED",
+                negative: false,
+              },
+            },
+          ],
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
     const adapter = new GoogleAdsAdapter(config);
     const context = {
       credentials: { accessToken: "access", scopes: [] },
-      accountId: "1234567890", currency: "USD",
+      accountId: "1234567890",
+      currency: "USD",
     };
-    const inventory = await adapter.listNegatives(context, { levels: ["campaign"], limit: 100 });
+    const inventory = await adapter.listNegatives(context, {
+      levels: ["campaign"],
+      limit: 100,
+    });
     expect(inventory.campaign.campaigns[0]?.negatives[0]?.text).toBe("clinic");
     const conflicts = await adapter.checkNegativeConflicts(context, {
-      campaignIds: ["1"], negatives: [{ text: "private", match_type: "BROAD" }], limit: 100,
+      campaignIds: ["1"],
+      negatives: [{ text: "private", match_type: "BROAD" }],
+      limit: 100,
     });
     expect(conflicts.conflicts[0]?.keyword.text).toBe("[private clinic]");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     for (const [url, init] of fetchMock.mock.calls) {
-      expect(String(url)).toContain("/v24/customers/1234567890/googleAds:search");
+      expect(String(url)).toContain(
+        "/v24/customers/1234567890/googleAds:search",
+      );
       expect((init as RequestInit).method).toBe("POST");
       expect(String((init as RequestInit).body)).not.toContain("mutate");
     }

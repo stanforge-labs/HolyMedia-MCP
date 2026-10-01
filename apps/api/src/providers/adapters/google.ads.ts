@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import type {
   ProviderAccountSummary,
@@ -10,6 +11,10 @@ import type {
 import { ProviderError } from "../provider.errors.js";
 import { providerJson } from "../provider-http.js";
 import { googleAdsApiError } from "../google-ads.error.js";
+import {
+  decodeGoogleCursor,
+  encodeGoogleCursor,
+} from "../google-ads-cursor.js";
 import { keywordOptions, listGoogleKeywords } from "../google-ads-keywords.js";
 import {
   checkGoogleNegativeConflicts,
@@ -43,6 +48,10 @@ import type {
 
 const GOOGLE_SCOPE = "https://www.googleapis.com/auth/adwords";
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const CAMPAIGN_FIELDS =
+  "campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign_budget.amount_micros, campaign_budget.resource_name, campaign_budget.explicitly_shared, campaign_budget.period";
+const CAMPAIGN_METRIC_FIELDS =
+  ", metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion";
 
 export const googleAdsDefinition = (
   configured: boolean,
@@ -260,12 +269,27 @@ export class GoogleAdsAdapter
   ) {
     const customerId = assertCustomerId(context.accountId);
     const safeLimit = Math.max(1, Math.min(limit, 500));
-    const offset = campaignCursorOffset(cursor);
     const loginCustomerId = this.contextLoginCustomerId(context);
     const statusFilter = campaignStatusFilter(statuses);
     const dates = range ? validateDateRange(range) : undefined;
+    const cursorContext = createHash("sha256")
+      .update(
+        JSON.stringify({
+          customerId,
+          dates: dates ?? null,
+          statusFilter,
+          limit: safeLimit,
+        }),
+      )
+      .digest("hex");
+    const lastId = campaignCursorId(
+      cursor,
+      cursorContext,
+      this.config.sessionHashSecret,
+    );
     const filters = [
       statusFilter,
+      ...(lastId ? [`campaign.id > ${lastId}`] : []),
       ...(dates
         ? [`segments.date BETWEEN '${dates.startDate}' AND '${dates.endDate}'`]
         : []),
@@ -275,46 +299,64 @@ export class GoogleAdsAdapter
         context.credentials.accessToken,
         customerId,
         loginCustomerId,
-        `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign_budget.amount_micros, campaign_budget.resource_name, campaign_budget.explicitly_shared, campaign_budget.period${dates ? ", metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion" : ""} FROM campaign WHERE ${filters.join(" AND ")} ORDER BY campaign.id`,
+        `SELECT ${CAMPAIGN_FIELDS}${dates ? CAMPAIGN_METRIC_FIELDS : ""} FROM campaign WHERE ${filters.join(" AND ")} ORDER BY campaign.id LIMIT ${safeLimit + 1}`,
       ),
       context.currency
         ? Promise.resolve([])
         : this.customerRows(context.credentials, customerId, loginCustomerId),
     ]);
     const currency = context.currency ?? customer[0]?.currency ?? null;
-    const items = rows.slice(offset, offset + safeLimit).map((row) => {
-      const campaign = object(row.campaign);
-      const budget = object(row.campaignBudget);
-      const metrics = object(row.metrics);
-      return {
-        id: String(campaign.id || ""),
-        name: String(campaign.name || ""),
-        status: stringOrNull(campaign.status),
-        objective: stringOrNull(campaign.advertisingChannelType),
-        budget: money(microsToAmount(budget.amountMicros), currency),
-        budgetDetails: {
-          resourceName: stringOrNull(budget.resourceName),
-          explicitlyShared:
-            typeof budget.explicitlyShared === "boolean"
-              ? budget.explicitlyShared
-              : null,
-          period: stringOrNull(budget.period),
-        },
-        ...(range
-          ? {
-              metrics: googleMetricsFromRaw(metrics, currency),
-            }
-          : {}),
-        metadata: { source: "Google Ads API" },
-        provenance: provenance("GOOGLE_ADS", "Google Ads API campaign"),
-      } satisfies ProviderCampaign;
-    });
+    const items = rows
+      .slice(0, safeLimit)
+      .map((row) => googleCampaignFromRow(row, currency, Boolean(dates)));
+    const finalId = items.at(-1)?.id;
     return {
       items,
-      ...(offset + items.length < rows.length
-        ? { nextCursor: String(offset + items.length) }
+      ...(rows.length > safeLimit && finalId
+        ? {
+            nextCursor: encodeGoogleCursor(
+              { id: finalId },
+              cursorContext,
+              this.config.sessionHashSecret,
+              "campaigns",
+            ),
+          }
         : {}),
     };
+  }
+
+  public async getCampaign(
+    context: ProviderReadContext,
+    campaignId: string,
+    range?: ProviderDateRange,
+  ): Promise<ProviderCampaign | null> {
+    const customerId = assertCustomerId(context.accountId);
+    const id = assertCampaignId(campaignId);
+    const loginCustomerId = this.contextLoginCustomerId(context);
+    const [rows, customer] = await Promise.all([
+      this.searchStream(
+        context.credentials.accessToken,
+        customerId,
+        loginCustomerId,
+        `SELECT ${CAMPAIGN_FIELDS} FROM campaign WHERE campaign.id = ${id} AND campaign.status != 'REMOVED' LIMIT 1`,
+      ),
+      context.currency
+        ? Promise.resolve([])
+        : this.customerRows(context.credentials, customerId, loginCustomerId),
+    ]);
+    const row = rows.find(
+      (value) => String(object(value.campaign).id ?? "") === id,
+    );
+    if (!row) return null;
+    const currency = context.currency ?? customer[0]?.currency ?? null;
+    const campaign = googleCampaignFromRow(row, currency, false);
+    if (range)
+      campaign.metrics = await this.getMetrics(
+        context,
+        validateDateRange(range),
+        id,
+      );
+    return campaign;
   }
 
   public async getMetrics(
@@ -325,7 +367,7 @@ export class GoogleAdsAdapter
     const normalized = validateDateRange(range);
     const customerId = assertCustomerId(context.accountId);
     const filter = campaignId
-      ? `campaign.id = ${assertCustomerId(campaignId)} AND `
+      ? `campaign.id = ${assertCampaignId(campaignId)} AND `
       : "";
     const resource = campaignId ? "campaign" : "customer";
     const entity = campaignId ? "campaign.id, " : "";
@@ -393,6 +435,7 @@ export class GoogleAdsAdapter
           loginCustomerId,
           query,
         ),
+      this.config.sessionHashSecret,
     );
   }
 
@@ -402,14 +445,18 @@ export class GoogleAdsAdapter
   ) {
     const customerId = assertCustomerId(context.accountId);
     const loginCustomerId = this.contextLoginCustomerId(context);
-    return listGoogleNegatives(customerId, options, (query, token) =>
-      this.searchPage(
-        context.credentials.accessToken,
-        customerId,
-        loginCustomerId,
-        query,
-        token,
-      ),
+    return listGoogleNegatives(
+      customerId,
+      options,
+      (query, token) =>
+        this.searchPage(
+          context.credentials.accessToken,
+          customerId,
+          loginCustomerId,
+          query,
+          token,
+        ),
+      this.config.sessionHashSecret,
     );
   }
 
@@ -419,14 +466,18 @@ export class GoogleAdsAdapter
   ) {
     const customerId = assertCustomerId(context.accountId);
     const loginCustomerId = this.contextLoginCustomerId(context);
-    return checkGoogleNegativeConflicts(customerId, options, (query, token) =>
-      this.searchPage(
-        context.credentials.accessToken,
-        customerId,
-        loginCustomerId,
-        query,
-        token,
-      ),
+    return checkGoogleNegativeConflicts(
+      customerId,
+      options,
+      (query, token) =>
+        this.searchPage(
+          context.credentials.accessToken,
+          customerId,
+          loginCustomerId,
+          query,
+          token,
+        ),
+      this.config.sessionHashSecret,
     );
   }
 
@@ -769,6 +820,39 @@ function googleMetricsFromRaw(
     microsToAmount(raw.costMicros),
   );
 }
+function googleCampaignFromRow(
+  row: Record<string, unknown>,
+  currency: string | null,
+  includeMetrics: boolean,
+): ProviderCampaign {
+  const campaign = object(row.campaign);
+  const budget = object(row.campaignBudget);
+  return {
+    id: String(campaign.id || ""),
+    name: String(campaign.name || ""),
+    status: stringOrNull(campaign.status),
+    objective: stringOrNull(campaign.advertisingChannelType),
+    budget: money(microsToAmount(budget.amountMicros), currency),
+    budgetDetails: {
+      resourceName: stringOrNull(budget.resourceName),
+      explicitlyShared:
+        typeof budget.explicitlyShared === "boolean"
+          ? budget.explicitlyShared
+          : null,
+      period: stringOrNull(budget.period),
+    },
+    ...(includeMetrics
+      ? { metrics: googleMetricsFromRaw(object(row.metrics), currency) }
+      : {}),
+    metadata: { source: "Google Ads API" },
+    provenance: provenance("GOOGLE_ADS", "Google Ads API campaign"),
+  };
+}
+function assertCampaignId(value: string): string {
+  if (!/^\d{1,20}$/.test(value))
+    throw new ProviderError("invalid_request", "Invalid Google campaign ID.");
+  return value;
+}
 function campaignStatusFilter(statuses?: readonly string[]): string {
   if (!statuses?.length) return "campaign.status != 'REMOVED'";
   const normalized = [
@@ -787,20 +871,23 @@ function campaignStatusFilter(statuses?: readonly string[]): string {
     ? `campaign.status = '${normalized[0]}'`
     : `campaign.status IN (${normalized.map((status) => `'${status}'`).join(", ")})`;
 }
-function campaignCursorOffset(cursor?: string): number {
-  if (!cursor) return 0;
-  if (!/^(0|[1-9]\d*)$/.test(cursor))
+function campaignCursorId(
+  cursor: string | undefined,
+  context: string,
+  secret: string,
+): string | undefined {
+  if (!cursor) return undefined;
+  try {
+    const payload = decodeGoogleCursor(cursor, context, secret, "campaigns");
+    if (typeof payload.id !== "string" || !/^\d{1,20}$/.test(payload.id))
+      throw Error();
+    return payload.id;
+  } catch {
     throw new ProviderError(
-      "provider_response_invalid",
+      "invalid_request",
       "Invalid Google campaign cursor.",
     );
-  const offset = Number(cursor);
-  if (!Number.isSafeInteger(offset))
-    throw new ProviderError(
-      "provider_response_invalid",
-      "Invalid Google campaign cursor.",
-    );
-  return offset;
+  }
 }
 function normalizeGoogleStatus(value: unknown): string {
   const status = String(value || "UNKNOWN").toUpperCase();

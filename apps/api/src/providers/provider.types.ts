@@ -116,6 +116,11 @@ export interface ProviderReadAdapter {
     cursor?: string,
     statuses?: readonly string[],
   ): Promise<{ items: ProviderCampaign[]; nextCursor?: string }>;
+  getCampaign?(
+    context: ProviderReadContext,
+    campaignId: string,
+    range?: ProviderDateRange,
+  ): Promise<ProviderCampaign | null>;
   getMetrics(
     context: ProviderReadContext,
     range: ProviderDateRange,
@@ -217,7 +222,10 @@ export type GoogleNegativeConflictPage = {
     ad_group: { id: string; name: string };
     reason: { code: string; message: string };
   }>;
-  normalized_negatives: Array<{ text: string; match_type: "BROAD" | "PHRASE" | "EXACT" }>;
+  normalized_negatives: Array<{
+    text: string;
+    match_type: "BROAD" | "PHRASE" | "EXACT";
+  }>;
   next_cursor: string | null;
 };
 
