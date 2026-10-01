@@ -2,7 +2,11 @@ name: HolyMedia MCP v2 production image
 
 on:
   push:
-    branches: [main, "feat/install-memora"]
+    branches:
+      - main
+      - "feat/install-memora"
+      - "codex/production-image-optimization"
+      - "codex/google-ads-image-optimization"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +40,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,format=long
-            type=raw,value=production
+            type=raw,value=production,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/install-memora' }}
 
       - name: Build and push immutable production image
         uses: docker/build-push-action@v6
@@ -53,3 +57,95 @@ jobs:
           sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  image-smoke:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      V2_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:sha-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull only on CI runner and report image layers
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$V2_IMAGE"
+          docker image inspect --format 'Uncompressed bytes: {{.Size}}' "$V2_IMAGE"
+          docker history --no-trunc "$V2_IMAGE"
+          docker buildx imagetools inspect --raw "$V2_IMAGE" | jq -r '
+            if .layers then
+              "Compressed layer bytes: \([.layers[].size] | add)",
+              (.layers[] | "Layer \(.digest): \(.size) bytes")
+            else
+              "Registry manifest is an index; inspect platform manifest for compressed layer sizes"
+            end'
+
+      - name: Check final image content and ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect --format '{{.Config.User}}' "$V2_IMAGE")" = node
+          docker run --rm --entrypoint sh "$V2_IMAGE" -ec '
+            test ! -d /workspace/.git
+            test ! -d /workspace/apps/api/src
+            test ! -d /workspace/apps/worker/src
+            test ! -d /workspace/apps/web/app
+            test ! -d /workspace/node_modules/.cache
+            test ! -d /pnpm/store
+            test ! -e /workspace/.env
+            test ! -e /root/.npmrc
+            test ! -e /root/.ssh
+            test -x /workspace/packages/database/node_modules/.bin/prisma
+            test -x /workspace/apps/worker/node_modules/.bin/playwright
+          '
+
+      - name: Start disposable API, Web and Worker from the final image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml up -d --no-build postgres redis api worker web
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:4000/health >/tmp/v2-health.json \
+              && curl --fail --silent http://127.0.0.1:4000/ready >/tmp/v2-ready.json \
+              && curl --fail --silent http://127.0.0.1:3000/api/health >/tmp/v2-web-health.json; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml ps
+              docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml logs --no-color api web worker
+              exit 1
+            fi
+            sleep 2
+          done
+          grep -q '"status":"ok"' /tmp/v2-health.json
+          grep -q '"status":"ok"' /tmp/v2-ready.json
+          grep -q '"status":"ok"' /tmp/v2-web-health.json
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4000/mcp)" = 401
+          for service in api web worker; do
+            container_id=$(docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml ps -q "$service")
+            test "$(docker inspect -f '{{.State.Health.Status}}' "$container_id")" = healthy
+          done
+
+      - name: Verify Prisma, Redis and Chromium paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml)
+          "${compose[@]}" exec -T api pnpm --dir packages/database exec node -e "import('./dist/index.js').then(({PrismaClient}) => { if (!PrismaClient) process.exit(1) })"
+          "${compose[@]}" exec -T worker node -e "import('ioredis').then(async ({default: Redis}) => { const r = new Redis(process.env.REDIS_URL); await r.ping(); await r.quit() }).catch(() => process.exit(1))"
+          "${compose[@]}" exec -T worker pnpm --filter @holymedia/worker exec node -e "import('playwright').then(async ({chromium}) => { const browser = await chromium.launch(); await browser.close() }).catch(() => process.exit(1))"
+
+      - name: Stop disposable stack
+        if: always()
+        shell: bash
+        run: |
+          docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml down -v --remove-orphans || true

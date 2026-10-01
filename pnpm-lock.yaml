@@ -220,16 +220,19 @@ importers:
       '@prisma/client':
         specifier: 7.9.1
         version: 7.9.1(prisma@7.9.1(@types/node@26.2.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: 17.4.2
+        version: 17.4.2
       pg:
         specifier: 8.23.0
         version: 8.23.0
+      prisma:
+        specifier: 7.9.1
+        version: 7.9.1(@types/node@26.2.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)
     devDependencies:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
-      prisma:
-        specifier: 7.9.1
-        version: 7.9.1(@types/node@26.2.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)
 
   packages/observability:
     dependencies:

@@ -1,22 +1,66 @@
-FROM node:24-bookworm-slim
+# syntax=docker/dockerfile:1.7
+
+FROM node:24-bookworm-slim AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /workspace
 
-RUN npm install --global pnpm@11.1.3
+RUN npm install --global pnpm@11.1.3 && npm cache clean --force
 
+# Source edits must not invalidate the dependency layers.
+FROM base AS manifests
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.base.json .npmrc ./
-COPY apps ./apps
-COPY packages ./packages
-RUN pnpm install --frozen-lockfile
-RUN pnpm exec playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/hermes/package.json ./apps/hermes/package.json
+COPY apps/web/package.json ./apps/web/package.json
+COPY apps/worker/package.json ./apps/worker/package.json
+COPY packages/config/package.json ./packages/config/package.json
+COPY packages/contracts/package.json ./packages/contracts/package.json
+COPY packages/database/package.json ./packages/database/package.json
+COPY packages/observability/package.json ./packages/observability/package.json
+COPY packages/site-audit/package.json ./packages/site-audit/package.json
+COPY packages/testing/package.json ./packages/testing/package.json
 
+FROM manifests AS build-deps
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store
+
+FROM build-deps AS build
 COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
-RUN pnpm build
-RUN chown -R node:node /workspace
+RUN pnpm build && rm -rf apps/web/.next/cache
+
+# Only the three running applications and their workspace dependencies.
+FROM manifests AS prod-deps
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm --filter "@holymedia/api..." --filter "@holymedia/web..." \
+    --filter "@holymedia/worker..." install --prod --frozen-lockfile \
+    --store-dir=/pnpm/store
+
+FROM base AS runtime
+ENV NODE_ENV=production
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+COPY --from=prod-deps --chown=node:node /workspace /workspace
+
+# The Worker still runs Site Audit jobs with Chromium. Keep its browser and OS
+# libraries, but do not install either in the build or API/Web dependency layers.
+RUN pnpm --filter @holymedia/worker exec playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* /root/.cache
+
+COPY --from=build --chown=node:node /workspace/apps/api/dist ./apps/api/dist
+COPY --from=build --chown=node:node /workspace/apps/worker/dist ./apps/worker/dist
+COPY --from=build --chown=node:node /workspace/apps/web/.next ./apps/web/.next
+COPY --from=build --chown=node:node /workspace/apps/web/public ./apps/web/public
+COPY --from=build --chown=node:node /workspace/apps/web/next.config.ts ./apps/web/next.config.ts
+COPY --from=build --chown=node:node /workspace/packages/config/dist ./packages/config/dist
+COPY --from=build --chown=node:node /workspace/packages/contracts/dist ./packages/contracts/dist
+COPY --from=build --chown=node:node /workspace/packages/database/dist ./packages/database/dist
+COPY --from=build --chown=node:node /workspace/packages/database/prisma ./packages/database/prisma
+COPY --from=build --chown=node:node /workspace/packages/database/prisma.config.ts ./packages/database/prisma.config.ts
+COPY --from=build --chown=node:node /workspace/packages/observability/dist ./packages/observability/dist
+COPY --from=build --chown=node:node /workspace/packages/site-audit/dist ./packages/site-audit/dist
 
 USER node
