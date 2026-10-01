@@ -1,0 +1,3 @@
+services:
+  api:
+    image: ${V2_API_IMAGE:?V2_API_IMAGE is required}

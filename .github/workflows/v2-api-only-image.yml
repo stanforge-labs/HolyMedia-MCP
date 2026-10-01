@@ -1,0 +1,189 @@
+name: HolyMedia MCP v2 API-only image
+
+on:
+  push:
+    branches:
+      - codex/google-ads-api-only-image
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:api-sha-${{ github.sha }}
+  CURRENT_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:sha-d88ac55d767f713f53932ea62673b09505b51f17
+
+jobs:
+  build-and-push:
+    if: github.ref == 'refs/heads/codex/google-ads-api-only-image'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify exact release commit
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push immutable API image only
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile.v2
+          target: api-runtime
+          push: true
+          tags: ${{ env.API_IMAGE }}
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Report immutable digest
+        run: |
+          echo "API image: $API_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Digest: ${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+  inspect-and-smoke:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull old image, then API image, and measure actual disk increment
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$CURRENT_IMAGE"
+          docker_root=$(docker info --format '{{.DockerRootDir}}')
+          before=$(df -B1 --output=avail "$docker_root" | tail -1 | tr -d ' ')
+          echo 'Docker storage before API pull:'
+          docker system df -v
+          docker pull "$API_IMAGE"
+          after=$(df -B1 --output=avail "$docker_root" | tail -1 | tr -d ' ')
+          increment=$((before - after))
+          echo 'Docker storage after API pull:'
+          docker system df -v
+          printf 'INCREMENTAL STORAGE AFTER API IMAGE PULL: %s bytes\n' "$increment"
+          awk -v b="$increment" 'BEGIN { printf "INCREMENTAL STORAGE AFTER API IMAGE PULL: %.3f GiB\n", b/1073741824 }'
+          printf 'Before free: %s bytes; after free: %s bytes\n' "$before" "$after"
+          test "$increment" -ge 0
+          echo "Incremental disk after API pull: $increment bytes" >> "$GITHUB_STEP_SUMMARY"
+      - name: Report image size, history and layer overlap
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect --raw "$CURRENT_IMAGE" > /tmp/current-manifest.json
+          docker buildx imagetools inspect --raw "$API_IMAGE" > /tmp/api-manifest.json
+          jq -e '.layers and .config' /tmp/current-manifest.json > /dev/null
+          jq -e '.layers and .config' /tmp/api-manifest.json > /dev/null
+          jq -r '.layers[] | "\(.digest) \(.size)"' /tmp/current-manifest.json > /tmp/current-layers.txt
+          jq -r '.layers[] | "\(.digest) \(.size)"' /tmp/api-manifest.json > /tmp/api-layers.txt
+          awk 'NR==FNR { old[$1]=1; next } { total+=$2; if ($1 in old) shared+=$2 } END { printf "API compressed total: %.0f bytes\nShared compressed layers: %.0f bytes\nUnique compressed layers: %.0f bytes\n", total, shared, total-shared }' /tmp/current-layers.txt /tmp/api-layers.txt
+          echo "API uncompressed total: $(docker image inspect --format '{{.Size}}' "$API_IMAGE") bytes"
+          echo "Old uncompressed total: $(docker image inspect --format '{{.Size}}' "$CURRENT_IMAGE") bytes"
+          echo "API digest: ${{ needs.build-and-push.outputs.digest }}"
+          echo 'API Docker history:'
+          docker history --no-trunc "$API_IMAGE"
+          python3 - <<'PY'
+          import json, re, subprocess
+          def inspect(image):
+              return json.loads(subprocess.check_output(['docker', 'image', 'inspect', image], text=True))[0]
+          def history(image):
+              rows = subprocess.check_output(['docker', 'history', '--format', '{{json .}}', image], text=True).splitlines()
+              return [json.loads(row) for row in rows]
+          def size(value):
+              match = re.fullmatch(r'([0-9.]+)\s*([kMGT]?B)', value)
+              if not match: raise ValueError(f'Unexpected docker history size: {value}')
+              return float(match.group(1)) * {'B':1, 'kB':1e3, 'MB':1e6, 'GB':1e9, 'TB':1e12}[match.group(2)]
+          old_ids = set(inspect(__import__('os').environ['CURRENT_IMAGE'])['RootFS']['Layers'])
+          api = inspect(__import__('os').environ['API_IMAGE'])
+          api_ids = api['RootFS']['Layers']
+          sizes = [size(row['Size']) for row in reversed(history(__import__('os').environ['API_IMAGE'])) if size(row['Size']) > 0]
+          if len(sizes) != len(api_ids):
+              print(f'Shared uncompressed estimate unavailable: history has {len(sizes)} sized layers, image has {len(api_ids)} diff IDs')
+          else:
+              shared = sum(layer_size for layer_id, layer_size in zip(api_ids, sizes) if layer_id in old_ids)
+              print(f'Shared uncompressed estimate: {shared:.0f} bytes')
+              print(f'Unique uncompressed estimate: {api["Size"] - shared:.0f} bytes')
+          PY
+      - name: Check API-only content and non-root user
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect --format '{{.Config.User}}' "$API_IMAGE")" = node
+          docker run --rm --entrypoint sh "$API_IMAGE" -ec '
+            test -f /workspace/apps/api/dist/main.js
+            test -f /workspace/packages/database/dist/index.js
+            test -f /workspace/packages/database/dist/generated/prisma/client.js
+            test -x /workspace/packages/database/node_modules/.bin/prisma
+            test -d /workspace/packages/database/prisma/migrations
+            test -d /workspace/node_modules/.pnpm
+            test ! -e /ms-playwright
+            test ! -d /workspace/apps/web
+            test ! -d /workspace/apps/worker
+            test ! -d /workspace/apps/api/src
+            test ! -d /workspace/packages/database/src
+            test ! -d /workspace/packages/site-audit/src
+            test ! -d /workspace/.git
+            test ! -e /workspace/.env
+            test ! -d /pnpm/store
+            test ! -d /workspace/node_modules/.cache
+            test ! -e /root/.npmrc
+            test ! -e /root/.ssh
+            ! grep -Eq "(_authToken|_password|BEGIN .*PRIVATE KEY)" /workspace/.npmrc
+            if find /workspace/apps /workspace/packages -path "*/node_modules" -prune -o -type f \
+              \( -name "*.test.*" -o -name "*.spec.*" \) -print -quit | grep -q .; then
+              echo "Compiled project test/spec file found"; exit 1
+            fi
+            if find /workspace/node_modules/.pnpm -mindepth 1 -maxdepth 1 \
+              \( -name "next@*" -o -name "playwright@*" -o -name "playwright-core@*" \) -print -quit | grep -q .; then
+              echo "Web/Worker-only dependency found"; exit 1
+            fi
+            grep -R -q "google_ads_list_keywords" /workspace/apps/api/dist/mcp
+            grep -R -q "google_ads_manager_metrics_unsupported" /workspace/apps/api/dist
+          '
+      - name: Start disposable PostgreSQL, Redis and API image
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.api-release.yml)
+          "${compose[@]}" up -d --no-build postgres redis api
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:4000/health > /tmp/api-health.json \
+              && curl --fail --silent http://127.0.0.1:4000/ready > /tmp/api-ready.json; then break; fi
+            if [ "$attempt" -eq 60 ]; then
+              "${compose[@]}" ps
+              "${compose[@]}" logs --no-color api postgres redis
+              exit 1
+            fi
+            sleep 2
+          done
+          grep -q '"status":"ok"' /tmp/api-health.json
+          grep -q '"status":"ok"' /tmp/api-ready.json
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4000/mcp)" = 401
+          api_id=$("${compose[@]}" ps -q api)
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$api_id")" = healthy
+          "${compose[@]}" exec -T api pnpm --dir packages/database run prisma:status
+          docker cp scripts/v2-api-image-smoke.mjs "$api_id:/tmp/v2-api-image-smoke.mjs"
+          "${compose[@]}" exec -T api node /tmp/v2-api-image-smoke.mjs
+      - name: Stop disposable stack
+        if: always()
+        shell: bash
+        run: |
+          docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.api-release.yml down -v --remove-orphans || true

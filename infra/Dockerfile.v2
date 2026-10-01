@@ -44,6 +44,44 @@ RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
     --filter "@holymedia/worker..." install --prod --frozen-lockfile \
     --store-dir=/pnpm/store
 
+# The API image uses its own dependency graph; Web and Worker are neither
+# installed nor built for this target. The common runtime below is unchanged.
+FROM build-deps AS api-build
+COPY . .
+RUN pnpm --dir packages/database run prisma:generate \
+    && pnpm exec turbo run build --filter=@holymedia/api... \
+    && find apps/api/dist packages/config/dist packages/contracts/dist \
+      packages/database/dist packages/observability/dist packages/site-audit/dist \
+      -type f \( -name '*.test.*' -o -name '*.spec.*' \) -delete
+
+FROM manifests AS api-prod-deps
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm --filter "@holymedia/api..." install --prod --frozen-lockfile \
+    --store-dir=/pnpm/store
+
+FROM base AS api-runtime
+ENV NODE_ENV=production
+
+COPY --from=api-prod-deps --chown=node:node /workspace/package.json /workspace/pnpm-workspace.yaml /workspace/.npmrc ./
+COPY --from=api-prod-deps --chown=node:node /workspace/node_modules ./node_modules
+COPY --from=api-prod-deps --chown=node:node /workspace/apps/api ./apps/api
+COPY --from=api-prod-deps --chown=node:node /workspace/packages/config ./packages/config
+COPY --from=api-prod-deps --chown=node:node /workspace/packages/contracts ./packages/contracts
+COPY --from=api-prod-deps --chown=node:node /workspace/packages/database ./packages/database
+COPY --from=api-prod-deps --chown=node:node /workspace/packages/observability ./packages/observability
+COPY --from=api-prod-deps --chown=node:node /workspace/packages/site-audit ./packages/site-audit
+
+COPY --from=api-build --chown=node:node /workspace/apps/api/dist ./apps/api/dist
+COPY --from=api-build --chown=node:node /workspace/packages/config/dist ./packages/config/dist
+COPY --from=api-build --chown=node:node /workspace/packages/contracts/dist ./packages/contracts/dist
+COPY --from=api-build --chown=node:node /workspace/packages/database/dist ./packages/database/dist
+COPY --from=api-build --chown=node:node /workspace/packages/database/prisma ./packages/database/prisma
+COPY --from=api-build --chown=node:node /workspace/packages/database/prisma.config.ts ./packages/database/prisma.config.ts
+COPY --from=api-build --chown=node:node /workspace/packages/observability/dist ./packages/observability/dist
+COPY --from=api-build --chown=node:node /workspace/packages/site-audit/dist ./packages/site-audit/dist
+
+USER node
+
 FROM base AS runtime
 ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
