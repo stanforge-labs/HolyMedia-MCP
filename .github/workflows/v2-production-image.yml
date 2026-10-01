@@ -128,14 +128,32 @@ jobs:
             fi
             sleep 2
           done
-          grep -q '"status":"ok"' /tmp/v2-health.json
-          grep -q '"status":"ok"' /tmp/v2-ready.json
-          grep -q '"status":"ok"' /tmp/v2-web-health.json
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4000/mcp)" = 401
-          for service in api web worker; do
-            container_id=$(docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml ps -q "$service")
-            test "$(docker inspect -f '{{.State.Health.Status}}' "$container_id")" = healthy
+          for endpoint in health ready web-health; do
+            if ! grep -q '"status":"ok"' "/tmp/v2-${endpoint}.json"; then
+              echo "::error::Unexpected ${endpoint} response in image smoke"
+              exit 1
+            fi
           done
+          mcp_status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:4000/mcp)
+          if [ "$mcp_status" != 401 ]; then
+            echo "::error::Unauthenticated MCP returned ${mcp_status}, expected 401"
+            exit 1
+          fi
+          for attempt in {1..30}; do
+            all_healthy=true
+            for service in api web worker; do
+              container_id=$(docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml ps -q "$service")
+              status=$(docker inspect -f '{{.State.Health.Status}}' "$container_id")
+              if [ "$status" != healthy ]; then all_healthy=false; fi
+            done
+            if [ "$all_healthy" = true ]; then break; fi
+            sleep 2
+          done
+          if [ "$all_healthy" != true ]; then
+            echo "::error::API, Web or Worker did not become healthy within 60 seconds"
+            docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml ps
+            exit 1
+          fi
 
       - name: Verify Prisma, Redis and Chromium paths
         shell: bash
