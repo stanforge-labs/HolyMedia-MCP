@@ -45,9 +45,9 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY --from=prod-deps --chown=node:node /workspace /workspace
 
-# The Worker still runs Site Audit jobs with Chromium. Keep its browser and OS
-# libraries, but do not install either in the build or API/Web dependency layers.
-RUN pnpm --filter @holymedia/worker exec playwright install --with-deps chromium \
+# Site Audit launches Chromium headlessly without a channel. Keep the required
+# headless shell and OS libraries without the unused full headed browser.
+RUN pnpm --filter @holymedia/worker exec playwright install --with-deps --only-shell chromium \
     && rm -rf /var/lib/apt/lists/* /root/.cache
 
 COPY --from=build --chown=node:node /workspace/apps/api/dist ./apps/api/dist

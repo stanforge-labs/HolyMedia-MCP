@@ -106,6 +106,8 @@ jobs:
             test ! -e /root/.ssh
             test -x /workspace/packages/database/node_modules/.bin/prisma
             test -x /workspace/apps/worker/node_modules/.bin/playwright
+            find /ms-playwright -maxdepth 1 -type d -name "chromium_headless_shell-*" | grep -q .
+            if find /ms-playwright -maxdepth 1 -type d -name "chromium-*" | grep -q .; then exit 1; fi
           '
 
       - name: Start disposable API, Web and Worker from the final image
