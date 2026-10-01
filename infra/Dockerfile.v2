@@ -30,7 +30,12 @@ FROM build-deps AS build
 COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
-RUN pnpm build && rm -rf apps/web/.next/cache
+RUN pnpm build \
+    && find apps/api/dist apps/worker/dist packages/config/dist \
+      packages/contracts/dist packages/database/dist packages/observability/dist \
+      packages/site-audit/dist -type f \
+      \( -name '*.test.*' -o -name '*.spec.*' \) -delete \
+    && rm -rf apps/web/.next/cache
 
 # Only the three running applications and their workspace dependencies.
 FROM manifests AS prod-deps
