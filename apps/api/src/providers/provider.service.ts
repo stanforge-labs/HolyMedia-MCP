@@ -42,6 +42,8 @@ import type {
   GoogleAnalyticsReadAdapter,
   GoogleAnalyticsReportRequest,
   GoogleKeywordOptions,
+  GoogleNegativeConflictOptions,
+  GoogleNegativeOptions,
   GoogleSearchTermOptions,
   ProviderScopeMetadata,
   SearchConsoleReadAdapter,
@@ -762,6 +764,44 @@ export class ProviderService {
             "Google Ads account is required.",
           );
         return context.adapter.listKeywords(context.read, options);
+      },
+    );
+  }
+
+  public async readGoogleNegatives(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    options: GoogleNegativeOptions,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "google_negatives",
+      async () => {
+        const context = await this.readContext(workspaceId, connectionId, accountId);
+        if (context.account.provider !== "GOOGLE_ADS" || !context.adapter.listNegatives)
+          throw new ProviderError("invalid_account", "Google Ads account is required.");
+        return context.adapter.listNegatives(context.read, options);
+      },
+    );
+  }
+
+  public async readGoogleNegativeConflicts(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    options: GoogleNegativeConflictOptions,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "google_negative_conflicts",
+      async () => {
+        const context = await this.readContext(workspaceId, connectionId, accountId);
+        if (context.account.provider !== "GOOGLE_ADS" || !context.adapter.checkNegativeConflicts)
+          throw new ProviderError("invalid_account", "Google Ads account is required.");
+        return context.adapter.checkNegativeConflicts(context.read, options);
       },
     );
   }

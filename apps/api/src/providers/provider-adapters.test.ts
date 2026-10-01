@@ -489,6 +489,40 @@ describe("Google Ads v2 adapter", () => {
     });
   });
 
+  it("routes Stage 5 inventory and conflict checks through read-only Google Search", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ results: [{
+        campaign: { id: "1", name: "Search" },
+        campaignCriterion: { resourceName: "customers/1234567890/campaignCriteria/1~5",
+          criterionId: "5", keyword: { text: "clinic", matchType: "BROAD" }, status: "ENABLED" },
+      }] }))
+      .mockResolvedValueOnce(jsonResponse({ results: [{
+        campaign: { id: "1", name: "Search", status: "ENABLED" },
+        adGroup: { id: "2", name: "Group", status: "ENABLED" },
+        adGroupCriterion: { resourceName: "customers/1234567890/adGroupCriteria/2~6",
+          criterionId: "6", keyword: { text: "[private clinic]", matchType: "EXACT" },
+          status: "ENABLED", negative: false },
+      }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAdsAdapter(config);
+    const context = {
+      credentials: { accessToken: "access", scopes: [] },
+      accountId: "1234567890", currency: "USD",
+    };
+    const inventory = await adapter.listNegatives(context, { levels: ["campaign"], limit: 100 });
+    expect(inventory.campaign.campaigns[0]?.negatives[0]?.text).toBe("clinic");
+    const conflicts = await adapter.checkNegativeConflicts(context, {
+      campaignIds: ["1"], negatives: [{ text: "private", match_type: "BROAD" }], limit: 100,
+    });
+    expect(conflicts.conflicts[0]?.keyword.text).toBe("[private clinic]");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(String(url)).toContain("/v24/customers/1234567890/googleAds:search");
+      expect((init as RequestInit).method).toBe("POST");
+      expect(String((init as RequestInit).body)).not.toContain("mutate");
+    }
+  });
+
   it("reads a search-term page in one Google Search request with keyword attribution and no write", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

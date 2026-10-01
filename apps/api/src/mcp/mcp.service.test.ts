@@ -188,7 +188,7 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(159);
+    expect(service.tools()).toHaveLength(161);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
@@ -236,6 +236,8 @@ describe("MCP V1-compatible policy", () => {
         "keyword",
         "ad_group",
         "search_term",
+        "negative_keyword",
+        "shared_negative_list",
       ],
     });
     expect(
@@ -291,6 +293,56 @@ describe("MCP V1-compatible policy", () => {
     ).rejects.toMatchObject({ code: "invalid_request" });
   });
 
+  it("registers read-only negative inventory and conflict tools with scoped inputs", async () => {
+    const readGoogleNegatives = vi.fn(async () => ({ account_id: "9458996580", next_cursor: null }));
+    const readGoogleNegativeConflicts = vi.fn(async () => ({ account_id: "9458996580", conflicts: [] }));
+    const service = serviceWithAccounts([account, metaAccount], {
+      readGoogleNegatives, readGoogleNegativeConflicts,
+      listProviders: () => [
+        { id: "GOOGLE_ADS", read: true, write: false },
+        { id: "META_ADS", read: true, write: true },
+      ],
+    });
+    expect(service.tools().find((tool) => tool.name === "google_ads_list_negatives")?.inputSchema)
+      .toMatchObject({ required: ["account_id"], additionalProperties: false });
+    expect(service.tools().find((tool) => tool.name === "google_ads_check_negative_conflicts")?.inputSchema)
+      .toMatchObject({ required: ["account_id", "campaign_ids", "negatives"], additionalProperties: false });
+    await service.call(principal(), "google_ads_list_negatives", {
+      account_id: account.externalAccountId, campaign_ids: ["123"], levels: ["shared_list"], limit: 25,
+    });
+    expect(readGoogleNegatives).toHaveBeenCalledWith(
+      "workspace-a", "connection-a", "internal-account-a",
+      { campaignIds: ["123"], levels: ["shared_list"], limit: 25 },
+    );
+    await service.call(principal(), "google_ads_check_negative_conflicts", {
+      account_id: account.externalAccountId, campaign_ids: ["123"],
+      negatives: [{ text: "приват", match_type: "BROAD" }], limit: 25,
+    });
+    expect(readGoogleNegativeConflicts).toHaveBeenCalledWith(
+      "workspace-a", "connection-a", "internal-account-a",
+      { campaignIds: ["123"], negatives: [{ text: "приват", match_type: "BROAD" }], limit: 25 },
+    );
+    expect(await service.call(principal(), "get_provider_capabilities", { provider: "GOOGLE_ADS" }))
+      .toMatchObject({ write: false });
+    expect(await service.call(principal(), "list_supported_objects", { provider: "GOOGLE_ADS" }))
+      .toMatchObject({ items: expect.arrayContaining(["negative_keyword", "shared_negative_list"]) });
+    expect(await service.call(principal(), "list_supported_objects", { provider: "META_ADS" }))
+      .toMatchObject({ items: ["account", "campaign", "metrics"] });
+    for (const args of [
+      { account_id: "bad" },
+      { account_id: account.externalAccountId, campaign_ids: ["not-an-id"] },
+      { account_id: account.externalAccountId, cursor: "" },
+    ])
+      await expect(service.call(principal(), "google_ads_list_negatives", args))
+        .rejects.toMatchObject({ code: "invalid_request" });
+    await expect(service.call(principal(), "google_ads_check_negative_conflicts", {
+      account_id: account.externalAccountId, negatives: [{ text: "x" }],
+    })).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(service.call(principal(), "google_ads_list_negatives", {
+      provider: "META_ADS", account_id: account.externalAccountId,
+    })).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
   it("registers a Search-only, date-required search-term read tool without changing Meta capabilities", async () => {
     const readGoogleSearchTerms = vi.fn(async () => ({
       items: [],
@@ -322,6 +374,8 @@ describe("MCP V1-compatible policy", () => {
         "keyword",
         "ad_group",
         "search_term",
+        "negative_keyword",
+        "shared_negative_list",
       ],
     });
     expect(

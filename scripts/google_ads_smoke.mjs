@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 
-// Stages 2–4: MCP read tools only. No mutate or validate_only path.
+// Stages 2–5: MCP read tools only. No mutate or validate_only path.
 const PERIOD = { start_date: "2026-08-30", end_date: "2026-09-28" };
 const TOKEN = process.env.GOOGLE_ADS_SMOKE_BEARER_TOKEN;
 const ENDPOINT = process.env.GOOGLE_ADS_SMOKE_MCP_URL;
@@ -23,6 +23,24 @@ export function check(name, expected, actual, pass) {
     `${name}\n  EXPECTED: ${expected}\n  ACTUAL: ${actual}\n  ${pass ? "PASS" : "FAIL"}`,
   );
   return pass;
+}
+
+export async function visitNegativePages(call, accountId, inspect, campaignIds) {
+  let cursor;
+  for (let page = 0; page < 1000; page++) {
+    const data = await call("google_ads_list_negatives", {
+      account_id: accountId,
+      ...(campaignIds ? { campaign_ids: campaignIds } : {}),
+      limit: 500,
+      ...(cursor ? { cursor } : {}),
+    });
+    if (!data || !data.campaign || !data.ad_group || !data.shared_list)
+      throw new Error("invalid negative page");
+    inspect(data);
+    cursor = data.next_cursor;
+    if (!cursor) return;
+  }
+  throw new Error("negative pagination exceeded 1000 pages");
 }
 
 async function main() {
@@ -316,6 +334,85 @@ async function main() {
       return {
         actual: `${count} visible rows; ${sum} ${currency ?? "null"}. Google Ads may withhold search terms; this value is not expected to equal total campaign spend`,
         pass: withinTwoPercent(sum, 23500) && currency === "USD",
+      };
+    },
+  );
+
+  await run(
+    "H. Stage 5 negative inventory in three On Clinic accounts",
+    "existing negatives visible in 9458996580, 2732846994 and 6196888360",
+    async () => {
+      const counts = [];
+      for (const accountId of ["9458996580", "2732846994", "6196888360"]) {
+        let count = 0;
+        await visitNegativePages(call, accountId, (data) => {
+          count += (data.campaign.campaigns ?? []).reduce((sum, item) => sum + (item.negatives?.length ?? 0), 0);
+          count += (data.ad_group.campaigns ?? []).reduce((sum, item) =>
+            sum + (item.ad_groups ?? []).reduce((inner, group) => inner + (group.negatives?.length ?? 0), 0), 0);
+          count += (data.shared_list.lists ?? []).reduce((sum, item) => sum + (item.negatives?.length ?? 0), 0);
+        });
+        counts.push(`${accountId}=${count}`);
+      }
+      return { actual: counts.join(", "), pass: counts.every((entry) => Number(entry.split("=")[1]) > 0) };
+    },
+  );
+
+  await run(
+    "I. Stage 5 broad negative conflict control",
+    "hm_oc_almaty_proktology_search: приват BROAD conflicts with actual [приват клиника] keyword",
+    async () => {
+      const campaigns = await call("list_campaigns", { account_id: "9458996580", limit: 500 });
+      const campaign = campaigns.items?.find((item) => item.name === "hm_oc_almaty_proktology_search");
+      if (!campaign?.id) throw new Error("control campaign not found");
+      let cursor;
+      let found;
+      for (let page = 0; page < 1000; page++) {
+        const data = await call("google_ads_check_negative_conflicts", {
+          account_id: "9458996580", campaign_ids: [campaign.id],
+          negatives: [{ text: "приват", match_type: "BROAD" }], limit: 500,
+          ...(cursor ? { cursor } : {}),
+        });
+        found ??= data.conflicts?.find((item) =>
+          item.keyword?.text === "[приват клиника]" &&
+          item.campaign?.id === campaign.id &&
+          item.keyword?.status === "ENABLED" &&
+          item.negative?.match_type === "BROAD");
+        cursor = data.next_cursor;
+        if (!cursor) break;
+        if (page === 999) throw new Error("conflict pagination exceeded 1000 pages");
+      }
+      return {
+        actual: found ? `${found.keyword.text} / ${found.keyword.resource_name}` : "target keyword conflict not found",
+        pass: Boolean(found?.keyword?.resource_name),
+      };
+    },
+  );
+
+  await run(
+    "J. Stage 5 clinic appointment effective negative",
+    "hm_oc_almaty_ginekologiya_search: clinic appointment is campaign negative or member of attached shared list",
+    async () => {
+      const campaigns = await call("list_campaigns", { account_id: "9458996580", limit: 500 });
+      const campaign = campaigns.items?.find((item) => item.name === "hm_oc_almaty_ginekologiya_search");
+      if (!campaign?.id) throw new Error("control campaign not found");
+      let campaignNegative = false;
+      const memberSets = new Set();
+      const attachedSets = new Set();
+      await visitNegativePages(call, "9458996580", (data) => {
+        for (const item of data.campaign.campaigns ?? [])
+          if (item.campaign_id === campaign.id)
+            campaignNegative ||= (item.negatives ?? []).some((negative) => negative.text?.trim().toLowerCase() === "clinic appointment");
+        for (const list of data.shared_list.lists ?? []) {
+          if ((list.negatives ?? []).some((negative) => negative.text?.trim().toLowerCase() === "clinic appointment"))
+            memberSets.add(list.resource_name);
+          if ((list.attached_campaigns ?? []).some((item) => item.campaign_id === campaign.id))
+            attachedSets.add(list.resource_name);
+        }
+      }, [campaign.id]);
+      const shared = [...memberSets].some((name) => attachedSets.has(name));
+      return {
+        actual: `campaign=${campaignNegative}; attached_shared_list=${shared}`,
+        pass: campaignNegative || shared,
       };
     },
   );

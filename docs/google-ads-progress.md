@@ -108,6 +108,77 @@ ORDER BY campaign.id, ad_group.id, search_term_view.search_term
 - Smoke Stage 4 добавлен в `scripts/google_ads_smoke.mjs`: account `9458996580`, даты `2026-03-01..2026-09-28`, term `приват клиника алматы` → широкий keyword `проктолог алматы`; сумма видимых terms ≈23 500 USD (±2%) с обязательной privacy-оговоркой. Запуск дал **`SMOKE NOT RUN: NO LIVE GOOGLE ADS ACCESS`** из-за отсутствия локальных MCP URL/token. Фактических live значений, включая GAQL field-combination validation, нет.
 - STOP CONDITIONS для CSV-подчасти: отсутствие безопасной MCP file delivery. Для JSON новые dependency/API version/DB schema/shared preview/Meta write не потребовались. Meta/Public MCP branch не менялись, deploy/push нет.
 
-## Этапы 5–9
+## Этап 5 — чтение минус-слов и проверка конфликтов
+
+- Дата: 2026-10-01. Ветка `codex/google-ads-ppc`, parent `736635e4ac31eb4862106bbb6da129f939fe2e43`. Только Google Ads READ; Google `write=false` сохранён. Этапы 6–9 не начаты. Новых dependencies, версии Google API, DB schema/migrations, общего preview/commit и Meta shared write code не требуется.
+- MCP `google_ads_list_negatives`: `account_id` обязателен (10 цифр, дефисы допускаются); опционально `campaign_ids` (1–200 числовых строковых ID), `levels` (непустой набор `campaign|ad_group|shared_list`, default все три), `limit` (1–500, default 100), opaque `cursor`. Неизвестный level, некорректный account/IDs/limit/cursor → typed `invalid_request`. `provider`, если указан, только `GOOGLE_ADS`.
+- Пять GAQL query families, все через GoogleAdsService.Search (никаких `mutate`, `validateOnly`, search per criterion/campaign/list):
+
+```gaql
+SELECT campaign.id, campaign.name, campaign_criterion.resource_name,
+  campaign_criterion.criterion_id, campaign_criterion.keyword.text,
+  campaign_criterion.keyword.match_type, campaign_criterion.status
+FROM campaign_criterion
+WHERE campaign_criterion.type = 'KEYWORD'
+  AND campaign_criterion.negative = TRUE
+  AND campaign_criterion.status != 'REMOVED'
+  [AND campaign.id IN (...)]
+ORDER BY campaign.id, campaign_criterion.criterion_id
+
+SELECT campaign.id, campaign.name, ad_group.id, ad_group.name,
+  ad_group_criterion.resource_name, ad_group_criterion.criterion_id,
+  ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+  ad_group_criterion.status
+FROM ad_group_criterion
+WHERE ad_group_criterion.type = 'KEYWORD'
+  AND ad_group_criterion.negative = TRUE
+  AND ad_group_criterion.status != 'REMOVED'
+  [AND campaign.id IN (...)]
+ORDER BY campaign.id, ad_group.id, ad_group_criterion.criterion_id
+
+SELECT shared_set.id, shared_set.name, shared_set.resource_name,
+  shared_set.status, shared_set.member_count
+FROM shared_set
+WHERE shared_set.type = 'NEGATIVE_KEYWORDS' AND shared_set.status = 'ENABLED'
+  [AND shared_set.resource_name IN (...)]
+ORDER BY shared_set.id
+
+SELECT shared_set.id, shared_set.name, shared_set.resource_name,
+  shared_set.status, shared_set.member_count,
+  shared_criterion.criterion_id, shared_criterion.resource_name,
+  shared_criterion.keyword.text, shared_criterion.keyword.match_type
+FROM shared_criterion
+WHERE shared_set.type = 'NEGATIVE_KEYWORDS'
+  AND shared_set.status = 'ENABLED' AND shared_criterion.type = 'KEYWORD'
+  [AND shared_set.resource_name IN (...)]
+ORDER BY shared_set.id, shared_criterion.criterion_id
+
+SELECT shared_set.id, shared_set.name, shared_set.resource_name,
+  shared_set.status, shared_set.member_count,
+  campaign.id, campaign.name, campaign_shared_set.resource_name,
+  campaign_shared_set.status
+FROM campaign_shared_set
+WHERE shared_set.type = 'NEGATIVE_KEYWORDS'
+  AND shared_set.status = 'ENABLED'
+  AND campaign_shared_set.status = 'ENABLED'
+  [AND campaign.id IN (...)]
+ORDER BY shared_set.id, campaign.id
+```
+
+- При `campaign_ids` сначала один paginated scan последней query family по выбранным campaigns собирает resource names релевантных attached lists; `shared_set` и `shared_criterion` затем фильтруются этими resource names в GAQL. Это не N+1, но scan повторяется на каждой странице shared-list metadata/members (до 100 provider pages и 1000 sets; превышение — явная ошибка с предложением сузить `campaign_ids`, без тихого пропуска). Связи `campaign_shared_set` уже фильтруются server-side. Без `campaign_ids` pre-scan отсутствует. При отсутствии релевантных списков metadata/member queries пропускаются.
+- Выход: `account_id`, `page_section`, `campaign.campaigns[].negatives`, `ad_group.campaigns[].ad_groups[].negatives`, `shared_list.lists[]` с `shared_set_id/name/resource_name/status/member_count`, `negatives`, `attached_campaigns`, `fragment_kind=metadata|members|attachments`, `next_cursor`. Поля shared list есть в каждой строке через attributed `shared_set`; `member_count=null`, если API не вернул корректное число, вместо выдуманного 0. Страница содержит **один** из пяти типов фрагментов. Пустые массивы в другом типе фрагмента не означают, что список пуст; клиент должен пройти `next_cursor` до `null` и объединить shared fragments по `resource_name` (или `shared_set_id` в рамках одного customer). В ответе максимум `limit` исходных строк; список/кампания могут продолжиться на следующей странице. Google не гарантирует snapshot isolation при изменениях между вызовами.
+- Единый deterministic cursor: base64url JSON с версией, индексом query family, Google provider page token, индексом строки и fingerprint account/filters; порядок families `campaign → ad_group → shared_set → shared_criterion → campaign_shared_set`. Нет загрузки всей account inventory в память — не более одной Google Search page и одного выходного фрагмента на вызов (кроме ограниченного pre-scan связей при `campaign_ids`). Неверный или несовместимый cursor отклоняется. Указанный лимит относится к строкам, не к числу вложенных campaign/list объектов.
+- MCP `google_ads_check_negative_conflicts`: обязательны `account_id`, `campaign_ids` (1–200 числовых строковых ID), `negatives` (1–100 `{text,match_type?}`; `BROAD|PHRASE|EXACT`, default BROAD), опциональны `limit` (1–500, default 100) и opaque `cursor`. Принимаются `слово`, `"фраза"`, `[точное]`; явный match type не должен противоречить синтаксису. Input дедуплицируется по нормализованному text + match type с сохранением первого порядка; response `normalized_negatives` показывает фактический набор. Некорректный match type/пустой text/cursor → `invalid_request`.
+- Checker использует Stage 3 `keywordInventoryQuery` и `keywordPlacement` напрямую в provider; не вызывает MCP через HTTP. GAQL `FROM ad_group_criterion` с `type='KEYWORD'`, `negative=FALSE`, `ad_group_criterion.status IN ('ENABLED')`, `campaign.id IN (...)`, non-REMOVED campaign/ad group; выбранные поля Stage 3. Дополнительные guards на malformed responses не допускают PAUSED/REMOVED/negative/out-of-scope placements. Текст positive keyword сравнивается независимо от его match type. Выход `conflicts[]` содержит normalized negative, реальный keyword resource/criterion/text/match_type/status, campaign/ad group ID/name и `reason.code/message`. Scan до 20 Google Search provider pages на MCP-вызов; если нужны ещё, выдаётся cursor продолжения, а не обрезается итог. Нет N+1; обычный запрос — 1 Search, плюс provider pages по необходимости. Один positive placement может дать несколько конфликтов (по разным кандидатам), в том числе через границу страницы.
+- Нормализация checker: trim, сворачивание пробелов, Unicode lower-case, снятие только внешних Google `"..."`/`[...]` delimiters; нет stemming, lemmatization, close variants, исправления опечаток или fuzzy. BROAD — все токены минуса присутствуют в keyword в любом порядке (с учётом повторов), PHRASE — токены идут подряд в том же порядке, EXACT — нормализованный текст равен. Две реальные placements в разных кампаниях возвращаются отдельно. `PAUSED` positive keywords не проверяются.
+- [v24 campaign_criterion](https://developers.google.com/google-ads/api/fields/v24/campaign_criterion), [ad_group_criterion](https://developers.google.com/google-ads/api/fields/v24/ad_group_criterion), [shared_set](https://developers.google.com/google-ads/api/fields/v24/shared_set), [shared_criterion](https://developers.google.com/google-ads/api/fields/v24/shared_criterion), [campaign_shared_set](https://developers.google.com/google-ads/api/fields/v24/campaign_shared_set): поля/attributed resources для пяти SELECT/FROM сочетаний сверены; `member_count` действительно существует и selectable, `campaign_shared_set.status`/`campaign_criterion.status` существуют. Полные запросы не выполнены против live API/GoogleAdsFieldService; фактическая совместимость и cross-customer (manager-owned) shared lists остаются неопределённостью до live READ. Версия API осталась `v24` в code default; production override не подтверждён.
+- `list_supported_objects(GOOGLE_ADS)` добавляет `negative_keyword`, `shared_negative_list`; Meta и Google `write=false` не менялись. Stage 2 structured Google Ads errors (`error_code`, `message`, `field_path`, `request_id`, `errors[]`) продолжают проходить через тот же REST search path; секреты не входят в output.
+- `scripts/google_ads_smoke.mjs` дополнен тремя только-read контролями: наличие existing negatives во всех трёх On Clinic accounts; `приват` BROAD против **фактического** `[приват клиника]` в `hm_oc_almaty_proktology_search`; effective presence `clinic appointment` в `hm_oc_almaty_ginekologiya_search` как campaign criterion **или** member attached shared list. Скрипт не вызывает write tools и отказывается работать при `GOOGLE_ADS_WRITE_MODE=live`.
+- Stage 4 CSV blocker **остаётся открытым**: MCP file-delivery architecture не создавалась; `format=csv` продолжает возвращать прежний typed error. PMax не расширялся.
+- Тесты/регресс: negative unit 11/11 (пять query families, группировка, multi-campaign attachments, levels/default/empty, pagination/invalid cursor, nullable `member_count`, structured error, 9 обязательных match cases, normalization/syntax/dedup, ENABLED-only placements, cross-campaign results), MCP service 33/33 (новые schemas/routing/validation/capabilities/Meta unchanged), adapter REST read-only test, smoke helper 4/4. `pnpm typecheck` PASS 15/15; `pnpm lint` PASS 10/10; `pnpm test` PASS 15/15 (API 336 passed, 20 skipped; Meta tests включены); legacy Python `PYTHONPATH=.;src` + `python -m pytest -q tests/unit` PASS 238 passed / 1 skipped; `python -m compileall -q src/ad_mcp` PASS; `git diff --check` PASS; `pnpm security:secrets` PASS. DB/Redis integration tests остались skipped.
+- Live smoke: `node scripts/google_ads_smoke.mjs` вывел **`SMOKE NOT RUN: NO LIVE GOOGLE ADS ACCESS`** — локальных `GOOGLE_ADS_SMOKE_MCP_URL` и `GOOGLE_ADS_SMOKE_BEARER_TOKEN` нет. Никаких live результатов H/I/J и фактической v24 GAQL-валидации нет. Никакие provider writes/validate_only не выполнялись.
+- STOP CONDITIONS: новых для Stage 5 нет; прежний Public MCP intersection HIGH перед Stage 6 остаётся. После Stage 5 **STOP** до отдельного архитектурного разбора человеком.
+
+## Этапы 6–9
 
 Не начаты. Никаких Google/Meta provider writes, `mutate` или `validate_only` не выполнялось; push/deploy отсутствуют.

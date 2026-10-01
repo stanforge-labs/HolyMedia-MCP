@@ -190,6 +190,26 @@ function amount(value: unknown): number {
   return numeric(value) / 1_000_000;
 }
 
+export function keywordPlacement(row: Row) {
+  const campaign = record(row.campaign);
+  const adGroup = record(row.adGroup);
+  const criterion = record(row.adGroupCriterion);
+  const keyword = record(criterion.keyword);
+  return {
+    resource_name: str(criterion.resourceName),
+    criterion_id: str(criterion.criterionId),
+    campaign_id: str(campaign.id),
+    campaign_name: str(campaign.name),
+    campaign_status: str(campaign.status),
+    ad_group_id: str(adGroup.id),
+    ad_group_name: str(adGroup.name),
+    ad_group_status: str(adGroup.status),
+    text: str(keyword.text),
+    match_type: str(keyword.matchType),
+    status: str(criterion.status),
+  };
+}
+
 function cursorFingerprint(
   accountId: string,
   options: GoogleKeywordOptions,
@@ -252,26 +272,13 @@ function toKeyword(
   metric: Row | undefined,
   currency: string | null,
 ): GoogleKeyword {
-  const campaign = record(row.campaign);
-  const adGroup = record(row.adGroup);
   const criterion = record(row.adGroupCriterion);
-  const keyword = record(criterion.keyword);
   const quality = record(criterion.qualityInfo);
   const metrics = record(metric?.metrics);
   const conversions = numeric(metrics.conversions);
   const cost = amount(metrics.costMicros);
   return {
-    resource_name: str(criterion.resourceName),
-    criterion_id: str(criterion.criterionId),
-    campaign_id: str(campaign.id),
-    campaign_name: str(campaign.name),
-    campaign_status: str(campaign.status),
-    ad_group_id: str(adGroup.id),
-    ad_group_name: str(adGroup.name),
-    ad_group_status: str(adGroup.status),
-    text: str(keyword.text),
-    match_type: str(keyword.matchType),
-    status: str(criterion.status),
+    ...keywordPlacement(row),
     serving_status: nullable(criterion.systemServingStatus),
     approval_status: nullable(criterion.approvalStatus),
     quality_score: optionalNumber(quality.qualityScore),

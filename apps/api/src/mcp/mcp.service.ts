@@ -17,6 +17,10 @@ import {
 import { metaInsightsParameters } from "../providers/meta-insights.parameters.js";
 import { metaReadSchema } from "./meta-read.schema.js";
 import { ProviderError } from "../providers/provider.errors.js";
+import type {
+  GoogleNegativeInput,
+  GoogleNegativeLevel,
+} from "../providers/provider.types.js";
 import { validateDateRange } from "../providers/provider-normalization.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
@@ -193,6 +197,8 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "google_analytics_get_custom_dimensions_metrics",
   "google_ads_list_keywords",
   "google_ads_search_terms",
+  "google_ads_list_negatives",
+  "google_ads_check_negative_conflicts",
 ] as const;
 
 const COMPAT_PREVIEW_OPERATIONS: Record<string, string> = {
@@ -730,6 +736,45 @@ export class McpService {
           account.provider === "GOOGLE_ADS"
             ? googleCampaignStatuses(args.status ?? args.statuses)
             : undefined,
+        );
+      }
+      case "google_ads_list_negatives":
+      case "google_ads_check_negative_conflicts": {
+        if (args.provider !== undefined && args.provider !== "GOOGLE_ADS")
+          throw new ProviderError("invalid_request", `${name} supports GOOGLE_ADS only.`);
+        const requested = args.account_id;
+        if (typeof requested !== "string" || !/^\d{10}$/.test(requested.replace(/-/g, "")))
+          throw new ProviderError("invalid_request", "account_id must be a 10-digit Google Ads customer ID.");
+        const account = await this.account(principal, {
+          provider: "GOOGLE_ADS", account_id: requested.replace(/-/g, ""),
+        });
+        const campaignIds = googleKeywordIds(args.campaign_ids, "campaign_ids");
+        const limit = args.limit === undefined ? 100 : args.limit;
+        if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 500)
+          throw new ProviderError("invalid_request", "limit must be between 1 and 500.");
+        if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor))
+          throw new ProviderError("invalid_request", "Invalid Google negative cursor.");
+        if (name === "google_ads_list_negatives") {
+          return this.providers.readGoogleNegatives(
+            principal.workspaceId, account.connectionId, account.id,
+            {
+              ...(campaignIds ? { campaignIds } : {}),
+              ...(args.levels !== undefined ? { levels: args.levels as GoogleNegativeLevel[] } : {}),
+              limit,
+              ...(args.cursor ? { cursor: args.cursor } : {}),
+            },
+          );
+        }
+        if (!campaignIds)
+          throw new ProviderError("invalid_request", "campaign_ids is required for conflict checks.");
+        return this.providers.readGoogleNegativeConflicts(
+          principal.workspaceId, account.connectionId, account.id,
+          {
+            campaignIds,
+            negatives: args.negatives as GoogleNegativeInput[],
+            limit,
+            ...(args.cursor ? { cursor: args.cursor } : {}),
+          },
         );
       }
       case "google_ads_list_keywords": {
@@ -2148,7 +2193,7 @@ export class McpService {
             "campaign",
             ...(definition.read ? ["metrics"] : []),
             ...(provider === "GOOGLE_ADS"
-              ? ["keyword", "ad_group", "search_term"]
+              ? ["keyword", "ad_group", "search_term", "negative_keyword", "shared_negative_list"]
               : []),
           ]
         : definition.read
@@ -2265,6 +2310,10 @@ export class McpService {
 }
 
 function toolDescription(name: string): string {
+  if (name === "google_ads_list_negatives")
+    return "Read-only paginated Google Ads campaign, ad group and shared-list negative keywords and their campaign attachments. Pages may contain shared-list fragments; combine by shared_set_id. Never changes ads.";
+  if (name === "google_ads_check_negative_conflicts")
+    return "Read-only check of proposed BROAD, PHRASE or EXACT negatives against ENABLED positive keywords in selected campaigns. Text matching only; no Google close variants and no writes.";
   if (name === "google_ads_list_keywords")
     return "Read-only Google Ads keyword inventory and period metrics, including zero-traffic keywords. Never changes ads.";
   if (name === "google_ads_search_terms")
@@ -2297,6 +2346,39 @@ function toolDescription(name: string): string {
 function googleKeywordToolSchema(
   name: string,
 ): Record<string, unknown> | undefined {
+  if (name === "google_ads_list_negatives")
+    return {
+      type: "object", additionalProperties: false, required: ["account_id"],
+      properties: {
+        provider: { type: "string", enum: ["GOOGLE_ADS"] },
+        account_id: { type: "string", pattern: "^[0-9-]{10,13}$" },
+        campaign_ids: { type: "array", minItems: 1, maxItems: 200,
+          items: { type: "string", pattern: "^[0-9]{1,20}$" } },
+        levels: { type: "array", minItems: 1, uniqueItems: true,
+          items: { type: "string", enum: ["campaign", "ad_group", "shared_list"] } },
+        limit: { type: "integer", minimum: 1, maximum: 500 },
+        cursor: { type: "string", minLength: 1 },
+      },
+    };
+  if (name === "google_ads_check_negative_conflicts")
+    return {
+      type: "object", additionalProperties: false,
+      required: ["account_id", "campaign_ids", "negatives"],
+      properties: {
+        provider: { type: "string", enum: ["GOOGLE_ADS"] },
+        account_id: { type: "string", pattern: "^[0-9-]{10,13}$" },
+        campaign_ids: { type: "array", minItems: 1, maxItems: 200,
+          items: { type: "string", pattern: "^[0-9]{1,20}$" } },
+        negatives: { type: "array", minItems: 1, maxItems: 100,
+          items: { type: "object", additionalProperties: false, required: ["text"],
+            properties: {
+              text: { type: "string", minLength: 1, maxLength: 202 },
+              match_type: { type: "string", enum: ["BROAD", "PHRASE", "EXACT"] },
+            } } },
+        limit: { type: "integer", minimum: 1, maximum: 500 },
+        cursor: { type: "string", minLength: 1 },
+      },
+    };
   if (name === "google_ads_search_terms")
     return {
       type: "object",

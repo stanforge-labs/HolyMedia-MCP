@@ -12,6 +12,10 @@ import { providerJson } from "../provider-http.js";
 import { googleAdsApiError } from "../google-ads.error.js";
 import { keywordOptions, listGoogleKeywords } from "../google-ads-keywords.js";
 import {
+  checkGoogleNegativeConflicts,
+  listGoogleNegatives,
+} from "../google-ads-negatives.js";
+import {
   listGoogleSearchTerms,
   searchTermOptions,
 } from "../google-ads-search-terms.js";
@@ -32,6 +36,8 @@ import type {
   ProviderReadAdapter,
   ProviderReadContext,
   GoogleKeywordOptions,
+  GoogleNegativeConflictOptions,
+  GoogleNegativeOptions,
   GoogleSearchTermOptions,
 } from "../provider.types.js";
 
@@ -387,6 +393,40 @@ export class GoogleAdsAdapter
           loginCustomerId,
           query,
         ),
+    );
+  }
+
+  public async listNegatives(
+    context: ProviderReadContext,
+    options: GoogleNegativeOptions,
+  ) {
+    const customerId = assertCustomerId(context.accountId);
+    const loginCustomerId = this.contextLoginCustomerId(context);
+    return listGoogleNegatives(customerId, options, (query, token) =>
+      this.searchPage(
+        context.credentials.accessToken,
+        customerId,
+        loginCustomerId,
+        query,
+        token,
+      ),
+    );
+  }
+
+  public async checkNegativeConflicts(
+    context: ProviderReadContext,
+    options: GoogleNegativeConflictOptions,
+  ) {
+    const customerId = assertCustomerId(context.accountId);
+    const loginCustomerId = this.contextLoginCustomerId(context);
+    return checkGoogleNegativeConflicts(customerId, options, (query, token) =>
+      this.searchPage(
+        context.credentials.accessToken,
+        customerId,
+        loginCustomerId,
+        query,
+        token,
+      ),
     );
   }
 

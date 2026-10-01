@@ -130,7 +130,96 @@ export interface ProviderReadAdapter {
     context: ProviderReadContext,
     options: GoogleSearchTermOptions,
   ): Promise<GoogleSearchTermPage>;
+  listNegatives?(
+    context: ProviderReadContext,
+    options: GoogleNegativeOptions,
+  ): Promise<GoogleNegativePage>;
+  checkNegativeConflicts?(
+    context: ProviderReadContext,
+    options: GoogleNegativeConflictOptions,
+  ): Promise<GoogleNegativeConflictPage>;
 }
+
+export type GoogleNegativeLevel = "campaign" | "ad_group" | "shared_list";
+export type GoogleNegativeInput = {
+  text: string;
+  match_type?: "BROAD" | "PHRASE" | "EXACT";
+};
+export type GoogleNegativeOptions = {
+  campaignIds?: string[];
+  levels?: GoogleNegativeLevel[];
+  limit: number;
+  cursor?: string;
+};
+export type GoogleNegativeConflictOptions = {
+  campaignIds: string[];
+  negatives: GoogleNegativeInput[];
+  limit: number;
+  cursor?: string;
+};
+export type GoogleNegativeKeyword = {
+  resource_name: string;
+  criterion_id: string;
+  text: string;
+  match_type: string;
+  status?: string;
+};
+export type GoogleNegativeCampaign = {
+  campaign_id: string;
+  campaign_name: string;
+  negatives: GoogleNegativeKeyword[];
+};
+export type GoogleNegativeAdGroup = {
+  ad_group_id: string;
+  ad_group_name: string;
+  negatives: GoogleNegativeKeyword[];
+};
+export type GoogleNegativeAdGroupCampaign = {
+  campaign_id: string;
+  campaign_name: string;
+  ad_groups: GoogleNegativeAdGroup[];
+};
+export type GoogleSharedNegativeList = {
+  shared_set_id: string;
+  name: string;
+  resource_name: string;
+  status: string;
+  member_count: number | null;
+  fragment_kind: "metadata" | "members" | "attachments";
+  negatives: GoogleNegativeKeyword[];
+  attached_campaigns: Array<{
+    campaign_id: string;
+    campaign_name: string;
+    resource_name: string;
+    status: string;
+  }>;
+};
+export type GoogleNegativePage = {
+  account_id: string;
+  page_section: "campaign" | "ad_group" | "shared_list";
+  campaign: { campaigns: GoogleNegativeCampaign[] };
+  ad_group: { campaigns: GoogleNegativeAdGroupCampaign[] };
+  shared_list: { lists: GoogleSharedNegativeList[] };
+  next_cursor: string | null;
+};
+export type GoogleNegativeConflictPage = {
+  account_id: string;
+  conflicts: Array<{
+    negative: { text: string; match_type: "BROAD" | "PHRASE" | "EXACT" };
+    keyword: {
+      resource_name: string;
+      criterion_id: string;
+      text: string;
+      match_type: string;
+      status: string;
+    };
+    campaign: { id: string; name: string };
+    ad_group: { id: string; name: string };
+    reason: { code: string; message: string };
+  }>;
+  normalized_negatives: Array<{ text: string; match_type: "BROAD" | "PHRASE" | "EXACT" }>;
+  next_cursor: string | null;
+};
 
 export type GoogleSearchTermOptions = {
   range: ProviderDateRange;
