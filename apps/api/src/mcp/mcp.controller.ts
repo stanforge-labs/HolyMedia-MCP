@@ -226,6 +226,10 @@ export class McpController {
                     : {}),
                   ...googleAdsMcpErrorFields(error),
                   ...(error instanceof ProviderError &&
+                  error.code === "invalid_request"
+                    ? { code: error.code, provider: "GOOGLE_ADS" }
+                    : {}),
+                  ...(error instanceof ProviderError &&
                   error.code === "not_supported_for_google_ads"
                     ? { code: error.code, provider: "GOOGLE_ADS" }
                     : {}),
@@ -265,6 +269,8 @@ export class McpController {
 export function mcpFailureMessage(error: unknown): string {
   if (error instanceof PreviewError) return error.publicMessage;
   if (error instanceof GoogleAdsApiError) return error.message;
+  if (error instanceof ProviderError && error.code === "invalid_request")
+    return error.message;
   if (
     error instanceof ProviderError &&
     error.code === "not_supported_for_google_ads"

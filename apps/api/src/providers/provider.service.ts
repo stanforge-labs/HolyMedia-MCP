@@ -41,6 +41,7 @@ import type {
   ProviderCredentialPayload,
   GoogleAnalyticsReadAdapter,
   GoogleAnalyticsReportRequest,
+  GoogleKeywordOptions,
   ProviderScopeMetadata,
   SearchConsoleReadAdapter,
   SearchConsoleQueryRow,
@@ -731,6 +732,35 @@ export class ProviderService {
           cursor,
           statuses,
         );
+      },
+    );
+  }
+
+  public async readGoogleKeywords(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    options: GoogleKeywordOptions,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "google_keywords",
+      async () => {
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        if (
+          context.account.provider !== "GOOGLE_ADS" ||
+          !context.adapter.listKeywords
+        )
+          throw new ProviderError(
+            "invalid_account",
+            "Google Ads account is required.",
+          );
+        return context.adapter.listKeywords(context.read, options);
       },
     );
   }

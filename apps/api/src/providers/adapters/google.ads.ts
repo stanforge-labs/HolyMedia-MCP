@@ -10,6 +10,7 @@ import type {
 import { ProviderError } from "../provider.errors.js";
 import { providerJson } from "../provider-http.js";
 import { googleAdsApiError } from "../google-ads.error.js";
+import { keywordOptions, listGoogleKeywords } from "../google-ads-keywords.js";
 import {
   metricsFromRaw,
   money,
@@ -26,6 +27,7 @@ import type {
   ProviderOAuthAdapter,
   ProviderReadAdapter,
   ProviderReadContext,
+  GoogleKeywordOptions,
 } from "../provider.types.js";
 
 const GOOGLE_SCOPE = "https://www.googleapis.com/auth/adwords";
@@ -344,6 +346,45 @@ export class GoogleAdsAdapter
     );
   }
 
+  public async listKeywords(
+    context: ProviderReadContext,
+    options: GoogleKeywordOptions,
+  ) {
+    const customerId = assertCustomerId(context.accountId);
+    const validated = keywordOptions(options);
+    const loginCustomerId = this.contextLoginCustomerId(context);
+    const currency =
+      context.currency ??
+      (
+        await this.customerRows(
+          context.credentials,
+          customerId,
+          loginCustomerId,
+        )
+      )[0]?.currency ??
+      null;
+    return listGoogleKeywords(
+      customerId,
+      validated,
+      currency,
+      (query, token) =>
+        this.searchPage(
+          context.credentials.accessToken,
+          customerId,
+          loginCustomerId,
+          query,
+          token,
+        ),
+      (query) =>
+        this.searchStream(
+          context.credentials.accessToken,
+          customerId,
+          loginCustomerId,
+          query,
+        ),
+    );
+  }
+
   public async health(
     context: ProviderReadContext,
   ): Promise<ProviderHealthView> {
@@ -498,6 +539,42 @@ export class GoogleAdsAdapter
         );
     }
     return rows;
+  }
+
+  private async searchPage(
+    accessToken: string,
+    customerId: string,
+    loginCustomerId: string | undefined,
+    query: string,
+    pageToken?: string,
+  ): Promise<{ results: Record<string, unknown>[]; nextPageToken?: string }> {
+    const data = await providerJson<Record<string, unknown>>(
+      `${this.apiBase()}/customers/${assertCustomerId(customerId)}/googleAds:search`,
+      {
+        method: "POST",
+        headers: {
+          ...this.headers(accessToken, loginCustomerId),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }),
+      },
+      this.config.providerHttpTimeoutMs,
+      googleAdsApiError,
+    );
+    if (data.results !== undefined && !Array.isArray(data.results))
+      throw new ProviderError(
+        "provider_response_invalid",
+        "Google Ads search response was invalid.",
+      );
+    return {
+      results: (data.results ?? []).filter(
+        (row): row is Record<string, unknown> =>
+          Boolean(row && typeof row === "object" && !Array.isArray(row)),
+      ),
+      ...(typeof data.nextPageToken === "string" && data.nextPageToken
+        ? { nextPageToken: data.nextPageToken }
+        : {}),
+    };
   }
 
   private headers(

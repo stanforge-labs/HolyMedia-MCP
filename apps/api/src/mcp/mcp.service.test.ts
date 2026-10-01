@@ -188,7 +188,7 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(157);
+    expect(service.tools()).toHaveLength(158);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
@@ -201,6 +201,87 @@ describe("MCP V1-compatible policy", () => {
         .find((tool) => tool.name === "google_analytics_run_report")
         ?.inputSchema,
     ).toMatchObject({ additionalProperties: false });
+  });
+
+  it("registers a Google-only keyword read tool and preserves write=false", async () => {
+    const readGoogleKeywords = vi.fn(async () => ({ items: [] }));
+    const service = serviceWithAccounts([account, metaAccount], {
+      readGoogleKeywords,
+      listProviders: () => [
+        { id: "GOOGLE_ADS", read: true, write: false },
+        { id: "META_ADS", read: true, write: true },
+      ],
+    });
+    const schema = service
+      .tools()
+      .find((tool) => tool.name === "google_ads_list_keywords")?.inputSchema;
+    expect(schema).toMatchObject({
+      required: ["account_id"],
+      additionalProperties: false,
+    });
+    expect(
+      await service.call(principal(), "get_provider_capabilities", {
+        provider: "GOOGLE_ADS",
+      }),
+    ).toMatchObject({ write: false });
+    expect(
+      await service.call(principal(), "list_supported_objects", {
+        provider: "GOOGLE_ADS",
+      }),
+    ).toMatchObject({
+      items: ["account", "campaign", "metrics", "keyword", "ad_group"],
+    });
+    expect(
+      await service.call(principal(), "list_supported_objects", {
+        provider: "META_ADS",
+      }),
+    ).toMatchObject({ items: ["account", "campaign", "metrics"] });
+    await service.call(principal(), "google_ads_list_keywords", {
+      account_id: account.externalAccountId,
+      since: "2026-03-01",
+      until: "2026-09-28",
+      campaign_ids: ["123"],
+      ad_group_ids: ["456"],
+      statuses: ["PAUSED"],
+      min_cost: 1,
+      limit: 25,
+    });
+    expect(readGoogleKeywords).toHaveBeenCalledWith(
+      "workspace-a",
+      "connection-a",
+      "internal-account-a",
+      {
+        campaignIds: ["123"],
+        adGroupIds: ["456"],
+        statuses: ["PAUSED"],
+        range: { startDate: "2026-03-01", endDate: "2026-09-28" },
+        minCost: 1,
+        limit: 25,
+      },
+    );
+    await expect(
+      service.call(principal(), "google_ads_list_keywords", {
+        provider: "META_ADS",
+        account_id: account.externalAccountId,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      service.call(principal(), "google_ads_list_keywords", {
+        account_id: "bad",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      service.call(principal(), "google_ads_list_keywords", {
+        account_id: account.externalAccountId,
+        statuses: ["UNKNOWN"],
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(
+      service.call(principal(), "google_ads_list_keywords", {
+        account_id: account.externalAccountId,
+        since: "",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_request" });
   });
 
   it("exposes every exact V1 tool name", () => {

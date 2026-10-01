@@ -69,6 +69,7 @@ export type ProviderErrorCode =
   | "provider_unavailable"
   | "rate_limited"
   | "invalid_account"
+  | "invalid_request"
   | "account_disabled"
   | "connection_revoked"
   | "google_ads_manager_metrics_unsupported"
@@ -121,7 +122,51 @@ export interface ProviderReadAdapter {
     campaignId?: string,
   ): Promise<ProviderMetricSummary>;
   health(context: ProviderReadContext): Promise<ProviderHealthView>;
+  listKeywords?(
+    context: ProviderReadContext,
+    options: GoogleKeywordOptions,
+  ): Promise<GoogleKeywordPage>;
 }
+
+export type GoogleKeywordOptions = {
+  campaignIds?: string[] | undefined;
+  adGroupIds?: string[] | undefined;
+  statuses?: string[] | undefined;
+  range: ProviderDateRange;
+  minCost?: number;
+  limit: number;
+  cursor?: string | undefined;
+};
+
+export type GoogleKeyword = {
+  resource_name: string;
+  criterion_id: string;
+  campaign_id: string;
+  campaign_name: string;
+  campaign_status: string;
+  ad_group_id: string;
+  ad_group_name: string;
+  ad_group_status: string;
+  text: string;
+  match_type: string;
+  status: string;
+  serving_status: string | null;
+  approval_status: string | null;
+  quality_score: number | null;
+  cpc: number | null;
+  effective_cpc: number | null;
+  final_urls: string[];
+  impressions: number;
+  clicks: number;
+  cost: number;
+  currency: string | null;
+  conversions: number;
+  all_conversions: number;
+  cost_per_conversion: number | null;
+  duplicate_in_campaigns: Array<{ campaign_id: string; campaign_name: string }>;
+};
+
+export type GoogleKeywordPage = { items: GoogleKeyword[]; nextCursor?: string };
 
 export type ProviderCampaignMutation = {
   objectId: string;

@@ -29,6 +29,57 @@
 - STOP CONDITIONS этого этапа: **не сработали** — зависимость, версия, схема БД и общий Meta/Public preview/commit не менялись. Ранее найденный **HIGH** конфликт Public MCP остаётся точкой остановки **перед этапом 6**, не решён на этапе 2.
 - Неопределённости до этапа 3: фактические live A–D, production API env/version, Google Console access/approval, фактические budget period/shared для `15961195382`, ответы Google с реальных аккаунтов. **Этап 3 не начинать без нового разрешения пользователя.**
 
-## Этапы 3–9
+## Этап 3 — чтение ключевых слов
+
+- Дата: 2026-10-01. Ветка `codex/google-ads-ppc`, parent `2ca493471cfaba70f6574db029d7b26301565e52`. Реализован только Google Ads READ; этапы 4–9 не начаты.
+- MCP tool: `google_ads_list_keywords`. Обязателен `account_id` (10 цифр, допускаются дефисы); опциональны `campaign_ids`/`ad_group_ids` (массивы 1–200 строковых числовых ID), `statuses` (`ENABLED|PAUSED|REMOVED`), `since` и `until` вместе (`YYYY-MM-DD`), `min_cost` (неотрицательное число в currency units), `limit` (1–500, default 100), `cursor` (opaque). Неуказанные даты используют прежний `defaultReportRange()` проекта: вчера и день за 30 суток до сегодня по UTC. Даты относятся **только к метрикам**, не к inventory. По умолчанию исключаются REMOVED keyword/campaign/ad group; явный `statuses:["REMOVED"]` разрешает только удалённые keyword, но не удалённые campaign/ad group. `UNKNOWN`/`UNSPECIFIED` v24 — response-only, не допускаются как input.
+- Query A, `GoogleAdsService.Search` (пагинация Google по 10 000 строк):
+
+```gaql
+SELECT campaign.id, campaign.name, campaign.status,
+  ad_group.id, ad_group.name, ad_group.status,
+  ad_group_criterion.resource_name, ad_group_criterion.criterion_id,
+  ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+  ad_group_criterion.status, ad_group_criterion.negative,
+  ad_group_criterion.approval_status, ad_group_criterion.system_serving_status,
+  ad_group_criterion.quality_info.quality_score,
+  ad_group_criterion.cpc_bid_micros,
+  ad_group_criterion.effective_cpc_bid_micros,
+  ad_group_criterion.final_urls
+FROM ad_group_criterion
+WHERE ad_group_criterion.type = 'KEYWORD'
+  AND ad_group_criterion.negative = FALSE
+  AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED'
+  AND ad_group_criterion.status != 'REMOVED'
+ORDER BY ad_group.id, ad_group_criterion.criterion_id
+```
+
+Последнее условие статуса заменяется на `IN (...)` при явных `statuses`; `campaign.id IN (...)` и `ad_group.id IN (...)` добавляются при фильтрах. Query A не содержит dates/metrics, поэтому нулевые ключи остаются.
+
+- Query B, `GoogleAdsService.SearchStream`, один batch до 200 criterion resource names:
+
+```gaql
+SELECT ad_group_criterion.resource_name, metrics.impressions,
+  metrics.clicks, metrics.cost_micros, metrics.conversions,
+  metrics.all_conversions
+FROM keyword_view
+WHERE segments.date BETWEEN '{since}' AND '{until}'
+  AND ad_group_criterion.resource_name IN ('customers/.../adGroupCriteria/...', ...)
+```
+
+Склейка по `ad_group_criterion.resource_name`; отсутствующие метрики → 0. `min_cost` применяется после merge и до формирования страницы.
+
+- Пагинация: Google Search возвращает фиксированные страницы до 10 000; внутри страницы метрики подгружаются пачками до 200. Курсор — base64url JSON с версией, provider `pageToken`, индексом строки и fingerprint account/filters/date/min_cost. Следующий курсор ставится **перед** первым следующим подходящим keyword, поэтому `min_cost` не перескакивает кандидатов; сортировка по `ad_group.id, criterion_id` стабильна при неизменном inventory. Между вызовами Google-данные могут измениться — snapshot isolation API не обещается. Scan ограничен 20 provider pages (до 200 000 строк при стандартной странице Google); сверх лимита tool явно просит сузить фильтры. Один вызов держит в памяти максимум одну inventory страницу плюс batches.
+- Дубликаты: дополнительный account-level paginated Search по non-negative/non-REMOVED criteria в `ENABLED` campaigns и non-REMOVED groups. Читаются `campaign.id/name` и `keyword.text`, map хранит только нормализованные тексты текущей выходной страницы. Нормализация удаляет `[ ] " +`, приводит к нижнему регистру и сворачивает пробелы; порядок слов не меняется, stemming/fuzzy/close variants нет. Текущая campaign исключается, повторения в той же campaign схлопываются. Нет N+1; цена — проход по account-wide keyword inventory **на каждую выдаваемую страницу**, при очень больших аккаунтах это дополнительная нагрузка.
+- Выход каждого keyword: `resource_name`, `criterion_id`, campaign/ad group ID/name/status, `text`, `match_type`, `status`, `serving_status`, `approval_status`, nullable `quality_score`, nullable `cpc`/`effective_cpc`, `final_urls` (массив v24), `impressions`, `clicks`, `cost`, `currency`, `conversions`, `all_conversions`, nullable `cost_per_conversion`, `duplicate_in_campaigns` (campaign ID/name). `cpc`, `effective_cpc`, `cost` делятся на 1 000 000 ровно один раз; `cost_per_conversion = cost / conversions`, при нуле — `null`. Валюта из сохранённого account context Stage 2 или одного customer read на вызов; не на каждый keyword.
+- `list_supported_objects(GOOGLE_ADS)` теперь `account,campaign,metrics,keyword,ad_group`; Meta остаётся `account,campaign,metrics`. `get_provider_capabilities(GOOGLE_ADS).write` остаётся `false`.
+- v24: сверены [ad_group_criterion fields](https://developers.google.com/google-ads/api/fields/v24/ad_group_criterion), [keyword_view attributed resources](https://developers.google.com/google-ads/api/fields/v24/keyword_view), [status enum](https://developers.google.com/google-ads/api/reference/rpc/v24/AdGroupCriterionStatusEnum.AdGroupCriterionStatus), [Query cookbook](https://developers.google.com/google-ads/api/docs/query/cookbook), [GAQL grammar](https://developers.google.com/google-ads/api/docs/query/grammar) и [REST pagination](https://developers.google.com/google-ads/api/rest/examples). Все запрошенные поля существуют; фактический v24 contract — `final_urls` (массив), поэтому не подменяем его одиночным URL. Целые Query A/B **не выполнялись против live API/GoogleAdsFieldService**: остаётся uncertainty по полной совместимости SELECT/FROM/WHERE, которую должен снять READ smoke.
+- Изменённые зоны: изолированный `google-ads-keywords.ts` + unit tests, Google adapter, provider read interface/service и typed validation, MCP registry/schema/dispatch/capabilities и tests, Stage 3 smoke check, этот progress. Ни schema/migration, ни Meta adapter/write/preview/commit, ни Public MCP branch не менялись.
+- Тесты: mock/unit покрывают метрики и zero-traffic, все status/default filters, campaign/ad group filters, dates in Query B, micros/currency, zero conversions, nullable quality/final URLs, `min_cost` с page1/page2, нормализацию/ENABLED-only дубликаты, bad inputs/cursor, structured Google API error, adapter REST path без mutate, capabilities и Meta supported-object regression. `pnpm typecheck` PASS 15/15, `pnpm lint` PASS 10/10, `pnpm test` PASS 15/15 (API 312 passed, 20 skipped; Meta tests включены), `node --test scripts/google_ads_smoke.test.mjs` PASS 3/3, legacy Python `PYTHONPATH=.;src` + `python -m pytest -q tests/unit` PASS 238 passed / 1 skipped, `python -m compileall -q src/ad_mcp` PASS. Integration-тесты с DB/Redis остаются skipped.
+- Live smoke Stage 3: `scripts/google_ads_smoke.mjs` добавляет проверку account `9458996580`, campaign `hm_oc_almaty_proktology_search`, 2026-03-01..2026-09-28; keyword count 68–72 (не денежный допуск), total spend ≈31 287 USD и `[приват клиника]` ≈2 998 USD (±2%). `EXPECTED/ACTUAL/PASS/FAIL` выводится скриптом. Запуск: **`SMOKE NOT RUN: NO LIVE GOOGLE ADS ACCESS`** — локальных `GOOGLE_ADS_SMOKE_MCP_URL`/`GOOGLE_ADS_SMOKE_BEARER_TOKEN` нет; фактические live results отсутствуют.
+- Diff/secret checks: `git diff --check` PASS; стандартный `pnpm security:secrets` PASS; дополнительная проверка 12 изменённых/новых файлов на типовые ключи/токены — 0 потенциальных совпадений.
+- STOP CONDITIONS Stage 3: не обнаружены для dependency/API version/DB schema/shared preview/Meta write. Прежний HIGH конфликт Public MCP остаётся только для будущего этапа 6. Production effective API version и live Google metrics/GAQL compatibility остаются непроверенными. После отчёта остановиться до человеческой проверки.
+
+## Этапы 4–9
 
 Не начаты. Никаких Google/Meta provider writes, `mutate` или `validate_only` не выполнялось; push/deploy отсутствуют.

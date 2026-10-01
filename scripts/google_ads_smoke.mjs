@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 
-// Stage 2 only: MCP read tools. This script has no mutate or validate_only path.
+// Stages 2–3: MCP read tools only. No mutate or validate_only path.
 const PERIOD = { start_date: "2026-08-30", end_date: "2026-09-28" };
 const TOKEN = process.env.GOOGLE_ADS_SMOKE_BEARER_TOKEN;
 const ENDPOINT = process.env.GOOGLE_ADS_SMOKE_MCP_URL;
@@ -200,6 +200,58 @@ async function main() {
           Number.isFinite(spend) &&
           Boolean(details?.period && details.resourceName) &&
           typeof details?.explicitlyShared === "boolean",
+      };
+    },
+  );
+
+  await run(
+    "E. Google Ads keywords",
+    "hm_oc_almaty_proktology_search: 68–72 keywords; total spend about 31,287 USD; [приват клиника] about 2,998 USD (money ±2%)",
+    async () => {
+      const campaigns = await call("list_campaigns", {
+        account_id: "9458996580",
+        limit: 500,
+      });
+      const campaign = campaigns.items?.find(
+        (item) => item.name === "hm_oc_almaty_proktology_search",
+      );
+      if (!campaign?.id)
+        throw new Error("target campaign not found in first 500 campaigns");
+      const items = [];
+      let cursor;
+      for (let page = 0; page < 100; page++) {
+        const result = await call("google_ads_list_keywords", {
+          account_id: "9458996580",
+          campaign_ids: [campaign.id],
+          since: "2026-03-01",
+          until: "2026-09-28",
+          limit: 100,
+          ...(cursor ? { cursor } : {}),
+        });
+        if (!Array.isArray(result.items))
+          throw new Error("invalid keyword page");
+        items.push(...result.items);
+        cursor = result.nextCursor;
+        if (!cursor) break;
+        if (page === 99)
+          throw new Error("keyword pagination exceeded 100 pages");
+      }
+      const spend = items.reduce(
+        (sum, item) => sum + Number(item.cost ?? 0),
+        0,
+      );
+      const privateClinic = items.find(
+        (item) => item.text === "[приват клиника]",
+      );
+      const keywordSpend = Number(privateClinic?.cost);
+      return {
+        actual: `${items.length} keywords; total=${spend} ${items[0]?.currency ?? "null"}; [приват клиника]=${keywordSpend}`,
+        pass:
+          items.length >= 68 &&
+          items.length <= 72 &&
+          items.every((item) => item.currency === "USD") &&
+          withinTwoPercent(spend, 31287) &&
+          withinTwoPercent(keywordSpend, 2998),
       };
     },
   );

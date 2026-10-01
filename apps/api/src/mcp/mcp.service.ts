@@ -191,6 +191,7 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "google_analytics_compare_periods",
   "google_analytics_list_google_ads_links",
   "google_analytics_get_custom_dimensions_metrics",
+  "google_ads_list_keywords",
 ] as const;
 
 const COMPAT_PREVIEW_OPERATIONS: Record<string, string> = {
@@ -382,6 +383,39 @@ function googleCampaignStatuses(value: unknown): string[] | undefined {
   ];
 }
 
+function googleKeywordIds(value: unknown, label: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 200 ||
+    value.some((item) => typeof item !== "string" || !/^\d{1,20}$/.test(item))
+  )
+    throw new ProviderError(
+      "invalid_request",
+      `${label} must contain 1–200 numeric IDs.`,
+    );
+  return [...new Set(value)];
+}
+
+function googleKeywordStatuses(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.some(
+      (item) =>
+        typeof item !== "string" ||
+        !["ENABLED", "PAUSED", "REMOVED"].includes(item.toUpperCase()),
+    )
+  )
+    throw new ProviderError(
+      "invalid_request",
+      "statuses must contain ENABLED, PAUSED, or REMOVED.",
+    );
+  return [...new Set(value.map((item: string) => item.toUpperCase()))];
+}
+
 @Injectable()
 export class McpService {
   public constructor(
@@ -400,6 +434,7 @@ export class McpService {
       description: toolDescription(name),
       inputSchema: metaReadSchema(name) ??
         previewToolSchema(name) ??
+        googleKeywordToolSchema(name) ??
         ga4ToolSchema(name) ?? {
           ...(name === "list_connected_resources"
             ? { additionalProperties: false }
@@ -694,6 +729,95 @@ export class McpService {
           account.provider === "GOOGLE_ADS"
             ? googleCampaignStatuses(args.status ?? args.statuses)
             : undefined,
+        );
+      }
+      case "google_ads_list_keywords": {
+        if (args.provider !== undefined && args.provider !== "GOOGLE_ADS")
+          throw new ProviderError(
+            "invalid_request",
+            "google_ads_list_keywords supports GOOGLE_ADS only.",
+          );
+        const requested = args.account_id;
+        if (
+          typeof requested !== "string" ||
+          !/^\d{10}$/.test(requested.replace(/-/g, ""))
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "account_id must be a 10-digit Google Ads customer ID.",
+          );
+        const account = await this.account(principal, {
+          provider: "GOOGLE_ADS",
+          account_id: requested.replace(/-/g, ""),
+        });
+        const campaignIds = googleKeywordIds(args.campaign_ids, "campaign_ids");
+        const adGroupIds = googleKeywordIds(args.ad_group_ids, "ad_group_ids");
+        const statuses = googleKeywordStatuses(args.statuses);
+        const limit = args.limit === undefined ? 100 : args.limit;
+        if (
+          typeof limit !== "number" ||
+          !Number.isInteger(limit) ||
+          limit < 1 ||
+          limit > 500
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "limit must be between 1 and 500.",
+          );
+        const minCost = args.min_cost;
+        if (
+          minCost !== undefined &&
+          (typeof minCost !== "number" ||
+            !Number.isFinite(minCost) ||
+            minCost < 0)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "min_cost must be a non-negative number.",
+          );
+        if (
+          args.cursor !== undefined &&
+          (typeof args.cursor !== "string" || !args.cursor)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "Invalid Google keyword cursor.",
+          );
+        if (
+          (args.since !== undefined || args.until !== undefined) &&
+          (typeof args.since !== "string" ||
+            !args.since ||
+            typeof args.until !== "string" ||
+            !args.until)
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "since and until must be supplied together.",
+          );
+        let metricRange;
+        try {
+          metricRange = googleInsightsRange(args);
+        } catch (error) {
+          throw new ProviderError(
+            "invalid_request",
+            error instanceof Error
+              ? error.message
+              : "Invalid Google Ads date range.",
+          );
+        }
+        return this.providers.readGoogleKeywords(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          {
+            ...(campaignIds ? { campaignIds } : {}),
+            ...(adGroupIds ? { adGroupIds } : {}),
+            ...(statuses ? { statuses } : {}),
+            range: metricRange,
+            ...(minCost !== undefined ? { minCost } : {}),
+            limit,
+            ...(args.cursor ? { cursor: args.cursor } : {}),
+          },
         );
       }
       case "get_campaign": {
@@ -1899,7 +2023,12 @@ export class McpService {
     if (!definition) return { provider, items: [] };
     const items =
       kind === "objects"
-        ? ["account", "campaign", ...(definition.read ? ["metrics"] : [])]
+        ? [
+            "account",
+            "campaign",
+            ...(definition.read ? ["metrics"] : []),
+            ...(provider === "GOOGLE_ADS" ? ["keyword", "ad_group"] : []),
+          ]
         : definition.read
           ? [
               "spend",
@@ -2014,6 +2143,8 @@ export class McpService {
 }
 
 function toolDescription(name: string): string {
+  if (name === "google_ads_list_keywords")
+    return "Read-only Google Ads keyword inventory and period metrics, including zero-traffic keywords. Never changes ads.";
   if (name === "list_connected_resources")
     return "List all currently enabled resources in the caller's workspace, grouped as advertising accounts, Google Analytics properties and Search Console properties. Use this for a complete connection inventory.";
   if (name === "list_ad_accounts")
@@ -2037,6 +2168,44 @@ function toolDescription(name: string): string {
   )
     return "Commit the exact explicitly confirmed preview_token using the same MCP key. Send only {preview_token}. The controlled policy allows only the prepared Meta account/campaign, PAUSED and name-only; the safe new name is bound to the preview. Reads Meta before and after the mutation. Generic writes remain blocked.";
   return `HolyMedia MCP compatibility tool: ${name}`;
+}
+
+function googleKeywordToolSchema(
+  name: string,
+): Record<string, unknown> | undefined {
+  if (name !== "google_ads_list_keywords") return undefined;
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["account_id"],
+    properties: {
+      provider: { type: "string", enum: ["GOOGLE_ADS"] },
+      account_id: { type: "string", pattern: "^[0-9-]{10,13}$" },
+      campaign_ids: {
+        type: "array",
+        minItems: 1,
+        maxItems: 200,
+        items: { type: "string", pattern: "^[0-9]{1,20}$" },
+      },
+      ad_group_ids: {
+        type: "array",
+        minItems: 1,
+        maxItems: 200,
+        items: { type: "string", pattern: "^[0-9]{1,20}$" },
+      },
+      statuses: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: { type: "string", enum: ["ENABLED", "PAUSED", "REMOVED"] },
+      },
+      since: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+      until: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+      min_cost: { type: "number", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 500 },
+      cursor: { type: "string", minLength: 1 },
+    },
+  };
 }
 
 function previewToolSchema(name: string): Record<string, unknown> | undefined {

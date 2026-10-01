@@ -363,6 +363,131 @@ describe("Google Ads v2 adapter", () => {
       providerCode: "invalid_grant",
     });
   });
+
+  it("reads keyword inventory, metric batch and duplicates without mutation or per-keyword currency reads", async () => {
+    const resourceName = "customers/1234567890/adGroupCriteria/10~5";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [
+            {
+              campaign: { id: "1", name: "Search", status: "ENABLED" },
+              adGroup: { id: "10", name: "Group", status: "ENABLED" },
+              adGroupCriterion: {
+                resourceName,
+                criterionId: "5",
+                keyword: { text: "[clinic]", matchType: "EXACT" },
+                status: "ENABLED",
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            results: [
+              {
+                adGroupCriterion: { resourceName },
+                metrics: { costMicros: "1000000", conversions: "0" },
+              },
+            ],
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await new GoogleAdsAdapter(config).listKeywords(
+      {
+        credentials: { accessToken: "access", scopes: [] },
+        accountId: "1234567890",
+        currency: "USD",
+      },
+      { range: { startDate: "2026-03-01", endDate: "2026-09-28" }, limit: 100 },
+    );
+    expect(result.items[0]).toMatchObject({
+      resource_name: resourceName,
+      cost: 1,
+      currency: "USD",
+      cost_per_conversion: null,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      expect.stringContaining("/v24/customers/1234567890/googleAds:search"),
+      expect.stringContaining(
+        "/v24/customers/1234567890/googleAds:searchStream",
+      ),
+      expect.stringContaining("/v24/customers/1234567890/googleAds:search"),
+    ]);
+    expect(
+      fetchMock.mock.calls.every(
+        ([, init]) => (init as RequestInit).method === "POST",
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.every(
+        ([, init]) =>
+          !(
+            "developer-token" in
+            ((init as RequestInit).headers as Record<string, string>)
+          ),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps structured Google errors on the keyword read path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: 400,
+              status: "INVALID_ARGUMENT",
+              details: [
+                {
+                  "@type":
+                    "type.googleapis.com/google.ads.googleads.v24.errors.GoogleAdsFailure",
+                  requestId: "keyword-req-1",
+                  errors: [
+                    {
+                      errorCode: { queryError: "INVALID_FIELD_NAME" },
+                      message: "Invalid field",
+                      location: { fieldPathElements: [{ fieldName: "query" }] },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          400,
+        ),
+      ),
+    );
+    await expect(
+      new GoogleAdsAdapter(config).listKeywords(
+        {
+          credentials: { accessToken: "access", scopes: [] },
+          accountId: "1234567890",
+          currency: "USD",
+        },
+        {
+          range: { startDate: "2026-03-01", endDate: "2026-09-28" },
+          limit: 100,
+        },
+      ),
+    ).rejects.toMatchObject({
+      requestId: "keyword-req-1",
+      errors: [
+        {
+          error_code: "INVALID_FIELD_NAME",
+          field_path: "query",
+          message: "Invalid field",
+        },
+      ],
+    });
+  });
 });
 
 describe("Google Analytics GA4 adapter", () => {

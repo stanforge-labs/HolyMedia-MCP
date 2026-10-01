@@ -24,6 +24,7 @@ export class ProviderError extends Error {
 
 export function shouldMarkConnectionDegraded(error: unknown): boolean {
   if (!(error instanceof ProviderError)) return true;
+  if (error.code === "invalid_request") return false;
   if (error.code === "google_ads_manager_metrics_unsupported") return false;
   // A denied customer can coexist with other readable customers on the same
   // Google OAuth connection; do not mark the entire connection unhealthy.
@@ -49,6 +50,7 @@ export function toSafeProviderException(error: unknown): Error {
     provider_unavailable: "Провайдер временно недоступен.",
     rate_limited: "Провайдер временно ограничил частоту запросов.",
     invalid_account: "Рекламный кабинет недействителен.",
+    invalid_request: error.message,
     account_disabled: "Рекламный кабинет отключён.",
     connection_revoked: "Доступ к подключению отозван.",
     google_ads_manager_metrics_unsupported:
@@ -59,6 +61,7 @@ export function toSafeProviderException(error: unknown): Error {
   const message = messages[error.code] ?? "Операция провайдера не выполнена.";
   if (
     error.code === "provider_not_configured" ||
+    error.code === "invalid_request" ||
     error.code === "invalid_oauth_state" ||
     error.code === "authorization_denied" ||
     error.code === "insufficient_permissions"
