@@ -36,6 +36,7 @@ export class CsrfGuard implements CanActivate {
     if (
       method === "POST" &&
       (requestPath === "/mcp" ||
+        requestPath === "/mcp/public" ||
         ["/oauth/token", "/oauth/register", "/oauth/revoke"].some((path) =>
           requestPath?.endsWith(path),
         ))

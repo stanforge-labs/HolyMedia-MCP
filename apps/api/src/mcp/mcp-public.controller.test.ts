@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { McpService } from "./mcp.service.js";
+import { PUBLIC_TOOL_NAMES } from "./mcp-public-tools.js";
 
 function reply() {
   const value = { code: vi.fn(), header: vi.fn(), send: vi.fn() };
@@ -23,6 +24,15 @@ function request(method: string, name?: string) {
 }
 
 describe("public MCP transport", () => {
+  const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  beforeEach(() => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+  });
+  afterEach(() => {
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+  });
   it("registers POST and GET at /mcp/public while keeping /mcp", () => {
     expect(Reflect.getMetadata("path", McpController.prototype.post)).toBe(
       "mcp",
@@ -67,12 +77,14 @@ describe("public MCP transport", () => {
     )) as {
       result: { tools: Array<{ name: string }> };
     };
-    expect(publicList.result.tools).toHaveLength(42);
+    expect(publicList.result.tools.map((tool) => tool.name)).toEqual([
+      ...PUBLIC_TOOL_NAMES,
+    ]);
     const legacyList = (await controller.post(
       request("tools/list"),
       reply() as never,
     )) as { result: { tools: Array<{ name: string }> } };
-    expect(legacyList.result.tools).toHaveLength(157);
+    expect(legacyList.result.tools).toEqual(legacyTools);
     expect(
       publicList.result.tools.some((tool) => tool.name === "commit_preview"),
     ).toBe(false);

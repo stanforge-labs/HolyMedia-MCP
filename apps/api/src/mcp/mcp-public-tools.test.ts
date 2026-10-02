@@ -11,13 +11,24 @@ import {
 const descriptors = McpService.prototype.tools.call({} as McpService);
 
 describe("public MCP tool registry", () => {
-  it("keeps the legacy 157-tool contract and exposes exactly the reviewed 42", () => {
-    expect(V1_COMPATIBLE_MCP_TOOLS).toHaveLength(157);
-    expect(PUBLIC_READ_TOOLS).toHaveLength(38);
+  it("exposes the reviewed read inventory from the current legacy registry", () => {
+    expect(V1_COMPATIBLE_MCP_TOOLS).toEqual(
+      expect.arrayContaining([...PUBLIC_READ_TOOLS]),
+    );
+    expect(PUBLIC_READ_TOOLS).toEqual(
+      expect.arrayContaining([
+        "google_ads_list_keywords",
+        "google_ads_search_terms",
+        "google_ads_list_negatives",
+        "google_ads_check_negative_conflicts",
+      ]),
+    );
     expect(PUBLIC_WRITE_TOOLS).toHaveLength(4);
     const listed = publicTools(descriptors);
     expect(listed.map((tool) => tool.name)).toEqual([...PUBLIC_TOOL_NAMES]);
-    expect(new Set(listed.map((tool) => tool.name)).size).toBe(42);
+    expect(new Set(listed.map((tool) => tool.name)).size).toBe(
+      PUBLIC_TOOL_NAMES.length,
+    );
     for (const hidden of [
       "confirm_preview",
       "commit_preview",

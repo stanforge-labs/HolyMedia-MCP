@@ -150,12 +150,15 @@ describe("OAuth client metadata documents", () => {
       token_endpoint_auth_method: "none",
     };
     expect(registrationMetadata(base).scope).toBe("adforge:mcp:read");
-    expect(registrationMetadata({
-      ...base,
-      scope: "adforge:mcp:read adforge:mcp:write",
-    }).scope).toBe("adforge:mcp:read adforge:mcp:write");
-    expect(() => registrationMetadata({ ...base, scope: "adforge:mcp:write" }))
-      .toThrow();
+    expect(
+      registrationMetadata({
+        ...base,
+        scope: "adforge:mcp:read adforge:mcp:write",
+      }).scope,
+    ).toBe("adforge:mcp:read adforge:mcp:write");
+    expect(() =>
+      registrationMetadata({ ...base, scope: "adforge:mcp:write" }),
+    ).toThrow();
   });
 });
 

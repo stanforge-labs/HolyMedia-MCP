@@ -944,25 +944,37 @@ describe("Meta Ads v2 adapter", () => {
   });
 
   it.each([
-    ["change_name", { new_name: "Public name", status: "IGNORED" }, { name: "Public name" }],
+    [
+      "change_name",
+      { new_name: "Public name", status: "IGNORED" },
+      { name: "Public name" },
+    ],
     ["pause", { name: "IGNORED" }, { status: "PAUSED" }],
     ["resume", { name: "IGNORED" }, { status: "ACTIVE" }],
-  ] as const)("sends only the %s business field to Meta", async (operation, payload, expected) => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true }));
-    vi.stubGlobal("fetch", fetchMock);
-    await new MetaAdsAdapter(config).mutateCampaign(
-      {
-        credentials: { accessToken: "fake-user-token", scopes: ["ads_read", "ads_management"] },
-        accountId: "act_1",
-      },
-      { objectId: "120251174838720324", operation, payload },
-    );
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = new URLSearchParams(String(init.body));
-    body.delete("access_token");
-    expect(Object.fromEntries(body)).toEqual(expected);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
+  ] as const)(
+    "sends only the %s business field to Meta",
+    async (operation, payload, expected) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ success: true }));
+      vi.stubGlobal("fetch", fetchMock);
+      await new MetaAdsAdapter(config).mutateCampaign(
+        {
+          credentials: {
+            accessToken: "fake-user-token",
+            scopes: ["ads_read", "ads_management"],
+          },
+          accountId: "act_1",
+        },
+        { objectId: "120251174838720324", operation, payload },
+      );
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = new URLSearchParams(String(init.body));
+      body.delete("access_token");
+      expect(Object.fromEntries(body)).toEqual(expected);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("reads an exact campaign directly from Meta for controlled verification", async () => {
     const fetchMock = vi.fn().mockResolvedValue(

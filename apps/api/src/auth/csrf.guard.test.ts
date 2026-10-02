@@ -60,18 +60,15 @@ describe("CsrfGuard", () => {
     ).toBe(true);
   });
 
-  it("allows an unauthenticated MCP POST to reach its OAuth challenge", () => {
+  it("allows unauthenticated MCP POSTs to reach their OAuth challenges", () => {
     const guard = new CsrfGuard();
-    expect(
-      guard.canActivate(
-        context({
-          method: "POST",
-          url: "/mcp",
-          headers: {},
-          cookies: {},
-        }),
-      ),
-    ).toBe(true);
+    for (const url of ["/mcp", "/mcp/public"]) {
+      expect(
+        guard.canActivate(
+          context({ method: "POST", url, headers: {}, cookies: {} }),
+        ),
+      ).toBe(true);
+    }
   });
 
   it("requires browser CSRF proof for approval view and decision even with a bearer", () => {
