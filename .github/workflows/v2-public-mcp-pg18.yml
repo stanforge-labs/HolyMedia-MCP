@@ -136,6 +136,9 @@ jobs:
           DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_upgrade
           V2_PG18_TEST_DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_upgrade
           V2_PG18_REHEARSAL: "true"
+          # Direct service test uses vi.fn provider stubs; no API or provider credentials.
+          PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true"
+          PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true"
         run: |
           set -euo pipefail
           pnpm build
