@@ -50,7 +50,7 @@ test("tariffs, profile, AI client and light-theme assets remain usable", async (
   await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
   const tokenForm = page.locator("form.token-form");
   await expect(tokenForm.locator(".scope-note")).toContainText(
-    "всем подключённым кабинетам",
+    "всем подключённым и выбранным ресурсам",
   );
   await tokenForm.getByRole("button", { name: "Срок действия" }).click();
   await expect(

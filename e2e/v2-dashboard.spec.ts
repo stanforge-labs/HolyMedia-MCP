@@ -486,7 +486,7 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(page.locator(".one-time-secret")).toBeVisible();
     await expect(page.locator(".account-picker")).toHaveCount(0);
     await expect(page.locator(".scope-note")).toContainText(
-      "всем подключённым кабинетам",
+      "всем подключённым и выбранным ресурсам",
     );
     await expect(tokenForm.locator('input[name="name"]')).toHaveValue("");
     await expect(page.locator(".notice--error")).toHaveCount(0);
