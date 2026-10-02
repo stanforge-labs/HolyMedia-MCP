@@ -2,6 +2,9 @@ name: v2-public-mcp-developer-mode
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/public-mcp-developer-mode-run
 
 permissions:
   contents: read
@@ -11,8 +14,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  source_integrity:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/codex/public-mcp-developer-mode-run') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/public-mcp-main-integration')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact event SHA without acceptance secrets
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify harness ancestor and migrations before acceptance runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor 7bcb0f46e1d45ca74932913bfbbbd089339e61f6 HEAD
+          test -d packages/database/prisma/migrations/0032_public_mcp_oauth_previews
+          test -d packages/database/prisma/migrations/0033_public_mcp_browser_approval
   acceptance:
-    if: github.ref == 'refs/heads/codex/public-mcp-main-integration'
+    needs: source_integrity
+    if: >-
+      needs.source_integrity.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/codex/public-mcp-developer-mode-run') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/public-mcp-main-integration'))
     runs-on: ubuntu-latest
     timeout-minutes: 85
     env:
@@ -66,20 +93,17 @@ jobs:
               exit 1
             fi
           done
-      - name: Checkout exact dispatched integration commit
+      - name: Checkout exact event commit
         id: checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Verify integration ancestry and clean migration numbering
+      - name: Verify acceptance checkout SHA
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git merge-base --is-ancestor 70482fb521cbb23483123c11e06a7c983078ff88 HEAD
-          test -d packages/database/prisma/migrations/0032_public_mcp_oauth_previews
-          test -d packages/database/prisma/migrations/0033_public_mcp_browser_approval
       - uses: pnpm/action-setup@v4
         with:
           version: 11.1.3
@@ -92,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          node --test scripts/public_mcp_devmode_gateway.test.mjs
+          node --test scripts/public_mcp_devmode_gateway.test.mjs scripts/public_mcp_devmode_tunnel_target.test.mjs
           pnpm --filter @holymedia/api exec vitest run src/mcp/mcp-transport-boundary.http.test.ts src/mcp/oauth-authorization.service.test.ts src/mcp/mcp-public-tools.test.ts src/mcp/mcp.service.test.ts
       - name: Deploy exact integration migrations to disposable PostgreSQL 18
         shell: bash
@@ -143,16 +167,7 @@ jobs:
             if ! kill -0 "$(cat "$RUNNER_TEMP/ngrok.pid")" 2>/dev/null; then echo 'TUNNEL START FAILED' >&2; exit 1; fi
             sleep 2
           done
-          node -e '
-            const fs = require("node:fs");
-            const tunnels = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/ngrok-tunnels.json", "utf8"));
-            const https = tunnels.tunnels?.find((item) => item.public_url?.startsWith("https://"));
-            if (!https) throw new Error("No HTTPS tunnel found");
-            const origin = new URL(https.public_url).origin;
-            if (origin.includes("mcp.holymedia.kz")) throw new Error("Non-disposable origin");
-            for (const name of ["TUNNEL_ORIGIN", "HOLYMEDIA_PUBLIC_BASE_URL", "CORS_ORIGINS", "NEXT_PUBLIC_API_BASE_URL"])
-              fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${origin}\n`);
-          '
+          node scripts/public_mcp_devmode_tunnel_target.mjs export "$RUNNER_TEMP/ngrok-tunnels.json"
       - name: Build API and Web with discovered tunnel origin
         shell: bash
         run: |
@@ -191,6 +206,16 @@ jobs:
       - name: Verify public OAuth, MCP, Web and write-denial boundaries
         shell: bash
         run: node scripts/public_mcp_devmode_preflight.mjs
+      - name: Show safe listener topology and recheck tunnel target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v ss > /dev/null; then
+            ss -H -ltn | awk '$4 ~ /:(3000|4000|8787)$/ { print $1, $4 }'
+          fi
+          curl -fsS http://127.0.0.1:8787/ready -o /dev/null
+          curl -fsS http://127.0.0.1:4040/api/tunnels -o "$RUNNER_TEMP/ngrok-tunnels.json"
+          node scripts/public_mcp_devmode_tunnel_target.mjs check "$RUNNER_TEMP/ngrok-tunnels.json"
       - name: Show only public URL and human acceptance instructions
         shell: bash
         run: |
@@ -215,7 +240,8 @@ jobs:
             done
             curl -fsS http://127.0.0.1:8787/ready -o /dev/null
             curl -fsS http://127.0.0.1:8787/api/health -o /dev/null
-            curl -fsS http://127.0.0.1:4040/api/tunnels -o /dev/null
+            curl -fsS http://127.0.0.1:4040/api/tunnels -o "$RUNNER_TEMP/ngrok-tunnels.json"
+            node scripts/public_mcp_devmode_tunnel_target.mjs check "$RUNNER_TEMP/ngrok-tunnels.json"
             echo "ACCEPTANCE HEALTH PASS: interval $minute/30"
             sleep 120
           done

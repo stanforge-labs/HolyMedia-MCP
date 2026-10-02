@@ -2,14 +2,24 @@
 
 This checklist is for the manual, read-only ChatGPT Developer Mode acceptance run. It is not a production or staging deployment. The workflow uses an isolated GitHub runner, PostgreSQL 18, Redis, a disposable user, and a temporary HTTPS tunnel. It does not connect provider accounts. Do not paste the acceptance email, password, OAuth codes, tokens, or screenshots containing them into issues, logs, or chat.
 
+## Disposable network topology
+
+- API: `0.0.0.0:4000` **inside the disposable GitHub-hosted runner only**. This is the application's existing bind; it is not the public endpoint.
+- Web: `127.0.0.1:3000` inside the runner.
+- Acceptance gateway: `127.0.0.1:8787` inside the runner.
+- Public: temporary ngrok HTTPS URL → **gateway only** → local API/Web routes. The workflow verifies ngrok's actual upstream target from its local metadata and rejects any target other than `127.0.0.1:8787`.
+
+Do not test the runner's public IP or forward ngrok directly to ports 4000 or 3000. [Official OpenAI documentation](https://developers.openai.com/plugins/deploy/connect-chatgpt) requires a reachable public HTTPS MCP endpoint or supported tunnel for Developer Mode testing; it does not prescribe the internal API listener address.
+
 ## Before starting
 
-1. Confirm the workflow run is for `codex/public-mcp-main-integration` and the workflow preflight passed. Do not use the production MCP URL.
-2. Add `NGROK_AUTHTOKEN`, `PUBLIC_MCP_ACCEPTANCE_EMAIL`, and `PUBLIC_MCP_ACCEPTANCE_PASSWORD` in Repository → Settings → Secrets and variables → Actions → New repository secret. Do not put their values in workflow inputs.
-3. Copy only `PUBLIC MCP DEVELOPER URL` from the run summary. The URL is ephemeral. The environment stays alive for 60 minutes after preflight; cancellation or expiry destroys it.
-4. In ChatGPT, open Settings → Security and login → Developer mode, turn it on, then Plugins → +. Enter the public `/mcp/public` URL and create the connection. Log in using the credentials whose values were added as repository secrets. Never record those values in the results below.
+1. Add `NGROK_AUTHTOKEN`, `PUBLIC_MCP_ACCEPTANCE_EMAIL`, and `PUBLIC_MCP_ACCEPTANCE_PASSWORD` in Repository → Settings → Secrets and variables → Actions → New repository secret. Do not put their values in workflow inputs or chat.
+2. Once all three are set, tell the operator `SECRETS READY`. Only then, as a **separate action**, refresh origin, verify the integration HEAD, create `codex/public-mcp-developer-mode-run` from that exact HEAD, add one empty commit (`ci: start disposable Public MCP developer-mode run`), and push that branch. Do not add more commits to it during acceptance. The workflow's `push` filter does not match `main`, the integration branch, or other feature branches.
+3. Confirm the workflow run is on `codex/public-mcp-developer-mode-run`, its source-integrity job and public preflight step passed, and it is descended from the prepared integration commit. Do not use the production MCP URL.
+4. Copy only `PUBLIC MCP DEVELOPER URL` from the run summary. The URL is ephemeral. The environment stays alive for 60 minutes after preflight; cancellation or expiry destroys it.
+5. In ChatGPT, open Settings → Security and login → Developer mode, turn it on, then Plugins → +. Enter the public `/mcp/public` URL and create the connection. Log in using the credentials whose values were added as repository secrets. Never record those values in the results below.
 
-The workflow must not be run if any required secret is absent. A new `workflow_dispatch` file must also be registered on the repository default branch before GitHub will expose manual dispatch for it; changing that branch requires separate authorization. Do not merge or push to `main` under the current task.
+Do not create the temporary run branch before human confirmation that the secrets are ready. The workflow also fails early with only a missing secret's **name** if one is absent. `workflow_dispatch` remains in the file for future use but is not needed for this push-triggered run; GitHub's [manual workflow rule](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow) still requires default-branch registration for manual dispatch. Do not add this workflow to `main` or merge the integration branch.
 
 ## Connection and safety checklist
 
@@ -53,8 +63,8 @@ The prompts are selection and argument-schema checks, not requests for live Goog
 
 ## After acceptance
 
-1. Mark the connection and evaluation rows. Record only non-sensitive findings, the workflow run URL, and the integration commit SHA. Do not save token-bearing screenshots.
+1. Mark the connection and evaluation rows. Record only non-sensitive findings, the workflow run URL, and the tested run-branch commit SHA. Do not save token-bearing screenshots.
 2. Check the sanitized gateway/API artifact, if present, for `Bearer`, `Authorization`, `Cookie`, `CSRF`, `oauth code`, `access_token`, `refresh_token`, `hmap_`, and preview tokens. The artifact intentionally contains only allowlisted method, coarse pathname, status, and duration fields. Never publish raw runner logs.
-3. Cancel the run if finished early, or let its 60-minute window expire. Confirm the tunnel is no longer usable. The runner and its disposable database/services are then torn down.
+3. Cancel the run if finished early, or let its 60-minute window expire. Confirm the tunnel is no longer usable. The runner and its disposable database/services are then torn down. Delete the temporary run branch only in a later, separately authorized cleanup step; preserve the integration branch.
 
 OpenAI's [Developer Mode deployment guide](https://developers.openai.com/plugins/deploy/connect-chatgpt) describes the plugin connection flow and prompt-based evaluation. GitHub's [manual workflow guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow) documents the default-branch registration requirement.
