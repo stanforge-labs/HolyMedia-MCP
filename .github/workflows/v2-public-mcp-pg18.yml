@@ -1,0 +1,142 @@
+name: v2-public-mcp-pg18
+
+on:
+  push:
+    branches:
+      - codex/public-mcp-main-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: holymedia
+      PGPASSWORD: ci-only-public-mcp
+      PGDATABASE: holymedia_public_mcp_test
+      HOLYMEDIA_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: holymedia_public_mcp_test
+          POSTGRES_USER: holymedia
+          POSTGRES_PASSWORD: ci-only-public-mcp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U holymedia -d holymedia_public_mcp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout integration commit
+        uses: actions/checkout@v4
+        with:
+          path: integration
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Checkout exact main baseline
+        uses: actions/checkout@v4
+        with:
+          path: base-main
+          ref: 2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: integration/pnpm-lock.yaml
+      - name: Check source states and migration numbering
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C integration rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C base-main rev-parse HEAD)" = 2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
+          test -d base-main/packages/database/prisma/migrations/0031_service_token_resource_access_mode
+          ! find base-main/packages/database/prisma/migrations -mindepth 1 -maxdepth 1 -type d -name '003[2-9]*' | grep -q .
+          test -d integration/packages/database/prisma/migrations/0032_public_mcp_oauth_previews
+          test -d integration/packages/database/prisma/migrations/0033_public_mcp_browser_approval
+          test "$(find integration/packages/database/prisma/migrations -mindepth 1 -maxdepth 1 -type d -name '003[2-9]*' | wc -l)" -eq 2
+          echo "Integration SHA: $GITHUB_SHA"
+          echo "Base SHA: $(git -C base-main rev-parse HEAD)"
+      - name: Install integration dependencies
+        working-directory: integration
+        run: pnpm install --frozen-lockfile
+      - name: Install exact baseline dependencies
+        working-directory: base-main
+        run: pnpm install --frozen-lockfile
+      - name: Verify real PostgreSQL 18 and create isolated databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          psql -v ON_ERROR_STOP=1 -c 'SELECT version();'
+          major=$(psql -At -v ON_ERROR_STOP=1 -c "SELECT current_setting('server_version_num')::int / 10000")
+          test "$major" = 18
+          psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE public_mcp_clean'
+          psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE public_mcp_upgrade'
+      - name: Clean install, schema, client, and migration status
+        working-directory: integration
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_clean
+        run: |
+          set -euo pipefail
+          pnpm --filter @holymedia/database prisma:validate
+          pnpm --filter @holymedia/database prisma:generate
+          pnpm --filter @holymedia/database prisma:deploy
+          pnpm --filter @holymedia/database prisma:status
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/v2-public-mcp-pg18-assert.sql
+          pnpm --filter @holymedia/database prisma:deploy | tee /tmp/public-mcp-clean-redeploy.log
+          grep -F 'No pending migrations to apply' /tmp/public-mcp-clean-redeploy.log
+      - name: Install exact main baseline through 0031
+        working-directory: base-main
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_upgrade
+        run: |
+          set -euo pipefail
+          pnpm --filter @holymedia/database prisma:deploy
+          applied=$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')
+          expected=$(find packages/database/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l)
+          test "$applied" -eq "$expected"
+          test "$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM _prisma_migrations WHERE migration_name = '0031_service_token_resource_access_mode' AND finished_at IS NOT NULL AND rolled_back_at IS NULL")" = 1
+          test "$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM _prisma_migrations WHERE migration_name LIKE '0032_%' OR migration_name LIKE '0033_%'")" = 0
+          psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c 'SELECT migration_name FROM _prisma_migrations ORDER BY migration_name' > /tmp/public-mcp-before.txt
+          echo "Baseline applied migrations: $applied; 0032/0033 absent"
+      - name: Apply only 0032 and 0033 to baseline database
+        working-directory: integration
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_upgrade
+        run: |
+          set -euo pipefail
+          pnpm --filter @holymedia/database prisma:deploy
+          psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c 'SELECT migration_name FROM _prisma_migrations ORDER BY migration_name' > /tmp/public-mcp-after.txt
+          comm -13 /tmp/public-mcp-before.txt /tmp/public-mcp-after.txt > /tmp/public-mcp-new.txt
+          diff -u <(printf '0032_public_mcp_oauth_previews\n0033_public_mcp_browser_approval\n') /tmp/public-mcp-new.txt
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/v2-public-mcp-pg18-assert.sql
+          pnpm --filter @holymedia/database prisma:deploy | tee /tmp/public-mcp-upgrade-redeploy.log
+          grep -F 'No pending migrations to apply' /tmp/public-mcp-upgrade-redeploy.log
+          pnpm --filter @holymedia/database prisma:status
+      - name: Public MCP database smoke with mocked provider
+        working-directory: integration
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_upgrade
+          V2_PG18_TEST_DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@127.0.0.1:5432/public_mcp_upgrade
+          V2_PG18_REHEARSAL: "true"
+        run: |
+          set -euo pipefail
+          pnpm build
+          pnpm --filter @holymedia/api exec vitest run src/mcp/mcp-public-write.pg18.integration.test.ts

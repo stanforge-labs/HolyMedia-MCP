@@ -5,20 +5,25 @@ import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 
 // Never run this against a non-disposable database by accident.
 const localUrl = process.env.V2_PG18_TEST_DATABASE_URL;
+const ciUrl = localUrl ? new URL(localUrl) : null;
 const enabled =
-  localUrl === "postgresql://postgres@127.0.0.1:55418/holymedia_pg18_test";
+  localUrl === "postgresql://postgres@127.0.0.1:55418/holymedia_pg18_test" ||
+  (process.env.V2_PG18_REHEARSAL === "true" &&
+    ciUrl?.hostname === "127.0.0.1" &&
+    ciUrl.username === "holymedia" &&
+    ciUrl.pathname === "/public_mcp_upgrade");
 
 describe.skipIf(!enabled)(
   "PostgreSQL 18 disposable public preview lifecycle",
   () => {
-    it("retains legacy rows and atomically claims one browser-approved OAuth preview", async () => {
+    it("keeps legacy preview compatibility and atomically claims one browser-approved OAuth preview", async () => {
       const database = createDatabase(localUrl!);
       const suffix = Math.random().toString(36).slice(2);
       const principal: OAuthMcpPrincipal = {
         kind: "oauth",
         tokenId: `access-${suffix}`,
-        userId: "10000000-0000-4000-8000-000000000001",
-        workspaceId: "20000000-0000-4000-8000-000000000002",
+        userId: "",
+        workspaceId: "",
         clientId: "",
         grantId: "a0000000-0000-4000-8000-00000000000a",
         resource: "https://mcp.holymedia.kz/mcp/public",
@@ -28,16 +33,75 @@ describe.skipIf(!enabled)(
       };
       let clientId = "";
       let previewId = "";
+      let workspaceId = "";
+      let userId = "";
       try {
         const version = await database.client.$queryRaw<
           Array<{ version: string }>
         >`
         SELECT current_setting('server_version') AS version`;
         expect(version[0]?.version).toMatch(/^18\./);
-        const legacy = await database.client.mcpPreview.findFirst({
-          where: {
-            id: "70000000-0000-4000-8000-000000000007",
-            serviceTokenId: "40000000-0000-4000-8000-000000000004",
+        const user = await database.client.user.create({
+          data: {
+            email: `public-pg18-${suffix}@example.test`,
+            name: "Public PG18 test",
+            passwordHash: "ci-only",
+          },
+        });
+        userId = user.id;
+        principal.userId = userId;
+        const workspace = await database.client.workspace.create({
+          data: {
+            name: "Public PG18 test",
+            slug: `public-pg18-${suffix}`,
+            accessStatus: "ACTIVE",
+            memberships: { create: { userId, role: "OWNER" } },
+          },
+        });
+        workspaceId = workspace.id;
+        principal.workspaceId = workspaceId;
+        const connection = await database.client.providerConnection.create({
+          data: {
+            workspaceId,
+            provider: "META_ADS",
+            status: "CONNECTED",
+            createdBy: userId,
+          },
+        });
+        const account = await database.client.providerAccount.create({
+          data: {
+            workspaceId,
+            connectionId: connection.id,
+            provider: "META_ADS",
+            externalAccountId: "act_123",
+            displayName: "Mock account",
+            enabled: true,
+          },
+        });
+        const identity = await database.client.serviceIdentity.create({
+          data: { workspaceId, createdById: userId, name: "Legacy preview" },
+        });
+        const token = await database.client.serviceToken.create({
+          data: {
+            serviceIdentityId: identity.id,
+            tokenDigest: `pg18-service-${suffix}`,
+            tokenPrefix: "pg18-service",
+            name: "Legacy preview",
+            scopes: ["adforge:mcp:read"],
+          },
+        });
+        const legacy = await database.client.mcpPreview.create({
+          data: {
+            workspaceId,
+            serviceTokenId: token.id,
+            provider: "META_ADS",
+            accountId: account.id,
+            externalObjectId: "123456789",
+            operation: "META_CAMPAIGN_PAUSE",
+            payload: { status: "PAUSED" },
+            diff: { before: "ACTIVE", requested: "PAUSED" },
+            previewTokenDigest: `pg18-legacy-${suffix}`,
+            expiresAt: new Date(Date.now() + 3_600_000),
           },
         });
         expect(legacy).toMatchObject({
@@ -204,6 +268,12 @@ describe.skipIf(!enabled)(
           await database.client.oAuthPublicClient.deleteMany({
             where: { id: clientId },
           });
+        if (workspaceId)
+          await database.client.workspace.deleteMany({
+            where: { id: workspaceId },
+          });
+        if (userId)
+          await database.client.user.deleteMany({ where: { id: userId } });
         await closeDatabase(database);
       }
     });
