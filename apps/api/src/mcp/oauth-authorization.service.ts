@@ -13,10 +13,8 @@ import {
   OAuthClientMetadataService,
   registrationMetadata,
 } from "./oauth-client-metadata.service.js";
+import { oauthEndpoints } from "./oauth-endpoints.js";
 
-export const OAUTH_ISSUER = "https://mcp.holymedia.kz";
-export const MCP_RESOURCE = `${OAUTH_ISSUER}/mcp`;
-export const MCP_PUBLIC_RESOURCE = `${OAUTH_ISSUER}/mcp/public`;
 export const MCP_READ_SCOPE = "adforge:mcp:read";
 export const MCP_WRITE_SCOPE = "adforge:mcp:write";
 
@@ -38,6 +36,7 @@ export type OAuthAuthorizationContextView = {
 @Injectable()
 export class OAuthAuthorizationService {
   private readonly writeScopeEnabled = loadConfig().publicMcpWriteScopeEnabled;
+  private readonly endpoints = oauthEndpoints();
 
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
@@ -89,21 +88,26 @@ export class OAuthAuthorizationService {
       input.code_challenge_method,
       "code_challenge_method",
     );
-    const resource = stringValue(input.resource) || MCP_RESOURCE;
+    const resource =
+      stringValue(input.resource) || this.endpoints.legacyResource;
     if (responseType !== "code") {
       throw new BadRequestException("Only response_type=code is supported.");
     }
     if (method !== "S256" || !validPkceChallenge(codeChallenge)) {
       throw new BadRequestException("A valid S256 PKCE challenge is required.");
     }
-    if (resource !== MCP_RESOURCE && resource !== MCP_PUBLIC_RESOURCE) {
+    if (!this.isCurrentResource(resource)) {
       throw new BadRequestException("OAuth resource is invalid.");
     }
     const client = await this.publicClient(clientId);
     if (!client || !jsonStrings(client.redirectUris).includes(redirectUri)) {
       throw new BadRequestException("OAuth client or redirect URI is invalid.");
     }
-    const scope = normalizeScope(stringValue(input.scope), resource);
+    const scope = normalizeScope(
+      stringValue(input.scope),
+      resource,
+      this.endpoints.publicResource,
+    );
     this.assertWriteScopeEnabled(scope);
     const clientScopes = new Set(client.scope.split(/\s+/).filter(Boolean));
     if (scope.split(" ").some((item) => !clientScopes.has(item))) {
@@ -133,8 +137,8 @@ export class OAuthAuthorizationService {
       });
 
     const target = principal
-      ? `${OAUTH_ISSUER}/oauth/authorize/continue?transaction=${encodeURIComponent(transaction.id)}`
-      : `${OAUTH_ISSUER}/auth?oauth_transaction=${encodeURIComponent(transaction.id)}`;
+      ? `${this.endpoints.authorizationContinue}?transaction=${encodeURIComponent(transaction.id)}`
+      : `${this.endpoints.login}?oauth_transaction=${encodeURIComponent(transaction.id)}`;
     return { url: target, statusCode: 302, transaction_id: transaction.id };
   }
 
@@ -166,7 +170,7 @@ export class OAuthAuthorizationService {
       data: { userId: principal.userId, workspaceId: selectedWorkspaceId },
     });
     return {
-      url: `${OAUTH_ISSUER}/connect/claude?transaction=${encodeURIComponent(transaction.id)}`,
+      url: `${this.endpoints.consent}?transaction=${encodeURIComponent(transaction.id)}`,
       statusCode: 302,
     };
   }
@@ -186,7 +190,11 @@ export class OAuthAuthorizationService {
           client: { select: { clientId: true, clientName: true } },
         },
       });
-    if (!transaction || transaction.userId !== principal.userId) {
+    if (
+      !transaction ||
+      !this.isCurrentResource(transaction.resource) ||
+      transaction.userId !== principal.userId
+    ) {
       throw new UnauthorizedException("OAuth transaction is not available.");
     }
     const workspaces = await this.workspacesForUser(principal.userId);
@@ -334,8 +342,8 @@ export class OAuthAuthorizationService {
     if (
       !validPkceVerifier(verifier) ||
       (requestedResource &&
-        requestedResource !== MCP_RESOURCE &&
-        requestedResource !== MCP_PUBLIC_RESOURCE)
+        requestedResource !== this.endpoints.legacyResource &&
+        requestedResource !== this.endpoints.publicResource)
     ) {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
@@ -352,6 +360,7 @@ export class OAuthAuthorizationService {
       code.usedAt ||
       code.expiresAt <= new Date() ||
       code.redirectUri !== redirectUri ||
+      !this.isCurrentResource(code.resource) ||
       (requestedResource && code.resource !== requestedResource) ||
       !pkceMatches(verifier, code.codeChallenge)
     ) {
@@ -423,8 +432,8 @@ export class OAuthAuthorizationService {
     const requestedResource = stringValue(input.resource);
     if (
       requestedResource &&
-      requestedResource !== MCP_RESOURCE &&
-      requestedResource !== MCP_PUBLIC_RESOURCE
+      requestedResource !== this.endpoints.legacyResource &&
+      requestedResource !== this.endpoints.publicResource
     ) {
       throw new UnauthorizedException("OAuth refresh token is invalid.");
     }
@@ -444,6 +453,7 @@ export class OAuthAuthorizationService {
       client.tokenEndpointAuthMethod !== "none" ||
       !refresh ||
       refresh.clientId !== client.id ||
+      !this.isCurrentResource(refresh.resource) ||
       (requestedResource && refresh.resource !== requestedResource)
     ) {
       throw new UnauthorizedException("OAuth refresh token is invalid.");
@@ -535,8 +545,9 @@ export class OAuthAuthorizationService {
 
   public async authenticate(
     rawToken: string,
-    resource: string = MCP_RESOURCE,
+    resource: string = this.endpoints.legacyResource,
   ): Promise<OAuthMcpPrincipal | null> {
+    if (!this.isCurrentResource(resource)) return null;
     if (!rawToken.startsWith("hm_oauth_")) return null;
     const token = await this.database.client.oAuthAccessToken.findUnique({
       where: { tokenDigest: digest(rawToken) },
@@ -551,7 +562,7 @@ export class OAuthAuthorizationService {
       token.revokedAt ||
       token.expiresAt <= new Date() ||
       token.resource !== resource ||
-      (resource === MCP_PUBLIC_RESOURCE && !token.refreshFamilyId) ||
+      (resource === this.endpoints.publicResource && !token.refreshFamilyId) ||
       token.client.status !== "active" ||
       token.client.revokedAt ||
       token.workspace.accessStatus !== "ACTIVE" ||
@@ -653,6 +664,13 @@ export class OAuthAuthorizationService {
     throw new BadRequestException("Explicit OAuth scope consent is required.");
   }
 
+  private isCurrentResource(resource: string): boolean {
+    return (
+      resource === this.endpoints.legacyResource ||
+      resource === this.endpoints.publicResource
+    );
+  }
+
   private async activeTransaction(transactionId: string) {
     const transaction =
       await this.database.client.oAuthAuthorizationTransaction.findFirst({
@@ -662,7 +680,7 @@ export class OAuthAuthorizationService {
           expiresAt: { gt: new Date() },
         },
       });
-    if (!transaction) {
+    if (!transaction || !this.isCurrentResource(transaction.resource)) {
       throw new BadRequestException("OAuth transaction is invalid or expired.");
     }
     return transaction;
@@ -734,13 +752,17 @@ function jsonStrings(value: unknown): string[] {
     : [];
 }
 
-function normalizeScope(value: string, resource: string): string {
+function normalizeScope(
+  value: string,
+  resource: string,
+  publicResource: string,
+): string {
   if (!value || value === "adforge:mcp" || value === MCP_READ_SCOPE) {
     return MCP_READ_SCOPE;
   }
   const scopes = new Set(value.split(/\s+/).filter(Boolean));
   if (
-    resource === MCP_PUBLIC_RESOURCE &&
+    resource === publicResource &&
     scopes.size === 2 &&
     scopes.has(MCP_READ_SCOPE) &&
     scopes.has(MCP_WRITE_SCOPE)

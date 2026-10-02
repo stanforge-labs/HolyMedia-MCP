@@ -56,10 +56,13 @@ import { ServiceTokenService } from "./service-tokens/service-token.service.js";
 })
 class HttpRouteTestModule {}
 
+const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+
 describe("production-prefix HTTP routing", () => {
   let app: NestFastifyApplication;
 
   beforeAll(async () => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
     app = await NestFactory.create<NestFastifyApplication>(
       HttpRouteTestModule,
       new FastifyAdapter(),
@@ -72,6 +75,9 @@ describe("production-prefix HTTP routing", () => {
 
   afterAll(async () => {
     await app?.close();
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
   });
 
   it("serves public MCP at root, not under api/v1", async () => {
@@ -147,5 +153,81 @@ describe("production-prefix HTTP routing", () => {
     });
     expect(token.statusCode).toBe(201);
     expect(token.json().token_type).toBe("Bearer");
+  });
+});
+
+describe("local root OAuth and MCP HTTP routing", () => {
+  let localApp: NestFastifyApplication;
+  const origin = "https://local.example.test";
+  beforeAll(async () => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = origin;
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    localApp = await NestFactory.create<NestFastifyApplication>(
+      HttpRouteTestModule,
+      new FastifyAdapter(),
+      { logger: false },
+    );
+    configureApiRouting(localApp);
+    await localApp.init();
+    await localApp.getHttpAdapter().getInstance().ready();
+  });
+  afterAll(async () => {
+    await localApp?.close();
+    if (previousBaseUrl === undefined)
+      delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+    else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  it("serves all discovery variants without /api/v1 and isolates both MCP challenges", async () => {
+    const fastify = localApp.getHttpAdapter().getInstance();
+    for (const [path, resource] of [
+      ["/.well-known/oauth-protected-resource", `${origin}/mcp`],
+      ["/.well-known/oauth-protected-resource/mcp", `${origin}/mcp`],
+      [
+        "/.well-known/oauth-protected-resource/mcp/public",
+        `${origin}/mcp/public`,
+      ],
+    ] as const) {
+      const response = await fastify.inject({ method: "GET", url: path });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        resource,
+        authorization_servers: [origin],
+      });
+      expect(
+        (await fastify.inject({ method: "GET", url: `/api/v1${path}` }))
+          .statusCode,
+      ).toBe(404);
+    }
+    const authorization = await fastify.inject({
+      method: "GET",
+      url: "/.well-known/oauth-authorization-server",
+    });
+    expect(authorization.statusCode).toBe(200);
+    expect(authorization.json()).toMatchObject({
+      issuer: origin,
+      authorization_endpoint: `${origin}/oauth/authorize`,
+      token_endpoint: `${origin}/oauth/token`,
+      registration_endpoint: `${origin}/oauth/register`,
+      revocation_endpoint: `${origin}/oauth/revoke`,
+    });
+    expect(
+      (
+        await fastify.inject({
+          method: "GET",
+          url: "/api/v1/.well-known/oauth-authorization-server",
+        })
+      ).statusCode,
+    ).toBe(404);
+    for (const [path, suffix] of [
+      ["/mcp", "mcp"],
+      ["/mcp/public", "mcp/public"],
+    ] as const) {
+      const response = await fastify.inject({ method: "GET", url: path });
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toBe(
+        `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/${suffix}", scope="adforge:mcp:read"`,
+      );
+    }
   });
 });

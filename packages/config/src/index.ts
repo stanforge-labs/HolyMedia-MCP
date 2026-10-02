@@ -372,6 +372,37 @@ function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return value;
 }
 
+function canonicalPublicBaseUrl(
+  value: string,
+  environment: "development" | "test" | "staging" | "production",
+): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("HOLYMEDIA_PUBLIC_BASE_URL must be an absolute URL.");
+  }
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/" ||
+    (url.protocol !== "https:" &&
+      !(
+        local &&
+        (environment === "development" || environment === "test") &&
+        url.protocol === "http:"
+      ))
+  ) {
+    throw new Error(
+      "HOLYMEDIA_PUBLIC_BASE_URL must be a canonical HTTPS origin (localhost HTTP is for development/test only).",
+    );
+  }
+  return url.origin;
+}
+
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = rawConfigSchema.safeParse(withV1ProviderAliases(source));
   if (!parsed.success) {
@@ -402,6 +433,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (corsOrigins.length === 0) {
     throw new Error("CORS_ORIGINS must contain at least one origin.");
   }
+
+  const publicBaseUrl = canonicalPublicBaseUrl(
+    value.HOLYMEDIA_PUBLIC_BASE_URL ?? corsOrigins[0]!,
+    value.NODE_ENV,
+  );
 
   return {
     environment: value.NODE_ENV,
@@ -495,10 +531,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     adminLogin: "Admin",
     adminPassword: value.HOLYMEDIA_ADMIN_PASSWORD,
     adminSessionTtlHours: value.HOLYMEDIA_ADMIN_SESSION_TTL_HOURS,
-    publicBaseUrl: (value.HOLYMEDIA_PUBLIC_BASE_URL ?? corsOrigins[0]!).replace(
-      /\/$/,
-      "",
-    ),
+    publicBaseUrl,
     telegramSupportBotToken: nonEmpty(value.TELEGRAM_SUPPORT_BOT_TOKEN),
     telegramSupportChatId: nonEmpty(value.TELEGRAM_SUPPORT_CHAT_ID),
     sessionTtlDays: value.SESSION_TTL_DAYS,

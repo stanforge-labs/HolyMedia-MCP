@@ -1,9 +1,11 @@
 import { Controller, Get } from "@nestjs/common";
 import { loadConfig } from "@holymedia/config";
+import { oauthEndpoints } from "../mcp/oauth-endpoints.js";
 
 @Controller()
 export class OAuthMetadataController {
   private readonly writeScopeEnabled = loadConfig().publicMcpWriteScopeEnabled;
+  private readonly endpoints = oauthEndpoints();
 
   private publicScopes(): string[] {
     return this.writeScopeEnabled
@@ -14,8 +16,8 @@ export class OAuthMetadataController {
   @Get(".well-known/oauth-protected-resource")
   public protectedResource() {
     return {
-      resource: "https://mcp.holymedia.kz/mcp",
-      authorization_servers: ["https://mcp.holymedia.kz"],
+      resource: this.endpoints.legacyResource,
+      authorization_servers: [this.endpoints.issuer],
       scopes_supported: ["adforge:mcp:read"],
       bearer_methods_supported: ["header"],
     };
@@ -29,8 +31,8 @@ export class OAuthMetadataController {
   @Get(".well-known/oauth-protected-resource/mcp/public")
   public protectedPublicMcpResource() {
     return {
-      resource: "https://mcp.holymedia.kz/mcp/public",
-      authorization_servers: ["https://mcp.holymedia.kz"],
+      resource: this.endpoints.publicResource,
+      authorization_servers: [this.endpoints.issuer],
       scopes_supported: this.publicScopes(),
       bearer_methods_supported: ["header"],
     };
@@ -39,11 +41,11 @@ export class OAuthMetadataController {
   @Get(".well-known/oauth-authorization-server")
   public authorizationServer() {
     return {
-      issuer: "https://mcp.holymedia.kz",
-      authorization_endpoint: "https://mcp.holymedia.kz/oauth/authorize",
-      token_endpoint: "https://mcp.holymedia.kz/oauth/token",
-      registration_endpoint: "https://mcp.holymedia.kz/oauth/register",
-      revocation_endpoint: "https://mcp.holymedia.kz/oauth/revoke",
+      issuer: this.endpoints.issuer,
+      authorization_endpoint: this.endpoints.authorization,
+      token_endpoint: this.endpoints.token,
+      registration_endpoint: this.endpoints.registration,
+      revocation_endpoint: this.endpoints.revocation,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],

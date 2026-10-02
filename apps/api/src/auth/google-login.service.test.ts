@@ -26,6 +26,35 @@ afterEach(() => {
 });
 
 describe("GoogleLoginService", () => {
+  it("accepts only same-local-origin internal return URLs while preserving the configured Google callback", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://local.example.test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    vi.stubEnv(
+      "PROVIDER_GOOGLE_LOGIN_REDIRECT_URI",
+      "https://local.example.test/auth/google/callback",
+    );
+    const database = databaseMock();
+    const service = new GoogleLoginService(database as never);
+    const transaction = "11111111-1111-4111-8111-111111111111";
+    const sameOrigin = `https://local.example.test/oauth/authorize/continue?transaction=${transaction}`;
+    await service.start(sameOrigin);
+    expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        nextPath: `/oauth/authorize/continue?transaction=${transaction}`,
+      }),
+    });
+    await service.start(
+      `https://prod.example.test/oauth/authorize/continue?transaction=${transaction}`,
+    );
+    expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ nextPath: "/dashboard" }),
+    });
+    expect(service.redirectUri()).toBe(
+      "https://local.example.test/auth/google/callback",
+    );
+  });
   it("creates a V1-compatible authorization URL and consumes state once", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");

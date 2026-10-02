@@ -8,10 +8,10 @@ import {
   ServiceTokenService,
 } from "../service-tokens/service-token.service.js";
 import { McpController } from "./mcp.controller.js";
-import {
-  MCP_RESOURCE,
-  OAuthAuthorizationService,
-} from "./oauth-authorization.service.js";
+import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
+import { oauthEndpoints } from "./oauth-endpoints.js";
+
+const MCP_RESOURCE = oauthEndpoints().legacyResource;
 
 const integrationEnabled =
   process.env.V2_INTEGRATION_TESTS === "true" &&

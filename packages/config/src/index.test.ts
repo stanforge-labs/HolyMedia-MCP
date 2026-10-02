@@ -3,6 +3,37 @@ import { randomUUID } from "node:crypto";
 import { loadConfig } from "./index.js";
 
 describe("v2 configuration", () => {
+  it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        HOLYMEDIA_PUBLIC_BASE_URL: "https://local.example.test/",
+      }).publicBaseUrl,
+    ).toBe("https://local.example.test");
+    for (const value of [
+      "https://example.test/path",
+      "https://example.test/?x=1",
+      "https://example.test/#part",
+      "https://user:pass@example.test/",
+      "http://example.test/",
+    ]) {
+      expect(() =>
+        loadConfig({ NODE_ENV: "test", HOLYMEDIA_PUBLIC_BASE_URL: value }),
+      ).toThrow(/HOLYMEDIA_PUBLIC_BASE_URL/);
+    }
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "staging",
+        HOLYMEDIA_PUBLIC_BASE_URL: "http://localhost:3000",
+      }),
+    ).toThrow(/HOLYMEDIA_PUBLIC_BASE_URL/);
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        HOLYMEDIA_PUBLIC_BASE_URL: "http://localhost:3000",
+      }).publicBaseUrl,
+    ).toBe("http://localhost:3000");
+  });
   it("keeps owner admin access disabled until an environment secret is supplied", () => {
     const base = {
       NODE_ENV: "test" as const,
