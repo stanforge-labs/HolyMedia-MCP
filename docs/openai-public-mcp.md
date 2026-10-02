@@ -1,7 +1,8 @@
 # HolyMedia public MCP: implementation and rollout
 
-This is **code-only and not deployed**. The future endpoint is
-`https://mcp.holymedia.kz/mcp/public`. It shares the existing API process,
+This is **code-only and not deployed**. The future production endpoint is
+`https://mcp.holymedia.kz/mcp/public`; local acceptance uses an HTTPS tunnel
+configured through `HOLYMEDIA_PUBLIC_BASE_URL`. It shares the API process,
 OAuth server, database and provider adapters. Legacy `/mcp`, ServiceToken
 previews, `confirm_preview`, App Review aliases and the hardcoded Meta App
 Review flow remain separate and unchanged.
@@ -23,7 +24,8 @@ legacy `/mcp`.
 returns 405, not SSE. Only an OAuth token for the exact `/mcp/public` resource
 is accepted. Both listing and invocation enforce the server-side allowlist.
 
-The public registry has **42 tools: 38 read and four controlled-write**:
+The public registry has an explicit reviewed read allowlist from the current
+legacy MCP registry, plus four controlled-write tools:
 
 ```text
 preview_change_campaign_name
@@ -32,7 +34,10 @@ preview_resume_campaign
 commit_confirmed_preview
 ```
 
-`confirm_preview`, `commit_preview`, `commit_meta_app_review_preview` and
+The read allowlist includes `google_ads_list_keywords`,
+`google_ads_search_terms`, `google_ads_list_negatives` and
+`google_ads_check_negative_conflicts`. Its test checks capabilities and names,
+not an old fixed tool count. `confirm_preview`, `commit_preview`, `commit_meta_app_review_preview` and
 `commit_meta_confirmed_write` are not public. The read registry includes the
 selected account, campaign, analytics, diagnostics and structured-report tools
 in `mcp-public-tools.ts`; arbitrary-site analysis and capability aliases are
@@ -53,7 +58,7 @@ advisory; server authorization is the actual boundary.
 
 ## OAuth scope and two independent gates
 
-`adforge:mcp:read` supports all 38 read tools. Controlled writes additionally
+`adforge:mcp:read` supports the reviewed read tools. Controlled writes additionally
 require an explicitly granted `adforge:mcp:write` scope for the public resource.
 `PUBLIC_MCP_WRITE_SCOPE_ENABLED` defaults to `false`: public OAuth metadata
 omits write, authorization rejects it, and refresh cannot add it to a read
@@ -122,15 +127,14 @@ without storing raw tokens or credentials.
 
 ## PostgreSQL 18 migration and application rollback
 
-Migration `0032_public_mcp_oauth_preview` enables OAuth-owned rows while
+Migration `0032_public_mcp_oauth_previews` enables OAuth-owned rows while
 preserving legacy ServiceToken rows. Migration
 `0033_public_mcp_browser_approval` adds a nullable unique approval digest,
 approver/session and cancellation fields plus database identity constraints.
-In a disposable **PostgreSQL 18.6** database, we applied pre-0032 schema,
-created a representative ServiceToken preview, applied 0032 and 0033, queried
-the legacy row through Prisma, exercised OAuth preview/browser approval and
-parallel commit with a fake provider, and checked nullability, FKs and
-indexes. No production database or provider was used.
+Rehearse both fresh installation and current-main upgrade on a disposable
+PostgreSQL 18 database before local acceptance. The rehearsal must inspect
+legacy ServiceToken previews, OAuth preview/browser approval and Prisma
+client behavior. Never point this procedure at production data.
 
 If the API must revert to the old image after migration, keep **both public
 flags OFF**. The old image can use the additive schema: Prisma ignores new
@@ -142,28 +146,28 @@ forward deploy. In particular, do not enable old-image public controlled
 write during rollback: that version exposes MCP `confirm_preview`. No
 destructive SQL-down migration is planned; preserve audit evidence and roll
 forward with a corrected application image. Verify old-image boot and legacy
-smoke tests in staging before relying on rollback.
+smoke tests in an isolated local rehearsal before relying on rollback.
 
 ## Separate report phase and rollout
 
 Public report tools return structured chat data, not files. Web DOCX/PPTX
 downloads are not exposed through MCP; file delivery needs separate design.
 
-1. Deploy new API and Web together with both flags OFF. Verify additive
-   migrations on a backed-up staging database.
-2. In staging, check root discovery, read consent, write rejection while its
-   gate is OFF, both locales, ownership/CSRF denial, `/mcp` and App Review.
-3. Enable scope issuance only in staging and obtain explicit new-Web consent.
-   Test preview, approval/cancel, expiry and stale detection with commit OFF.
-4. After separate approval, enable controlled commit only in staging, using a
-   designated test campaign and direct read-back/audit/uncertainty drills.
-5. Review monitoring and rollback before any production rollout. This
-   document authorizes neither production deploy nor provider write.
+1. Run CI and local unit, integration, browser and PostgreSQL 18 migration
+   rehearsals with both public write flags OFF and no live provider calls.
+2. In a separate task, expose the isolated local API/Web through an HTTPS
+   tunnel and set `HOLYMEDIA_PUBLIC_BASE_URL` to that tunnel origin. Use
+   ChatGPT Developer Mode to check root discovery, read consent, write
+   rejection, both locales, ownership/CSRF denial, `/mcp` and App Review.
+3. Record local acceptance evidence, including origin/resource isolation and
+   ingress log redaction. Only then plan a separately approved production
+   acceptance and Plugin submission. This document authorizes neither a
+   production deploy nor a provider write.
 
 Before enabling `PUBLIC_MCP_WRITE_SCOPE_ENABLED` in any environment, verify
 the actual ingress configuration and access logs. They must not record
 sensitive query, body or header values, including Authorization, Cookie,
 CSRF proofs, approval nonces and preview tokens. The approval route itself
-must not carry a nonce in its requested URL, and the staging acceptance must
+must not carry a nonce in its requested URL, and local acceptance must
 confirm that Web/API/ingress logs and telemetry contain none of these values.
 Application-level redaction does not prove ingress-level redaction.
