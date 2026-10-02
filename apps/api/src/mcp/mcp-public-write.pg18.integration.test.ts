@@ -177,9 +177,7 @@ describe.skipIf(!enabled)(
           },
         )) as Record<string, unknown>;
         const rawToken = created.preview_token as string;
-        const nonce = new URL(created.approval_url as string).searchParams.get(
-          "approval",
-        )!;
+        const nonce = new URL(created.approval_url as string).hash.slice(1);
         const persisted = await database.client.mcpPreview.findFirstOrThrow({
           where: { principalType: "OAUTH_USER", oauthClientId: clientId },
         });
