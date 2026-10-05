@@ -41,6 +41,8 @@ if (kind === "api") {
 } else {
   assert(!existsSync("/workspace/apps/api"));
   assert(!existsSync("/workspace/packages/database"));
+  assert(!existsSync("/workspace/apps/web/node_modules/.bin/playwright"));
+  assert(!existsSync("/workspace/node_modules/.bin/playwright"));
   assert(
     !packages.some((name) =>
       /^(prisma@|@prisma\+|bullmq@|ioredis@)/.test(name),

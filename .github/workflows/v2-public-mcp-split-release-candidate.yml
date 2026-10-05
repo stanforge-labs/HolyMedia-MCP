@@ -63,6 +63,7 @@ jobs:
           python3 -m py_compile scripts/public_mcp_split_candidate_image_scan.py scripts/public_mcp_split_candidate_image_scan_test.py
           node --test scripts/public_mcp_split_candidate_storage_test.mjs
           node --test scripts/public_mcp_split_candidate_browser_proxy_test.mjs
+          node --test scripts/public_mcp_split_candidate_web_prune_test.mjs
           python3 scripts/public_mcp_split_candidate_image_scan_test.py
 
   quality:
