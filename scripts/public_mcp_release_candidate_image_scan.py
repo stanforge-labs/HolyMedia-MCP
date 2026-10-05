@@ -10,7 +10,9 @@ patterns = [
     rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
     rb"sk-proj-[A-Za-z0-9_-]{20,}",
     rb"GOCSPX-[A-Za-z0-9_-]{20,}",
-    rb"\bEA[A-Za-z0-9_-]{30,}\b",
+    # Meta access tokens are delimited values, not arbitrary EA substrings in
+    # ELF tables, documentation identifiers, or base64-encoded WASM payloads.
+    rb"(?<![A-Za-z0-9_+/=-])EA[A-Za-z0-9_-]{80,400}(?![A-Za-z0-9_+/=-])",
     rb"\bhm_oauth_[A-Za-z0-9_-]{30,}\b",
     rb"\bgh[pousr]_[A-Za-z0-9_]{30,}\b",
     rb"\bgithub_pat_[A-Za-z0-9_]{30,}\b",

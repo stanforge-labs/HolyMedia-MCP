@@ -31,6 +31,16 @@ class ImageScanTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn(value, result.stdout)
 
+    def test_delimited_meta_token_rejected_without_printing_value(self):
+        value = b"EAA" + b"a" * 100
+        result = self.scan("workspace/provider.json", b'{"token":"' + value + b'"}')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn(value, result.stdout)
+
+    def test_binary_tables_and_embedded_wasm_are_not_meta_tokens(self):
+        for content in [b"EACCES_CONFIGURATION_REQUIRED_ERROR", b'"AAAAEAA' + b"a" * 100 + b'AAAA"', b'"EAA' + b"a" * 500 + b'"']:
+            self.assertEqual(self.scan("workspace/runtime.wasm-base64.js", content).returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
