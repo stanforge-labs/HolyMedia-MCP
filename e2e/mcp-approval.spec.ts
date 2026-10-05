@@ -8,6 +8,16 @@ const cors = {
   "access-control-allow-methods": "GET,POST,OPTIONS",
 };
 
+// This suite is local and fully mocked: never contact production/providers.
+test.beforeEach(async ({ context }) => {
+  await context.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    return ["localhost", "127.0.0.1"].includes(url.hostname)
+      ? route.continue()
+      : route.abort("blockedbyclient");
+  });
+});
+
 test("RU/EN approval keeps its nonce and only POST approves", async ({
   page,
 }) => {
@@ -131,8 +141,109 @@ test("RU/EN approval keeps its nonce and only POST approves", async ({
     ),
   ).toBeNull();
   await expect(
-    page.getByText("Approval here does not yet change the Meta Ads campaign."),
+    page.getByText("Approval here does not change data in the ad account."),
   ).toBeVisible();
+});
+
+test("Google keyword batch renders immutable before/after rows in RU/EN without automatic approval", async ({
+  page,
+}) => {
+  const decisions: unknown[] = [];
+  await page.route(
+    /^http:\/\/localhost:3000\/(?:en\/)?mcp\/approve$/,
+    async (route) => {
+      const response = await route.fetch(),
+        headers = { ...response.headers() };
+      delete headers["content-security-policy"];
+      await route.fulfill({ response, headers });
+    },
+  );
+  await page.route("**/api/v1/auth/csrf", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: cors,
+      contentType: "application/json",
+      body: JSON.stringify({ csrfToken: "test-csrf" }),
+    }),
+  );
+  await page.route(
+    /\/api\/v1\/mcp\/public\/approval(?:\/view)?$/,
+    async (route) => {
+      if (route.request().method() === "OPTIONS")
+        return route.fulfill({ status: 204, headers: cors });
+      expect(route.request().headers()["x-csrf-token"]).toBe("test-csrf");
+      if (!new URL(route.request().url()).pathname.endsWith("/view")) {
+        decisions.push(route.request().postDataJSON());
+        return route.fulfill({
+          status: 201,
+          headers: cors,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "approved" }),
+        });
+      }
+      await route.fulfill({
+        status: 200,
+        headers: cors,
+        contentType: "application/json",
+        body: JSON.stringify({
+          provider: "Google Ads",
+          account: "TEST Ads",
+          campaign: "Paused TEST campaign",
+          operation: "GOOGLE_KEYWORD_STATUS",
+          field: "status",
+          before: "2 keywords",
+          after: "PAUSED",
+          expires_at: "2030-01-01T00:00:00.000Z",
+          approved: false,
+          items: [101, 102].map((id) => ({
+            resource_name: `customers/1234567890/adGroupCriteria/10~${id}`,
+            criterion_id: String(id),
+            keyword: `fixture keyword ${id}`,
+            match_type: "EXACT",
+            campaign_id: "1",
+            campaign_name: "Paused TEST campaign",
+            ad_group_id: "10",
+            ad_group_name: "TEST group",
+            before_status: id === 101 ? "ENABLED" : "PAUSED",
+            after_status: "PAUSED",
+            warnings: id === 102 ? ["no_op: статус уже установлен"] : [],
+          })),
+        }),
+      });
+    },
+  );
+  await page.goto(`/mcp/approve#${nonce}`);
+  await expect(
+    page.getByRole("table", { name: "Статус ключевых слов" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row").filter({ hasText: "fixture keyword 101" }),
+  ).toContainText("ENABLED");
+  await expect(
+    page.getByRole("row").filter({ hasText: "fixture keyword 102" }),
+  ).toContainText("no-op");
+  await expect(page.locator(".app-loader")).toHaveAttribute(
+    "data-loader-visible",
+    "false",
+  );
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth + 1,
+    ),
+  ).toBe(true);
+  expect(decisions).toHaveLength(0);
+  await page.getByRole("button", { name: "English" }).click();
+  await expect(
+    page.getByRole("table", { name: "Keyword status" }),
+  ).toBeVisible();
+  expect(decisions).toHaveLength(0);
+  await page.getByRole("button", { name: "Approve change" }).click();
+  await expect(
+    page.getByText("Change approved. Return to ChatGPT/Codex to execute it."),
+  ).toBeVisible();
+  expect(decisions).toEqual([{ approval_nonce: nonce, decision: "approve" }]);
 });
 
 test("login return URL is fixed and approval survives in the same tab", async ({

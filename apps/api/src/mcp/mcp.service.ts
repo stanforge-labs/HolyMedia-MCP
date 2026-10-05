@@ -25,6 +25,7 @@ import type {
 import { validateDateRange } from "../providers/provider-normalization.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
+import { keywordStatusToolSchema } from "./mcp-google-keyword-schema.js";
 
 const providerAliases: Record<string, ProviderId> = {
   google_ads: "GOOGLE_ADS",
@@ -448,7 +449,22 @@ export class McpService {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
       description: toolDescription(name),
-      inputSchema: metaReadSchema(name) ??
+      ...([
+        "pause_entities_preview",
+        "update_entity_status_preview",
+        "commit_preview",
+      ].includes(name)
+        ? {
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: name === "commit_preview",
+              openWorldHint: true,
+              idempotentHint: false,
+            },
+          }
+        : {}),
+      inputSchema: keywordStatusToolSchema(name) ??
+        metaReadSchema(name) ??
         previewToolSchema(name) ??
         googleKeywordToolSchema(name) ??
         ga4ToolSchema(name) ?? {
@@ -472,8 +488,7 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
-    // No Google write-preview exists before stages 6–8. Reject before the
-    // shared preview store, without changing Meta's preview/commit path.
+    // Only the typed keyword status vertical slice is enabled for Google.
     if (
       text(args.provider).toLowerCase() === "google_ads" &&
       (COMPAT_PREVIEW_OPERATIONS[name] ||
@@ -484,6 +499,41 @@ export class McpService {
           "preview_change_campaign_budget",
         ].includes(name))
     ) {
+      if (
+        args.provider === "GOOGLE_ADS" &&
+        ["pause_entities_preview", "update_entity_status_preview"].includes(
+          name,
+        )
+      ) {
+        if (
+          Object.keys(args).some(
+            (k) =>
+              ![
+                "provider",
+                "account_id",
+                "entity_type",
+                "status",
+                "items",
+              ].includes(k),
+          )
+        )
+          throw new ProviderError(
+            "invalid_request",
+            "Google status preview не принимает дополнительные mutation-поля.",
+          );
+        return this.previews.create(this.servicePrincipal(principal), {
+          provider: "GOOGLE_ADS",
+          accountId: text(args.account_id),
+          objectId: "keyword_batch",
+          operation:
+            name === "pause_entities_preview" ? "pause" : "update_status",
+          payload: {
+            entity_type: args.entity_type,
+            items: args.items,
+            ...(args.status !== undefined ? { status: args.status } : {}),
+          },
+        });
+      }
       if (COMPAT_PREVIEW_OPERATIONS[name]) safePreviewPayload(args);
       throw new ProviderError(
         "not_supported_for_google_ads",
@@ -2396,6 +2446,10 @@ export class McpService {
 }
 
 function toolDescription(name: string): string {
+  if (["pause_entities_preview", "update_entity_status_preview"].includes(name))
+    return "Create a provider-aware status preview. GOOGLE_ADS supports positive keyword ENABLED/PAUSED batches (max 500) with live state read and Google validate_only, never provider mutation. Use explicit GOOGLE_ADS and real campaign/ad group/criterion IDs; approve the returned HolyMedia browser URL before commit_preview. Existing Meta semantics are unchanged.";
+  if (name === "commit_preview")
+    return "Commit only the exact stored preview_token. Google keywords require explicit HolyMedia browser approval; rechecks account policy and snapshot, sends partial_failure mutation once, rereads provider state and audits each row. No replacement mutation fields allowed.";
   if (name === "google_ads_list_negatives")
     return "Read-only paginated Google Ads campaign, ad group and shared-list negative keywords and their campaign attachments. Pages may contain shared-list fragments; combine by shared_set_id. Never changes ads.";
   if (name === "google_ads_check_negative_conflicts")

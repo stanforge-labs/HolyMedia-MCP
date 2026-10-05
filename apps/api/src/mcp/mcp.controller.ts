@@ -15,6 +15,7 @@ import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
 import { GoogleAdsApiError } from "../providers/google-ads.error.js";
+import { GoogleAdsWriteError } from "../providers/google-ads-write.js";
 import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
@@ -226,7 +227,31 @@ export class McpController {
         return {
           jsonrpc: "2.0",
           id,
-          result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+          result: {
+            content: [
+              // Keep the existing JSON text contract for older MCP clients
+              // that do not consume structuredContent (including tokens/rows).
+              {
+                type: "text",
+                text: JSON.stringify(result),
+              },
+              ...(result &&
+              typeof result === "object" &&
+              "provider" in result &&
+              result.provider === "GOOGLE_ADS" &&
+              "summary" in result &&
+              typeof result.summary === "string"
+                ? [{ type: "text", text: result.summary }]
+                : []),
+            ],
+            ...(result &&
+            typeof result === "object" &&
+            "provider" in result &&
+            result.provider === "GOOGLE_ADS" &&
+            "operation_count" in result
+              ? { structuredContent: result }
+              : {}),
+          },
         };
       } catch (error) {
         if (publicRoute && isPublicTool(name) && !isPublicReadTool(name)) {
@@ -351,6 +376,13 @@ export class McpController {
                         retryable: false,
                         user_action: "select_client_account",
                         upstream_code: error.providerCode,
+                      }
+                    : {}),
+                  ...(error instanceof GoogleAdsWriteError
+                    ? {
+                        code: error.writeCode,
+                        provider: "GOOGLE_ADS",
+                        google_errors: error.failures,
                       }
                     : {}),
                 }),

@@ -36,6 +36,7 @@ export class ProviderRegistry {
       {
         definition: googleAdsDefinition(
           Boolean(google.definition.status === "available"),
+          this.config.providerGoogleAdsWriteEnabled,
         ),
         adapter: google,
       },

@@ -3,6 +3,28 @@ import { randomUUID } from "node:crypto";
 import { loadConfig } from "./index.js";
 
 describe("v2 configuration", () => {
+  it("defaults Google writes OFF and normalizes a separate deny-by-default account allowlist", () => {
+    const config = loadConfig({ NODE_ENV: "test" });
+    expect(config.providerGoogleAdsWriteEnabled).toBe(false);
+    expect(config.googleAdsWriteAccountAllowlist).toEqual([]);
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false",
+        GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST:
+          "123-456-7890,1234567890, 9999999999",
+      }),
+    ).toMatchObject({
+      providerGoogleAdsWriteEnabled: false,
+      googleAdsWriteAccountAllowlist: ["1234567890", "9999999999"],
+    });
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "test",
+        GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "act_123",
+      }),
+    ).toThrow(/GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST/);
+  });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
     expect(
       loadConfig({

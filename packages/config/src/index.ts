@@ -45,6 +45,8 @@ const rawConfigSchema = z.object({
     .string()
     .regex(/^v?\d+$/)
     .default("v24"),
+  PROVIDER_GOOGLE_ADS_WRITE_ENABLED: booleanFromEnv.default(false),
+  GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID: z.string().optional(),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI: z.string().url().optional(),
@@ -182,6 +184,8 @@ export type AppConfig = {
   providerGoogleDeveloperToken: string | undefined;
   providerGoogleLoginCustomerId: string | undefined;
   providerGoogleApiVersion: string;
+  providerGoogleAdsWriteEnabled: boolean;
+  googleAdsWriteAccountAllowlist: string[];
   providerGoogleSearchConsoleClientId: string | undefined;
   providerGoogleSearchConsoleClientSecret: string | undefined;
   providerGoogleSearchConsoleRedirectUri: string | undefined;
@@ -438,6 +442,17 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     value.HOLYMEDIA_PUBLIC_BASE_URL ?? corsOrigins[0]!,
     value.NODE_ENV,
   );
+  const googleAdsWriteAccountAllowlist = [
+    ...new Set(
+      value.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST.split(",")
+        .map((v) => v.trim().replace(/-/g, ""))
+        .filter(Boolean),
+    ),
+  ];
+  if (googleAdsWriteAccountAllowlist.some((v) => !/^\d{10}$/.test(v)))
+    throw new Error(
+      "GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST must contain Google customer IDs.",
+    );
 
   return {
     environment: value.NODE_ENV,
@@ -457,6 +472,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleDeveloperToken: value.PROVIDER_GOOGLE_DEVELOPER_TOKEN,
     providerGoogleLoginCustomerId: value.PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID,
     providerGoogleApiVersion: value.PROVIDER_GOOGLE_API_VERSION,
+    providerGoogleAdsWriteEnabled: value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED,
+    googleAdsWriteAccountAllowlist,
     providerGoogleSearchConsoleClientId:
       value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID,
     providerGoogleSearchConsoleClientSecret:

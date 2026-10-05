@@ -33,6 +33,14 @@ import { ProviderMetricsService } from "./provider.metrics.js";
 import { MetaAdsAdapter } from "./adapters/meta.ads.js";
 import type { MetaInsightsRequest } from "./meta-insights.parameters.js";
 import { metaReadError } from "./meta-read.error.js";
+import {
+  assertGoogleWriteAccount,
+  GoogleAdsWriteError,
+  writeFailureFromError,
+  type GoogleKeywordIdentity,
+  type GoogleKeywordMutation,
+  type GoogleKeywordWriteAdapter,
+} from "./google-ads-write.js";
 import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
@@ -1114,6 +1122,84 @@ export class ProviderService {
       );
       throw error;
     }
+  }
+
+  private async googleKeywordContext(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    if (context.account.provider !== "GOOGLE_ADS")
+      throw new ProviderError(
+        "invalid_account",
+        "Требуется Google Ads аккаунт.",
+      );
+    assertGoogleWriteAccount(this.config, context.account.externalAccountId);
+    const adapter = context.adapter as unknown as GoogleKeywordWriteAdapter;
+    if (
+      typeof adapter.readKeywordStates !== "function" ||
+      typeof adapter.validateKeywordStatuses !== "function" ||
+      typeof adapter.commitKeywordStatuses !== "function"
+    )
+      throw new ProviderError(
+        "provider_not_configured",
+        "Google Ads keyword write adapter недоступен.",
+      );
+    return { ...context, adapter };
+  }
+  public async readGoogleKeywordStates(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    items: GoogleKeywordIdentity[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    try {
+      return await ctx.adapter.readKeywordStates(ctx.read, items);
+    } catch (error) {
+      if (error instanceof GoogleAdsWriteError) throw error;
+      const failure = writeFailureFromError(error);
+      throw new GoogleAdsWriteError(
+        "google_keyword_read_failed",
+        failure.message,
+        [failure],
+      );
+    }
+  }
+  public async validateGoogleKeywordStatuses(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    items: GoogleKeywordMutation[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return ctx.adapter.validateKeywordStatuses(ctx.read, items);
+  }
+  public async commitGoogleKeywordStatuses(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    items: GoogleKeywordMutation[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return ctx.adapter.commitKeywordStatuses(ctx.read, items);
   }
 
   public async mutateCampaign(

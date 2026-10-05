@@ -12,6 +12,17 @@ import { ProviderError } from "../provider.errors.js";
 import { providerJson } from "../provider-http.js";
 import { googleAdsApiError } from "../google-ads.error.js";
 import {
+  assertGoogleWriteAccount,
+  keywordBatch,
+  googleMutationResults,
+  GoogleAdsWriteError,
+  writeFailureFromError,
+  type GoogleKeywordIdentity,
+  type GoogleKeywordSnapshot,
+  type GoogleKeywordMutation,
+  type GoogleKeywordWriteAdapter,
+} from "../google-ads-write.js";
+import {
   decodeGoogleCursor,
   encodeGoogleCursor,
 } from "../google-ads-cursor.js";
@@ -55,6 +66,7 @@ const CAMPAIGN_METRIC_FIELDS =
 
 export const googleAdsDefinition = (
   configured: boolean,
+  googleAdsWriteEnabled = false,
 ): ProviderDefinition => ({
   id: "GOOGLE_ADS",
   displayName: "Google Ads",
@@ -63,13 +75,16 @@ export const googleAdsDefinition = (
   accountDiscovery: true,
   refresh: true,
   read: configured,
-  write: false,
+  write: configured && googleAdsWriteEnabled,
   status: configured ? "available" : "configuration_required",
   scopes: [GOOGLE_SCOPE],
 });
 
 export class GoogleAdsAdapter
-  implements ProviderOAuthAdapter, ProviderReadAdapter
+  implements
+    ProviderOAuthAdapter,
+    ProviderReadAdapter,
+    GoogleKeywordWriteAdapter
 {
   public readonly definition: ProviderDefinition;
   private readonly config: AppConfig;
@@ -82,6 +97,7 @@ export class GoogleAdsAdapter
         config.providerGoogleClientSecret &&
         config.providerGoogleRedirectUri,
       ),
+      config.providerGoogleAdsWriteEnabled,
     );
   }
 
@@ -397,6 +413,162 @@ export class GoogleAdsAdapter
       }),
       currency,
     );
+  }
+
+  public async readKeywordStates(
+    context: ProviderReadContext,
+    items: GoogleKeywordIdentity[],
+  ): Promise<GoogleKeywordSnapshot[]> {
+    const account = assertCustomerId(context.accountId);
+    const selected = keywordBatch(account, items);
+    const rows = await this.searchStream(
+      context.credentials.accessToken,
+      account,
+      this.contextLoginCustomerId(context),
+      `SELECT campaign.id, campaign.name, campaign.status, ad_group.id, ad_group.name, ad_group.status, ad_group_criterion.resource_name, ad_group_criterion.criterion_id, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status, ad_group_criterion.negative, ad_group_criterion.type FROM ad_group_criterion WHERE ad_group_criterion.type = KEYWORD AND ad_group_criterion.negative = FALSE AND ad_group_criterion.resource_name IN (${selected.map((x) => `'${x.resource_name}'`).join(", ")})`,
+    );
+    return selected.map((item) => {
+      const matches = rows.filter(
+        (row) =>
+          object(row.adGroupCriterion).resourceName === item.resource_name,
+      );
+      const row = matches[0],
+        criterion = object(row?.adGroupCriterion),
+        campaign = object(row?.campaign),
+        group = object(row?.adGroup),
+        keyword = object(criterion.keyword);
+      if (
+        matches.length !== 1 ||
+        String(campaign.id) !== item.campaign_id ||
+        String(group.id) !== item.ad_group_id ||
+        String(criterion.criterionId) !== item.criterion_id ||
+        // ProtoJSON may omit a default false; GAQL also excludes negatives.
+        (criterion.negative !== undefined && criterion.negative !== false) ||
+        criterion.type !== "KEYWORD" ||
+        !["ENABLED", "PAUSED"].includes(String(criterion.status)) ||
+        campaign.status === "REMOVED" ||
+        group.status === "REMOVED" ||
+        typeof keyword.text !== "string" ||
+        !["BROAD", "PHRASE", "EXACT"].includes(String(keyword.matchType))
+      )
+        throw new GoogleAdsWriteError(
+          "google_keyword_unavailable",
+          "Ключевое слово не найдено, удалено или не соответствует кампании/группе. Создайте новый preview.",
+        );
+      return {
+        ...item,
+        account_id: account,
+        campaign_name: String(campaign.name ?? ""),
+        campaign_status: String(campaign.status ?? ""),
+        ad_group_name: String(group.name ?? ""),
+        ad_group_status: String(group.status ?? ""),
+        keyword: keyword.text,
+        match_type: String(keyword.matchType),
+        status: criterion.status as "ENABLED" | "PAUSED",
+      };
+    });
+  }
+  public validateKeywordStatuses(
+    context: ProviderReadContext,
+    items: GoogleKeywordMutation[],
+  ) {
+    return this.keywordMutation(context, items, true);
+  }
+  public commitKeywordStatuses(
+    context: ProviderReadContext,
+    items: GoogleKeywordMutation[],
+  ) {
+    if (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+      throw new GoogleAdsWriteError(
+        "confirmed_write_disabled",
+        "Подтверждённая запись выключена на сервере.",
+      );
+    return this.keywordMutation(context, items, false);
+  }
+  private async keywordMutation(
+    context: ProviderReadContext,
+    items: GoogleKeywordMutation[],
+    validateOnly: boolean,
+  ) {
+    assertGoogleWriteAccount(this.config, context.accountId);
+    if (!context.credentials.scopes.includes(GOOGLE_SCOPE))
+      throw new GoogleAdsWriteError(
+        "google_scope_required",
+        "Подключению Google Ads необходимо OAuth-разрешение adwords.",
+      );
+    const identities = keywordBatch(
+      context.accountId,
+      items.map(
+        ({ campaign_id, ad_group_id, criterion_id, resource_name }) => ({
+          campaign_id,
+          ad_group_id,
+          criterion_id,
+          resource_name,
+        }),
+      ),
+    );
+    if (
+      items.some(
+        (x) =>
+          !["ENABLED", "PAUSED"].includes(x.status) ||
+          Object.keys(x).some(
+            (k) =>
+              ![
+                "campaign_id",
+                "ad_group_id",
+                "criterion_id",
+                "resource_name",
+                "status",
+              ].includes(k),
+          ),
+      )
+    )
+      throw new GoogleAdsWriteError(
+        "google_keyword_status_invalid",
+        "Разрешены только ENABLED и PAUSED, без других mutation-полей.",
+      );
+    try {
+      const result = await providerJson<unknown>(
+        `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/adGroupCriteria:mutate`,
+        {
+          method: "POST",
+          headers: {
+            ...this.headers(
+              context.credentials.accessToken,
+              this.contextLoginCustomerId(context),
+            ),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            operations: identities.map((x, i) => ({
+              update: {
+                resourceName: x.resource_name,
+                status: items[i]!.status,
+              },
+              updateMask: "status",
+            })),
+            validateOnly,
+            partialFailure: true,
+          }),
+        },
+        this.config.providerHttpTimeoutMs,
+        googleAdsApiError,
+      );
+      if (!result || typeof result !== "object" || Array.isArray(result))
+        throw new GoogleAdsWriteError(
+          "google_response_invalid",
+          "Google Ads вернул некорректный ответ.",
+        );
+      return googleMutationResults(result, items, validateOnly);
+    } catch (error) {
+      if (error instanceof GoogleAdsWriteError) throw error;
+      const failure = writeFailureFromError(error);
+      throw new GoogleAdsWriteError(
+        "google_ads_mutation_failed",
+        failure.message,
+        [failure],
+      );
+    }
   }
 
   public async listKeywords(

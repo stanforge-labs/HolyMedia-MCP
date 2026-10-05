@@ -2,6 +2,10 @@ import { ForbiddenException } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { PreviewError } from "./mcp-preview.error.js";
+import {
+  GoogleAdsWriteError,
+  googleWriteFailure,
+} from "../providers/google-ads-write.js";
 
 function controller(authenticate = vi.fn().mockResolvedValue(null)) {
   return new McpController(
@@ -35,6 +39,60 @@ describe("MCP bearer authentication", () => {
     if (previousBaseUrl === undefined)
       delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+  });
+  it("Google batch has structured content and a concise summary; write failures preserve safe codes in Russian", async () => {
+    const payload = {
+      provider: "GOOGLE_ADS",
+      operation_count: 1,
+      summary: "Google Ads: 1 ключевое слово → PAUSED.",
+      items: [{ before_status: "ENABLED", after_status: "PAUSED" }],
+    };
+    const call = vi.fn().mockResolvedValue(payload);
+    const instance = new McpController(
+      { call } as never,
+      {
+        authenticate: vi.fn().mockResolvedValue({
+          kind: "service",
+          scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+          workspaceId: "workspace",
+          tokenId: "key",
+          serviceIdentityId: "identity",
+        }),
+      } as never,
+      { authenticate: vi.fn() } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
+    );
+    const request = {
+      headers: { authorization: "Bearer fixture-opaque" },
+      body: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "pause_entities_preview", arguments: {} },
+      },
+    };
+    const result = await instance.post(request as never, reply() as never);
+    expect(result).toMatchObject({
+      result: {
+        structuredContent: payload,
+        content: [
+          { type: "text", text: JSON.stringify(payload) },
+          { type: "text", text: payload.summary },
+        ],
+      },
+    });
+    const failure = googleWriteFailure("DEVELOPER_TOKEN_NOT_APPROVED");
+    call.mockRejectedValueOnce(
+      new GoogleAdsWriteError("google_ads_mutation_failed", failure.message, [
+        failure,
+      ]),
+    );
+    const rejected = await instance.post(request as never, reply() as never);
+    expect(JSON.stringify(rejected)).toContain("DEVELOPER_TOKEN_NOT_APPROVED");
+    expect(JSON.stringify(rejected)).toContain("Проверьте уровень доступа");
+    expect(JSON.stringify(rejected)).not.toContain("fixture-opaque");
   });
   it("returns a typed local confirmation error without exposing internal details", async () => {
     const instance = new McpController(

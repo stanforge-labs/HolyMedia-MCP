@@ -30,6 +30,19 @@ type ApprovalView = {
   after: string;
   expires_at: string;
   approved: boolean;
+  items?: Array<{
+    resource_name: string;
+    criterion_id: string;
+    keyword: string;
+    match_type: string;
+    campaign_id: string;
+    campaign_name: string;
+    ad_group_id: string;
+    ad_group_name: string;
+    before_status: string;
+    after_status: string;
+    warnings: string[];
+  }>;
 };
 
 const copy = {
@@ -56,7 +69,10 @@ const copy = {
     approved:
       "Изменение подтверждено. Вернитесь в ChatGPT/Codex для выполнения.",
     cancelled: "Изменение отменено. Выполнение по этому preview невозможно.",
-    noMutation: "Подтверждение здесь ещё не изменяет кампанию в Meta Ads.",
+    noMutation: "Подтверждение здесь не изменяет данные рекламного кабинета.",
+    keywords: "Статус ключевых слов",
+    keyword: "Ключевое слово / ID",
+    adGroup: "Группа объявлений",
   },
   en: {
     eyebrow: "HOLYMEDIA MCP",
@@ -80,7 +96,10 @@ const copy = {
     failed: "We could not save your decision. Please try again.",
     approved: "Change approved. Return to ChatGPT/Codex to execute it.",
     cancelled: "Change cancelled. This preview can no longer be executed.",
-    noMutation: "Approval here does not yet change the Meta Ads campaign.",
+    noMutation: "Approval here does not change data in the ad account.",
+    keywords: "Keyword status",
+    keyword: "Keyword / ID",
+    adGroup: "Ad group",
   },
 };
 
@@ -225,15 +244,17 @@ export default function McpApprovalPage() {
   }
 
   const operation = view
-    ? view.operation === "META_CAMPAIGN_RENAME"
-      ? t.rename
-      : view.operation === "META_CAMPAIGN_PAUSE"
-        ? t.pause
-        : t.resume
+    ? view.operation === "GOOGLE_KEYWORD_STATUS"
+      ? t.keywords
+      : view.operation === "META_CAMPAIGN_RENAME"
+        ? t.rename
+        : view.operation === "META_CAMPAIGN_PAUSE"
+          ? t.pause
+          : t.resume
     : "";
 
   return (
-    <main className="oauth-consent-shell">
+    <main className="oauth-consent-shell mcp-approval-shell">
       <section
         className="oauth-consent-card mcp-approval-card"
         aria-labelledby="approval-title"
@@ -284,6 +305,50 @@ export default function McpApprovalPage() {
                 <strong>{view.after}</strong>
               </div>
             </div>
+            {view.items && (
+              <div
+                className="mcp-approval-batch"
+                role="region"
+                aria-label={t.keywords}
+                tabIndex={0}
+              >
+                <table>
+                  <caption>
+                    {t.keywords} · {view.items.length}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t.keyword}</th>
+                      <th scope="col">{t.campaign}</th>
+                      <th scope="col">{t.adGroup}</th>
+                      <th scope="col">{t.before}</th>
+                      <th scope="col">{t.after}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.items.map((item) => (
+                      <tr key={item.resource_name}>
+                        <th scope="row">
+                          {item.keyword} [{item.match_type}] ·{" "}
+                          {item.criterion_id}
+                        </th>
+                        <td>
+                          {item.campaign_name} · {item.campaign_id}
+                        </td>
+                        <td>
+                          {item.ad_group_name} · {item.ad_group_id}
+                        </td>
+                        <td>{item.before_status}</td>
+                        <td>
+                          {item.after_status}
+                          {item.warnings.length > 0 ? " (no-op)" : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <p className="mcp-approval-expiry">
               {t.expires}:{" "}
               {new Date(view.expires_at).toLocaleString(
