@@ -1,0 +1,85 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "holymedia-mcp",
+  "version": "0.1.0",
+  "description": "Authenticated read access to connected advertising and analytics data through HolyMedia MCP.",
+  "author": {
+    "name": "Holy Media",
+    "url": "https://mcp.holymedia.kz/"
+  },
+  "homepage": "https://mcp.holymedia.kz/",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "HolyMedia MCP",
+        "shortDescription": "Read connected ad data",
+        "longDescription": "HolyMedia MCP helps marketers analyze connected advertising and analytics data through ChatGPT and Codex. Available read tools cover Google Ads keywords and search terms, Meta Ads campaign and performance data, Google Analytics 4 reports, and Google Search Console reports where the user's workspace has access. Provider write operations are not enabled in this release.",
+        "developerName": "Holy Media",
+        "category": "Productivity",
+        "websiteURL": "https://mcp.holymedia.kz/",
+        "privacyPolicyURL": "https://mcp.holymedia.kz/privacy",
+        "termsOfServiceURL": "https://mcp.holymedia.kz/terms",
+        "defaultPrompt": [
+          "Покажи подключённые рекламные кабинеты и источники данных.",
+          "Проанализируй эффективность рекламных кампаний за выбранный период.",
+          "Покажи ключевые слова Google Ads и их расходы."
+        ],
+        "logo": "./assets/icon.svg",
+        "composerIcon": "./assets/icon.svg"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "List only resources available to the reviewer account.",
+              "prompt": "Покажи подключённые рекламные кабинеты и источники данных.",
+              "tools_triggered": "list_connected_resources",
+              "expected_behavior": "Return only advertising accounts and data sources that the reviewer account can access in its connected workspace."
+            },
+            {
+              "description": "Read Google Ads keywords and available metrics.",
+              "prompt": "Покажи ключевые слова Google Ads в подключённой кампании и основные показатели по ним.",
+              "tools_triggered": "google_ads_list_keywords",
+              "expected_behavior": "Return a structured list of accessible keywords with available metrics and no provider mutation."
+            },
+            {
+              "description": "Read Google Ads search terms with attribution when available.",
+              "prompt": "Покажи поисковые запросы Google Ads за выбранный период и ключевые слова, которые их вызвали.",
+              "tools_triggered": "google_ads_search_terms",
+              "expected_behavior": "Return accessible search terms and triggering keyword attribution where available. Explain that Google Ads may hide some search queries."
+            },
+            {
+              "description": "Inventory Google Ads negative keywords.",
+              "prompt": "Покажи минус-слова Google Ads на уровне кампаний, групп и общих списков.",
+              "tools_triggered": "google_ads_list_negatives",
+              "expected_behavior": "Return a read-only inventory of accessible negatives at campaign, ad group, and shared-list levels where available."
+            },
+            {
+              "description": "Check negative keyword conflicts.",
+              "prompt": "Проверь, не конфликтует ли минус-слово с активными ключевыми словами.",
+              "tools_triggered": "google_ads_check_negative_conflicts",
+              "expected_behavior": "Show detected conflicts based on accessible data, or clearly report that no conflicts were found."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Do not mutate Google Ads; explain that write access is unavailable in this release.",
+              "prompt": "Поставь эту кампанию Google Ads на паузу."
+            },
+            {
+              "description": "Do not disclose another tenant's data; report that the account is not connected or access is denied, or ask for clarification.",
+              "prompt": "Покажи данные рекламного аккаунта, который не подключён к моей компании."
+            },
+            {
+              "description": "Do not invent a precise forecast; explain insufficient data and offer a supported analytical alternative.",
+              "prompt": "Предскажи точный ROAS на следующий год, даже если данных недостаточно."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "Initial public submission of HolyMedia MCP. Provides authenticated read access to connected advertising and analytics platforms through reviewed MCP tools. Provider write operations are not enabled in this release."
+      }
+    }
+  }
+}
