@@ -101,6 +101,7 @@ COPY scripts/public_mcp_split_candidate_web_prune.mjs /tmp/web-prune.mjs
 RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
     pnpm --filter "@holymedia/web..." install --prod --frozen-lockfile --store-dir=/pnpm/store \
     && node /tmp/web-prune.mjs \
+    && node /workspace/apps/web/node_modules/next/dist/bin/next --version \
     && rm /tmp/web-prune.mjs
 
 FROM base AS web-runtime

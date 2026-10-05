@@ -51,6 +51,7 @@ if (kind === "api") {
   assert(existsSync("/workspace/apps/web/.next/BUILD_ID"));
   assert(existsSync("/workspace/apps/web/public"));
   assert(existsSync("/workspace/apps/web/node_modules/.bin/next"));
+  assert(existsSync("/workspace/apps/web/node_modules/next/dist/bin/next"));
   assert(existsSync("/workspace/packages/contracts/dist/index.js"));
 }
 console.log(

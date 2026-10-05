@@ -11,6 +11,10 @@ import {
 import { join } from "node:path";
 export const isTestingPackage = (name) =>
   /^(?:@playwright\+test|playwright|playwright-core)@/.test(name);
+// Match the actual final linked module, never a peer name encoded in Next's
+// virtual-store directory key (next@..._@playwright+test@...).
+export const isTestingLink = (target) =>
+  /(?:^|\/)(?:@playwright\/test|playwright(?:-core)?)\/?$/.test(target);
 if (process.argv[1]?.endsWith("/web-prune.mjs")) {
   assert.equal(process.cwd(), "/workspace");
   for (const name of ["api", "worker"])
@@ -31,8 +35,12 @@ if (process.argv[1]?.endsWith("/web-prune.mjs")) {
         "experimental/testmode",
         "dist/experimental/testmode",
       ]) {
-        const target = join(next, suffix);
-        if (existsSync(target)) rmSync(target, { recursive: true });
+        const folder = join(next, suffix);
+        if (!existsSync(folder)) continue;
+        for (const item of readdirSync(folder, { withFileTypes: true })) {
+          if (item.name === "playwright" || item.name.startsWith("playwright."))
+            rmSync(join(folder, item.name), { recursive: item.isDirectory() });
+        }
       }
     }
   }
@@ -40,12 +48,7 @@ if (process.argv[1]?.endsWith("/web-prune.mjs")) {
     for (const entry of readdirSync(folder, { withFileTypes: true })) {
       const target = join(folder, entry.name);
       if (entry.isSymbolicLink()) {
-        if (
-          /(?:@playwright[+/]test|(?:^|\/)playwright(?:-core)?(?:@|\/))/.test(
-            readlinkSync(target),
-          )
-        )
-          rmSync(target);
+        if (isTestingLink(readlinkSync(target))) rmSync(target);
       } else if (
         entry.isFile() &&
         folder.endsWith("/.bin") &&
