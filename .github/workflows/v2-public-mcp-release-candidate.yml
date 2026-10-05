@@ -283,7 +283,9 @@ jobs:
         working-directory: runtime
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
+          NODE_OPTIONS: --dns-result-order=ipv4first
         run: |
+          curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:3000/api/health
           cp ../harness/scripts/public_mcp_release_candidate_playwright.mjs rc-playwright.config.mjs
           pnpm exec playwright test --config rc-playwright.config.mjs
       - name: Final adapter counters and sanitized runtime logs

@@ -15,7 +15,7 @@ export default defineConfig({
     // fails DNS before contacting a production application or provider.
     launchOptions: {
       args: [
-        "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
+        "--host-resolver-rules=MAP localhost 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
       ],
     },
     trace: "retain-on-failure",
