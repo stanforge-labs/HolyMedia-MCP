@@ -14,7 +14,7 @@ concurrency:
 
 env:
   SOURCE_SHA: a00817b746211a295bcb966f7fd7ef12cd6178fb
-  WEB_SOURCE_SHA: 55179f4d22a4fa6aa7bfb556dccb48e651958d07
+  WEB_SOURCE_SHA: ccb9db47996779b6ca44f118bf9e01e27e5ee344
   CURRENT_SHA: 2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
   CURRENT_DIGEST: sha256:dfd261f8941498ee48b7431a382c706e8bbe4fd2c0434dbe692114ea652944d8
   API_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-api-a00817b746211a295bcb966f7fd7ef12cd6178fb
@@ -214,12 +214,12 @@ jobs:
       tag: ${{ steps.candidate.outputs.tag }}
       digest: ${{ steps.candidate.outputs.digest }}
     env:
-      CANDIDATE_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-web-55179f4d22a4fa6aa7bfb556dccb48e651958d07
+      CANDIDATE_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-web-ccb9db47996779b6ca44f118bf9e01e27e5ee344
     steps:
       - uses: actions/checkout@v4
         with:
           path: runtime
-          ref: 55179f4d22a4fa6aa7bfb556dccb48e651958d07
+          ref: ccb9db47996779b6ca44f118bf9e01e27e5ee344
           persist-credentials: false
       - run: test "$(git -C runtime rev-parse HEAD)" = "$WEB_SOURCE_SHA"
       - uses: docker/setup-buildx-action@v3
