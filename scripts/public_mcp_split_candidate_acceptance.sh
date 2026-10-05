@@ -91,7 +91,7 @@ done
 docker pull "$CURRENT_IMAGE"
 docker pull postgres:18-alpine
 docker pull redis:7.4-alpine
-"${compose[@]}" config --format json | python3 -c '
+"${compose[@]}" --profile migration config --format json | python3 -c '
 import json,sys
 c=json.load(sys.stdin)
 assert c["networks"]["default"]["internal"] is True
