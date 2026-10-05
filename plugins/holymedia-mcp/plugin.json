@@ -17,6 +17,7 @@
         "developerName": "Holy Media",
         "category": "Productivity",
         "websiteURL": "https://mcp.holymedia.kz/",
+        "supportURL": "https://mcp.holymedia.kz/support",
         "privacyPolicyURL": "https://mcp.holymedia.kz/privacy",
         "termsOfServiceURL": "https://mcp.holymedia.kz/terms",
         "defaultPrompt": [
@@ -63,7 +64,7 @@
           ],
           "negative": [
             {
-              "description": "Do not mutate Google Ads; explain that write access is unavailable in this release.",
+              "description": "Do not mutate Google Ads; explain that write operations are unavailable in this read-only release.",
               "prompt": "Поставь эту кампанию Google Ads на паузу."
             },
             {
