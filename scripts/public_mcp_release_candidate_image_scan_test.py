@@ -42,10 +42,12 @@ class ImageScanTests(unittest.TestCase):
             self.assertEqual(self.scan("workspace/runtime.wasm-base64.js", content).returncode, 0)
 
     def test_complete_private_key_blocks_rejected_in_text_and_binary(self):
-        for key_type in [b"PRIVATE KEY", b"RSA PRIVATE KEY", b"EC PRIVATE KEY", b"OPENSSH PRIVATE KEY"]:
+        for key_type in [b"PRIVATE KEY", b"RSA PRIVATE KEY", b"EC PRIVATE KEY", b"DSA PRIVATE KEY", b"OPENSSH PRIVATE KEY"]:
             for newline in [b"\n", b"\\n"]:
-                content = b"-----BEGIN " + key_type + b"-----" + newline + b"A" * 128 + newline + b"-----END " + key_type + b"-----"
-                for path in ["workspace/config.js", "usr/lib/sample.so"]:
+                # Short PKCS#8 Ed25519 keys also fit below 80 base64 characters.
+                content = b"-----BEGIN " + key_type + b"-----" + newline + b"A" * 64 + newline + b"-----END " + key_type + b"-----"
+                # An unknown key in the exact GnuTLS path must still fail.
+                for path in ["workspace/config.js", "usr/lib/sample.so", "usr/lib/x86_64-linux-gnu/libgnutls.so.30.34.3"]:
                     result = self.scan(path, content)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn(content, result.stdout)
