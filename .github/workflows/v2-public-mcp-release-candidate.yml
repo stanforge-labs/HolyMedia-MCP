@@ -1,0 +1,326 @@
+name: v2-public-mcp-release-candidate
+
+on:
+  push:
+    branches:
+      - codex/public-mcp-release-candidate
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-mcp-release-candidate
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: a00817b746211a295bcb966f7fd7ef12cd6178fb
+  CURRENT_SHA: 2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
+  CURRENT_DIGEST: sha256:dfd261f8941498ee48b7431a382c706e8bbe4fd2c0434dbe692114ea652944d8
+  CANDIDATE_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-candidate-a00817b746211a295bcb966f7fd7ef12cd6178fb
+  CURRENT_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:sha-2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
+  HOLYMEDIA_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+  NEXT_PUBLIC_API_BASE_URL: https://mcp.holymedia.kz
+  NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+  CORS_ORIGINS: https://mcp.holymedia.kz
+  PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+  PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+  V2_CONFIRMED_WRITE_ENABLED: "false"
+  V2_PREVIEW_ONLY: "true"
+  V2_INTEGRATION_TESTS: "false"
+  V2_PG18_REHEARSAL: "false"
+
+jobs:
+  source-integrity:
+    if: github.ref == 'refs/heads/codex/public-mcp-release-candidate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Guard harness-only changes and exact ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" HEAD
+          git merge-base --is-ancestor "$CURRENT_SHA" "$SOURCE_SHA"
+          git diff --name-only "$SOURCE_SHA" HEAD > "$RUNNER_TEMP/rc-changed-paths"
+          test -s "$RUNNER_TEMP/rc-changed-paths"
+          if grep -Ev '^\.github/workflows/v2-public-mcp-release-candidate\.yml$|^scripts/public_mcp_release_candidate_[a-z_]+\.(mjs|py|sh)$|^infra/docker-compose\.v2\.public-mcp-candidate\.yml$' "$RUNNER_TEMP/rc-changed-paths"; then
+            echo 'Unexpected runtime/schema/package edit in release harness'; exit 1
+          fi
+          git diff --exit-code "$SOURCE_SHA" HEAD -- infra/Dockerfile.v2 packages/database/prisma apps packages .dockerignore
+          echo "Runtime source: $SOURCE_SHA; harness: $GITHUB_SHA"
+      - name: Validate harness syntax and storage/scanner safety tests
+        run: |
+          for file in scripts/public_mcp_release_candidate_*.mjs; do node --check "$file"; done
+          bash -n scripts/public_mcp_release_candidate_acceptance.sh
+          bash -n scripts/public_mcp_release_candidate_storage.sh
+          python3 -m py_compile scripts/public_mcp_release_candidate_image_scan.py scripts/public_mcp_release_candidate_image_scan_test.py
+          node --test scripts/public_mcp_release_candidate_storage_test.mjs
+          python3 scripts/public_mcp_release_candidate_image_scan_test.py
+
+  quality:
+    needs: source-integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: a00817b746211a295bcb966f7fd7ef12cd6178fb
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+          package_json_file: runtime/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: runtime/pnpm-lock.yaml
+      - run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm migrate:validate
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm security:secrets
+      - run: pnpm security:deps
+      - name: Record dependency severity counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rc-quality"
+          pnpm audit --json > "$RUNNER_TEMP/rc-quality/audit.json" || audit_status=$?
+          test "${audit_status:-0}" -le 1
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const file=process.env.RUNNER_TEMP+"/rc-quality/audit.json";
+            const audit=JSON.parse(fs.readFileSync(file,"utf8"));
+            const counts=audit.metadata?.vulnerabilities;
+            if (!counts || !Number.isInteger(counts.critical) || !Number.isInteger(counts.high) || !Number.isInteger(counts.moderate)) throw new Error("Audit counts unavailable");
+            if (counts.critical || counts.high) throw new Error("High/critical dependency findings");
+            const result={runtimeSource:process.env.SOURCE_SHA,quality:"PASS",security:counts,integrationTests:"disabled; no live providers"};
+            fs.writeFileSync(process.env.RUNNER_TEMP+"/rc-quality/quality.json",JSON.stringify(result,null,2));
+            console.log("QUALITY_RESULT "+JSON.stringify(result));
+          '
+          git diff --exit-code -- packages/database/prisma pnpm-lock.yaml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-mcp-candidate-quality
+          path: ${{ runner.temp }}/rc-quality/
+          if-no-files-found: ignore
+
+  build:
+    needs: source-integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.candidate.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: a00817b746211a295bcb966f7fd7ef12cd6178fb
+          persist-credentials: false
+      - run: test "$(git -C runtime rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Never overwrite an existing immutable candidate tag
+        id: exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "$CANDIDATE_TAG" > "$RUNNER_TEMP/rc-existing-image" 2> "$RUNNER_TEMP/rc-image-error"; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo 'Reusing existing immutable candidate; no tag overwrite'
+          elif grep -Eqi 'not found|manifest unknown|MANIFEST_UNKNOWN' "$RUNNER_TEMP/rc-image-error"; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Cannot safely establish candidate tag absence'; exit 1
+          fi
+      - name: Build full optimized runtime from exact source and push candidate only
+        id: image
+        if: steps.exists.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: runtime
+          file: runtime/infra/Dockerfile.v2
+          target: runtime
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          tags: ${{ env.CANDIDATE_TAG }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            io.holymedia.release-harness=${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify and record immutable candidate digest
+        id: candidate
+        env:
+          BUILT_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "$CANDIDATE_TAG" | awk '$1=="Digest:" {print $2; exit}')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          if [ -n "$BUILT_DIGEST" ]; then test "$digest" = "$BUILT_DIGEST"; fi
+          docker pull "$CANDIDATE_TAG@$digest"
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$CANDIDATE_TAG@$digest")" = "$SOURCE_SHA"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "CANDIDATE_IMAGE $CANDIDATE_TAG"
+          echo "CANDIDATE_DIGEST $digest"
+          printf 'Candidate: `%s`\n\nDigest: `%s`\n' "$CANDIDATE_TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+  storage:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CANDIDATE_DIGEST: ${{ needs.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Measure sequential pulls on this separate clean runner
+        run: bash harness/scripts/public_mcp_release_candidate_storage.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-mcp-candidate-storage
+          path: ${{ runner.temp }}/rc-storage/
+          if-no-files-found: error
+
+  acceptance:
+    needs: [build, quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CANDIDATE_DIGEST: ${{ needs.build.outputs.digest }}
+      COMPOSE_PROJECT_NAME: hm-public-mcp-candidate-ci
+      RELEASE_CANDIDATE_DISPOSABLE: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: a00817b746211a295bcb966f7fd7ef12cd6178fb
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate disposable strict-config keys, not provider credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          session=$(openssl rand -hex 32)
+          encryption=$(openssl rand -base64 32)
+          echo "::add-mask::$session"
+          echo "::add-mask::$encryption"
+          echo "SESSION_HASH_SECRET=$session" >> "$GITHUB_ENV"
+          echo "PROVIDER_CREDENTIAL_ENCRYPTION_KEYS=1:$encryption" >> "$GITHUB_ENV"
+          echo "CANDIDATE_IMAGE=$CANDIDATE_TAG@$CANDIDATE_DIGEST" >> "$GITHUB_ENV"
+          echo "CURRENT_IMAGE=$CURRENT_TAG@$CURRENT_DIGEST" >> "$GITHUB_ENV"
+          echo "HARNESS_SCRIPTS=$GITHUB_WORKSPACE/harness/scripts" >> "$GITHUB_ENV"
+      - name: Image scan, PG18 fresh migrations, old-image rollback and full runtime acceptance
+        run: bash harness/scripts/public_mcp_release_candidate_acceptance.sh
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+          package_json_file: runtime/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: runtime/pnpm-lock.yaml
+      - name: Install browser test dependencies from exact source
+        working-directory: runtime
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Support and fully mocked browser approval tests against candidate Web
+        working-directory: runtime
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+        run: |
+          cp ../harness/scripts/public_mcp_release_candidate_playwright.mjs rc-playwright.config.mjs
+          pnpm exec playwright test --config rc-playwright.config.mjs
+      - name: Final adapter counters and sanitized runtime logs
+        if: always()
+        run: bash harness/scripts/public_mcp_release_candidate_acceptance.sh collect
+      - name: Stop only this disposable CI stack
+        if: always()
+        run: |
+          docker compose -f harness/infra/docker-compose.v2.public-mcp-candidate.yml down -v --remove-orphans
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-mcp-candidate-acceptance
+          path: |
+            ${{ runner.temp }}/rc-acceptance/
+            runtime/test-results/
+          if-no-files-found: ignore
+
+  report:
+    if: always() && github.ref == 'refs/heads/codex/public-mcp-release-candidate'
+    needs: [source-integrity, quality, build, storage, acceptance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report independent release gates, without deployment
+        env:
+          SOURCE_RESULT: ${{ needs.source-integrity.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          STORAGE_RESULT: ${{ needs.storage.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          CANDIDATE_DIGEST: ${{ needs.build.outputs.digest }}
+        shell: bash
+        run: |
+          printf 'Runtime source: `%s`\nHarness: `%s`\nCandidate: `%s`\nDigest: `%s`\n\n' "$SOURCE_SHA" "$GITHUB_SHA" "$CANDIDATE_TAG" "$CANDIDATE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          printf '| Gate | Result |\n| --- | --- |\n| Source | %s |\n| Quality | %s |\n| Build | %s |\n| Storage | %s |\n| Acceptance | %s |\n\n' "$SOURCE_RESULT" "$QUALITY_RESULT" "$BUILD_RESULT" "$STORAGE_RESULT" "$ACCEPTANCE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Production accessed/changed: NO. Main changed: NO. ZIP rebuilt: NO. No deploy performed.\n' >> "$GITHUB_STEP_SUMMARY"
+          for result in "$SOURCE_RESULT" "$QUALITY_RESULT" "$BUILD_RESULT" "$STORAGE_RESULT" "$ACCEPTANCE_RESULT"; do
+            if [ "$result" != success ]; then echo 'RELEASE CANDIDATE BLOCKED'; exit 1; fi
+          done
+          echo 'RELEASE CANDIDATE PASS (separate production authorization and fresh disk check still required)'
