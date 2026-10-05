@@ -176,8 +176,7 @@ services:
       NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp.holymedia.kz
     working_dir: /workspace/apps/web
     command: ["./node_modules/.bin/next", "start"]
-    ports:
-      - "127.0.0.1:3000:3000"
+    # A CI-only host loopback proxy supplies browser ingress. Keep Web internal.
     healthcheck:
       test:
         [

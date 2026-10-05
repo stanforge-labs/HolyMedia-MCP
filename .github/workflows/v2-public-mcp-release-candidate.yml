@@ -62,6 +62,7 @@ jobs:
           bash -n scripts/public_mcp_release_candidate_storage.sh
           python3 -m py_compile scripts/public_mcp_release_candidate_image_scan.py scripts/public_mcp_release_candidate_image_scan_test.py
           node --test scripts/public_mcp_release_candidate_storage_test.mjs
+          node --test scripts/public_mcp_release_candidate_browser_proxy_test.mjs
           python3 scripts/public_mcp_release_candidate_image_scan_test.py
 
   quality:
@@ -285,7 +286,17 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           NODE_OPTIONS: --dns-result-order=ipv4first
         run: |
-          curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:3000/api/health
+          set -euo pipefail
+          web_id=$(docker compose -f ../harness/infra/docker-compose.v2.public-mcp-candidate.yml ps -q candidate-web)
+          test -n "$web_id"
+          test "$(docker inspect -f '{{.Image}}' "$web_id")" = "$(docker image inspect -f '{{.Id}}' "$CANDIDATE_IMAGE")"
+          network="${COMPOSE_PROJECT_NAME}_default"
+          test "$(docker network inspect -f '{{.Internal}}' "$network")" = true
+          export RC_BROWSER_WEB_IP=$(docker inspect "$web_id" | jq -er --arg network "$network" '.[0].NetworkSettings.Networks[$network].IPAddress')
+          node ../harness/scripts/public_mcp_release_candidate_browser_proxy.mjs > "$RUNNER_TEMP/rc-acceptance/browser-proxy.txt" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 --retry-connrefused --noproxy '*' http://127.0.0.1:3000/api/health
           cp ../harness/scripts/public_mcp_release_candidate_playwright.mjs rc-playwright.config.mjs
           pnpm exec playwright test --config rc-playwright.config.mjs
       - name: Final adapter counters and sanitized runtime logs
