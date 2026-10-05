@@ -25,7 +25,13 @@ returns 405, not SSE. Only an OAuth token for the exact `/mcp/public` resource
 is accepted. Both listing and invocation enforce the server-side allowlist.
 
 The public registry has an explicit reviewed read allowlist from the current
-legacy MCP registry, plus four controlled-write tools:
+legacy MCP registry. When `PUBLIC_MCP_WRITE_SCOPE_ENABLED=false`, only that
+read inventory is listed; direct calls to controlled-write names fail with
+`public_operation_not_available` before billing or provider dispatch. The
+first public release uses this read-only exposure policy.
+
+Only when `PUBLIC_MCP_WRITE_SCOPE_ENABLED=true` can the four prepared
+controlled-write tools appear in the public inventory:
 
 ```text
 preview_change_campaign_name

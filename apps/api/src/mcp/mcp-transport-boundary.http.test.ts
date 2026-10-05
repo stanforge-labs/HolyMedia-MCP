@@ -15,17 +15,20 @@ import { McpController } from "./mcp.controller.js";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
 import { McpService } from "./mcp.service.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
+import { PUBLIC_READ_TOOLS, PUBLIC_WRITE_TOOLS } from "./mcp-public-tools.js";
 
 const localOrigin = "https://local.example.test";
 const tools = McpService.prototype.tools.call({} as McpService);
 const publicWriteCall = vi.fn();
+const legacyCall = vi.fn();
+const billingCall = vi.fn();
 
 @Module({
   controllers: [McpController],
   providers: [
     CsrfGuard,
     { provide: APP_GUARD, useClass: CsrfGuard },
-    { provide: McpService, useValue: { tools: () => tools, call: vi.fn() } },
+    { provide: McpService, useValue: { tools: () => tools, call: legacyCall } },
     {
       provide: ServiceTokenService,
       useValue: {
@@ -61,7 +64,7 @@ const publicWriteCall = vi.fn();
             : null,
       },
     },
-    { provide: BillingService, useValue: { consumeMcpRequest: vi.fn() } },
+    { provide: BillingService, useValue: { consumeMcpRequest: billingCall } },
     { provide: AuditService, useValue: { record: vi.fn() } },
     { provide: McpPublicWriteService, useValue: { call: publicWriteCall } },
   ],
@@ -71,9 +74,14 @@ class LocalMcpBoundaryModule {}
 describe("local MCP HTTP tool boundary", () => {
   let app: NestFastifyApplication;
   const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  const previousWriteScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+  const previousControlledWriteFlag =
+    process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED;
 
   beforeAll(async () => {
     process.env.HOLYMEDIA_PUBLIC_BASE_URL = localOrigin;
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED = "false";
     app = await NestFactory.create<NestFastifyApplication>(
       LocalMcpBoundaryModule,
       new FastifyAdapter(),
@@ -89,9 +97,22 @@ describe("local MCP HTTP tool boundary", () => {
     if (previousBaseUrl === undefined)
       delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+    if (previousWriteScopeFlag === undefined)
+      delete process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+    else process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = previousWriteScopeFlag;
+    if (previousControlledWriteFlag === undefined)
+      delete process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED;
+    else
+      process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED =
+        previousControlledWriteFlag;
   });
 
-  async function request(path: string, token: string | null, method: string) {
+  async function request(
+    path: string,
+    token: string | null,
+    method: string,
+    params?: Record<string, unknown>,
+  ) {
     return app
       .getHttpAdapter()
       .getInstance()
@@ -102,7 +123,12 @@ describe("local MCP HTTP tool boundary", () => {
           "content-type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        payload: { jsonrpc: "2.0", id: 1, method },
+        payload: {
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          ...(params ? { params } : {}),
+        },
       });
   }
 
@@ -145,8 +171,34 @@ describe("local MCP HTTP tool boundary", () => {
     const publicNames = publicRead
       .json()
       .result.tools.map((tool: { name: string }) => tool.name);
+    expect(publicNames).toEqual([...PUBLIC_READ_TOOLS]);
+    for (const name of PUBLIC_WRITE_TOOLS)
+      expect(publicNames).not.toContain(name);
     expect(publicNames).not.toContain("confirm_preview");
     expect(publicNames).not.toContain("commit_preview");
     expect(publicWriteCall).not.toHaveBeenCalled();
   });
+
+  it.each(PUBLIC_WRITE_TOOLS)(
+    "rejects hidden %s before billing or any provider path",
+    async (name) => {
+      const response = await request(
+        "/mcp/public",
+        "local-read",
+        "tools/call",
+        {
+          name,
+          arguments: {},
+        },
+      );
+      expect(response.statusCode).toBe(200);
+      expect(response.json().result.isError).toBe(true);
+      expect(JSON.parse(response.json().result.content[0].text).code).toBe(
+        "public_operation_not_available",
+      );
+      expect(publicWriteCall).not.toHaveBeenCalled();
+      expect(legacyCall).not.toHaveBeenCalled();
+      expect(billingCall).not.toHaveBeenCalled();
+    },
+  );
 });

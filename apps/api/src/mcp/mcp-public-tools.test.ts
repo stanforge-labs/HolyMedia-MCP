@@ -5,6 +5,7 @@ import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_WRITE_TOOLS,
   isPublicTool,
+  isPublicToolAvailable,
   publicTools,
 } from "./mcp-public-tools.js";
 
@@ -25,9 +26,9 @@ describe("public MCP tool registry", () => {
     );
     expect(PUBLIC_WRITE_TOOLS).toHaveLength(4);
     const listed = publicTools(descriptors);
-    expect(listed.map((tool) => tool.name)).toEqual([...PUBLIC_TOOL_NAMES]);
+    expect(listed.map((tool) => tool.name)).toEqual([...PUBLIC_READ_TOOLS]);
     expect(new Set(listed.map((tool) => tool.name)).size).toBe(
-      PUBLIC_TOOL_NAMES.length,
+      PUBLIC_READ_TOOLS.length,
     );
     for (const hidden of [
       "confirm_preview",
@@ -44,8 +45,28 @@ describe("public MCP tool registry", () => {
     }
   });
 
+  it("hides every controlled-write tool from listing and invocation when scope is disabled", () => {
+    const names = publicTools(descriptors, false).map((tool) => tool.name);
+    expect(names).toEqual([...PUBLIC_READ_TOOLS]);
+    for (const name of PUBLIC_WRITE_TOOLS) {
+      expect(names).not.toContain(name);
+      expect(isPublicToolAvailable(name, false)).toBe(false);
+    }
+    for (const name of PUBLIC_READ_TOOLS)
+      expect(isPublicToolAvailable(name, false)).toBe(true);
+  });
+
+  it("preserves the future write inventory only when write scope is explicitly enabled", () => {
+    expect(publicTools(descriptors, true).map((tool) => tool.name)).toEqual([
+      ...PUBLIC_TOOL_NAMES,
+    ]);
+    for (const name of PUBLIC_WRITE_TOOLS)
+      expect(isPublicToolAvailable(name, true)).toBe(true);
+    expect(isPublicToolAvailable("commit_preview", true)).toBe(false);
+  });
+
   it("requires all annotations and classifies actual side effects", () => {
-    for (const tool of publicTools(descriptors)) {
+    for (const tool of publicTools(descriptors, true)) {
       expect(tool.title).toBeTruthy();
       expect(tool.annotations.title).toBeTruthy();
       for (const key of [
@@ -69,7 +90,7 @@ describe("public MCP tool registry", () => {
       }
     }
     const byName = new Map(
-      publicTools(descriptors).map((tool) => [tool.name, tool]),
+      publicTools(descriptors, true).map((tool) => [tool.name, tool]),
     );
     for (const name of PUBLIC_WRITE_TOOLS.slice(0, 3)) {
       expect(byName.get(name)?.annotations).toMatchObject({

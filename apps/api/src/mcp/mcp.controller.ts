@@ -15,6 +15,7 @@ import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
 import { GoogleAdsApiError } from "../providers/google-ads.error.js";
+import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
 import { MetaReadError } from "../providers/meta-read.error.js";
@@ -24,6 +25,7 @@ import { McpPublicWriteService } from "./mcp-public-write.service.js";
 import {
   isPublicReadTool,
   isPublicTool,
+  isPublicToolAvailable,
   publicTools,
 } from "./mcp-public-tools.js";
 
@@ -39,6 +41,8 @@ type JsonRpcRequest = {
 export class McpController {
   private readonly logger = createLogger("holymedia-mcp-v2-mcp");
   private readonly endpoints = oauthEndpoints();
+  private readonly publicWriteScopeEnabled =
+    loadConfig().publicMcpWriteScopeEnabled;
 
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
@@ -177,7 +181,9 @@ export class McpController {
         jsonrpc: "2.0",
         id,
         result: {
-          tools: publicRoute ? publicTools(this.mcp.tools()) : this.mcp.tools(),
+          tools: publicRoute
+            ? publicTools(this.mcp.tools(), this.publicWriteScopeEnabled)
+            : this.mcp.tools(),
         },
       };
     }
@@ -185,7 +191,10 @@ export class McpController {
       const params = input.params ?? {};
       const name = typeof params.name === "string" ? params.name : "";
       try {
-        if (publicRoute && !isPublicTool(name))
+        if (
+          publicRoute &&
+          !isPublicToolAvailable(name, this.publicWriteScopeEnabled)
+        )
           throw new PreviewError("public_operation_not_available");
         await this.billing.consumeMcpRequest(principal.workspaceId);
         let result: unknown;

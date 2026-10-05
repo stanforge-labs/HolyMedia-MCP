@@ -5,6 +5,7 @@ export const FRONTEND_ROUTES = [
   "/",
   "/privacy",
   "/terms",
+  "/support",
   "/auth",
   "/auth/reset",
   "/invitations/accept",
