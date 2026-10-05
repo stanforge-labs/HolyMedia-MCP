@@ -17,7 +17,8 @@ worker_check() {
   test "$(docker inspect -f '{{.Image}}' "$id")" = "$(docker image inspect -f '{{.Id}}' "$CURRENT_IMAGE")"
   test "$(docker inspect -f '{{.State.Health.Status}}' "$id")" = healthy
   docker exec "$id" node --input-type=module -e '
-    import {Queue, QueueEvents} from "bullmq";
+    import {Queue} from "bullmq";
+    import assert from "node:assert/strict";
     import {redisConnection} from "./dist/provider-discovery.job.js";
     import {createDatabase,closeDatabase} from "/workspace/packages/database/dist/index.js";
     const db=createDatabase(process.env.DATABASE_URL);
@@ -25,12 +26,20 @@ worker_check() {
     await closeDatabase(db);
     const connection=redisConnection(process.env.REDIS_URL);
     const q=new Queue("holymedia-v2-foundation",{connection});
-    const events=new QueueEvents("holymedia-v2-foundation",{connection});
-    await events.waitUntilReady();
     const job=await q.add("foundation.ping",{emittedAt:new Date().toISOString()},{removeOnComplete:10,removeOnFail:10});
-    await job.waitUntilFinished(events,30000);
-    await events.close(); await q.close();
-    console.log("OLD_WORKER_CHECK "+JSON.stringify({databaseMigrations:rows[0].count,foundationPing:"PASS",providerCalls:0,providerWrites:0}));
+    let completed;
+    const deadline=Date.now()+30000;
+    while(Date.now()<deadline) {
+      const state=await job.getState();
+      assert.notEqual(state,"failed","Foundation ping failed");
+      if(state==="completed") { completed=await q.getJob(job.id); break; }
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    assert(completed,"Foundation ping did not reach completed state before timeout");
+    assert.equal(completed.returnvalue.emittedAt,job.data.emittedAt);
+    assert(Number.isFinite(Date.parse(completed.returnvalue.processedAt)));
+    await q.close();
+    console.log("OLD_WORKER_CHECK "+JSON.stringify({databaseMigrations:rows[0].count,foundationPing:"PASS",jobState:"completed",jobId:job.id,providerCalls:0,providerWrites:0}));
   ' | tee "$output/worker-$phase.txt"
 }
 collect() {
