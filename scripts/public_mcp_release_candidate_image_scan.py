@@ -6,8 +6,12 @@ import tarfile
 
 findings = []
 file_count = 0
+private_key_template_files = 0
+private_key_header = re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
 patterns = [
-    rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+    # A PEM header alone is also present in TLS libraries and placeholder
+    # documentation. Require the matching footer and a real base64-sized body.
+    rb"-----BEGIN (?P<private_key_type>(?:RSA |EC |OPENSSH )?PRIVATE KEY)-----(?:\r?\n|\\n)(?:[A-Za-z0-9+/=]|\r|\n|\\n){80,}-----END (?P=private_key_type)-----",
     rb"sk-proj-[A-Za-z0-9_-]{20,}",
     rb"GOCSPX-[A-Za-z0-9_-]{20,}",
     # Meta access tokens are delimited values, not arbitrary EA substrings in
@@ -33,6 +37,7 @@ with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
         stream = archive.extractfile(entry)
         tail = b""
         found = False
+        template_header = False
         while True:
             chunk = stream.read(1024 * 1024)
             if not chunk:
@@ -40,12 +45,16 @@ with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
             data = tail + chunk
             if value_pattern.search(data):
                 found = True
+            if private_key_header.search(data):
+                template_header = True
             if name.endswith(".npmrc") and re.search(rb"(?:_authToken|_password|_auth)\s*=\s*[^\s]+", data):
                 found = True
-            tail = data[-4096:]
+            tail = data[-65536:]
         if found:
             findings.append({"path": name, "reason": "secret marker; content redacted"})
-result = {"imageSecretScan": "FAIL" if findings else "PASS", "filesScanned": file_count, "findings": findings}
+        elif template_header:
+            private_key_template_files += 1
+result = {"imageSecretScan": "FAIL" if findings else "PASS", "filesScanned": file_count, "incompletePrivateKeyMarkerFiles": private_key_template_files, "findings": findings}
 print("IMAGE_SCAN_RESULT " + json.dumps(result))
 if findings:
     sys.exit(1)
