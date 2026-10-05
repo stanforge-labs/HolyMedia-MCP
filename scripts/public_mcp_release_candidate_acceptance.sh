@@ -52,9 +52,16 @@ for s in ["candidate-api","candidate-observed-api","candidate-worker","rollback-
     for flag in ["PUBLIC_MCP_WRITE_SCOPE_ENABLED","PUBLIC_MCP_CONTROLLED_WRITE_ENABLED","V2_CONFIRMED_WRITE_ENABLED"]: assert e[flag]=="false"
     assert e["HOLYMEDIA_PUBLIC_BASE_URL"]=="https://mcp.holymedia.kz"
     assert e["CORS_ORIGINS"]=="https://mcp.holymedia.kz"
+for name, service in c["services"].items():
+    networks=set(service.get("networks", {}))
+    if name in ["candidate-migrate", "rollback-migrate"]:
+        assert networks=={"default", "migration-downloads"}
+        assert service["command"]==["pnpm", "--dir", "packages/database", "run", "prisma:deploy"]
+    else:
+        assert networks=={"default"}, "Application/runtime egress forbidden"
 assert c["services"]["rollback-api"]["command"]==["node","apps/api/dist/main.js"]
 assert "build" not in c["services"]["candidate-api"]
-print("DISPOSABLE CONFIG / NO EGRESS / FLAGS OFF / NO OLD MIGRATION COMMAND: PASS")
+print("DISPOSABLE CONFIG / RUNTIME NO EGRESS / FLAGS OFF / NO OLD MIGRATION COMMAND: PASS; isolated one-shot Prisma CLI may download its pinned engine")
 '
 "${compose[@]}" up -d --no-build --wait --wait-timeout 120 candidate-postgres candidate-redis rollback-postgres rollback-redis
 

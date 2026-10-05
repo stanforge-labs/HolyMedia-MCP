@@ -69,6 +69,9 @@ services:
       DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@candidate-postgres:5432/public_mcp_candidate
       REDIS_URL: redis://candidate-redis:6379
     command: ["pnpm", "--dir", "packages/database", "run", "prisma:deploy"]
+    # Only Prisma CLI runs here. Its version-pinned platform engine download
+    # is a build dependency fetch, not an application/provider call.
+    networks: [default, migration-downloads]
 
   rollback-migrate:
     # Candidate source applies the additive schema, never the old image.
@@ -79,6 +82,7 @@ services:
       DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@rollback-postgres:5432/public_mcp_rollback
       REDIS_URL: redis://rollback-redis:6379
     command: ["pnpm", "--dir", "packages/database", "run", "prisma:deploy"]
+    networks: [default, migration-downloads]
 
   rollback-api:
     image: ${CURRENT_IMAGE:?pinned old image required}
@@ -189,3 +193,5 @@ services:
 networks:
   default:
     internal: true
+  migration-downloads:
+    internal: false
