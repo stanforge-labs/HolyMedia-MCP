@@ -83,6 +83,36 @@ COPY --from=api-build --chown=node:node /workspace/packages/site-audit/dist ./pa
 
 USER node
 
+# Web production graph only. API, Prisma and Worker are not installed here.
+FROM build-deps AS web-build
+COPY . .
+ARG NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+RUN pnpm exec turbo run build --filter=@holymedia/web... \
+    && rm -rf apps/web/.next/cache \
+    && find packages/contracts/dist -type f \( -name '*.test.*' -o -name '*.spec.*' \) -delete
+
+FROM base AS web-prod-deps
+COPY package.json pnpm-lock.yaml .npmrc ./
+COPY infra/web-runtime.pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/contracts/package.json ./packages/contracts/package.json
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm --filter "@holymedia/web..." install --prod --frozen-lockfile --store-dir=/pnpm/store
+
+FROM base AS web-runtime
+ENV NODE_ENV=production
+COPY --from=web-prod-deps --chown=node:node /workspace/package.json /workspace/.npmrc ./
+COPY --from=web-prod-deps --chown=node:node /workspace/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=web-prod-deps --chown=node:node /workspace/node_modules ./node_modules
+COPY --from=web-prod-deps --chown=node:node /workspace/apps/web ./apps/web
+COPY --from=web-prod-deps --chown=node:node /workspace/packages/contracts ./packages/contracts
+COPY --from=web-build --chown=node:node /workspace/packages/contracts/dist ./packages/contracts/dist
+COPY --from=web-build --chown=node:node /workspace/apps/web/.next ./apps/web/.next
+COPY --from=web-build --chown=node:node /workspace/apps/web/public ./apps/web/public
+COPY --from=web-build --chown=node:node /workspace/apps/web/next.config.ts ./apps/web/next.config.ts
+USER node
+
 FROM base AS runtime
 ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright

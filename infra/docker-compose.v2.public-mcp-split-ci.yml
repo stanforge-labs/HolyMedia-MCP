@@ -1,0 +1,155 @@
+x-candidate-env: &candidate-env
+  NODE_ENV: production
+  V2_CONFIG_STRICT: "true"
+  HOLYMEDIA_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+  NEXT_PUBLIC_API_BASE_URL: https://mcp.holymedia.kz
+  NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+  CORS_ORIGINS: https://mcp.holymedia.kz
+  PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+  PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+  V2_CONFIRMED_WRITE_ENABLED: "false"
+  V2_PREVIEW_ONLY: "true"
+  V2_META_APP_REVIEW_RENAME_ENABLED: "false"
+  V2_META_APP_REVIEW_SECOND_RENAME_ENABLED: "false"
+  PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED: "false"
+  PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
+  PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: ${PROVIDER_CREDENTIAL_ENCRYPTION_KEYS:?disposable key required}
+  SESSION_HASH_SECRET: ${SESSION_HASH_SECRET:?disposable session key required}
+  RELEASE_CANDIDATE_DISPOSABLE: "true"
+  CHECKPOINT_DISABLE: "1"
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  API_PORT: "4000"
+
+services:
+  candidate-postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: public_mcp_candidate
+      POSTGRES_USER: holymedia
+      POSTGRES_PASSWORD: ci-only-public-mcp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holymedia -d public_mcp_candidate"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  candidate-redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  candidate-migrate:
+    image: ${API_IMAGE:?API digest required}
+    profiles: [migration]
+    environment:
+      <<: *candidate-env
+      DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@candidate-postgres:5432/public_mcp_candidate
+      REDIS_URL: redis://candidate-redis:6379
+    command: ["pnpm", "--dir", "packages/database", "run", "prisma:deploy"]
+    # Only Prisma CLI runs here. Its version-pinned platform engine download
+    # is a build dependency fetch, not an application/provider call.
+    networks: [default, migration-downloads]
+
+  old-migrate:
+    image: ${CURRENT_IMAGE:?old image required}
+    profiles: [migration]
+    environment:
+      <<: *candidate-env
+      DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@candidate-postgres:5432/public_mcp_candidate
+      REDIS_URL: redis://candidate-redis:6379
+    command: ["pnpm", "--dir", "packages/database", "run", "prisma:deploy"]
+    networks: [default, migration-downloads]
+
+  candidate-api:
+    image: ${API_IMAGE:?API digest required}
+    environment:
+      <<: *candidate-env
+      DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@candidate-postgres:5432/public_mcp_candidate
+      REDIS_URL: redis://candidate-redis:6379
+    command: ["node", "apps/api/dist/main.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  candidate-observed-api:
+    # Same immutable image, additional fail-closed adapter-attempt observation.
+    image: ${API_IMAGE:?API digest required}
+    environment:
+      <<: *candidate-env
+      DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@candidate-postgres:5432/public_mcp_candidate
+      REDIS_URL: redis://candidate-redis:6379
+      NODE_OPTIONS: --import=/acceptance/public_mcp_split_candidate_probe.mjs
+    volumes:
+      - ${HARNESS_SCRIPTS:?harness script path required}:/acceptance:ro
+    command: ["node", "apps/api/dist/main.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "--no-experimental-strip-types",
+          "-e",
+          "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  candidate-worker:
+    image: ${CURRENT_IMAGE:?old image required}
+    environment:
+      <<: *candidate-env
+      DATABASE_URL: postgresql://holymedia:ci-only-public-mcp@candidate-postgres:5432/public_mcp_candidate
+      REDIS_URL: redis://candidate-redis:6379
+    working_dir: /workspace/apps/worker
+    command: ["node", "dist/main.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "import('ioredis').then(async({default:R})=>{const r=new R(process.env.REDIS_URL);await r.ping();await r.quit()}).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  candidate-web:
+    image: ${WEB_IMAGE:?Web digest required}
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NEXT_PUBLIC_API_BASE_URL: https://mcp.holymedia.kz
+      NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+    working_dir: /workspace/apps/web
+    command: ["./node_modules/.bin/next", "start"]
+    # A CI-only host loopback proxy supplies browser ingress. Keep Web internal.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+networks:
+  default:
+    internal: true
+  migration-downloads:
+    internal: false

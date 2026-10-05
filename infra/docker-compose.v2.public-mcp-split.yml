@@ -1,0 +1,7 @@
+# Apply after docker-compose.v2.production.yml. No deployment in this task.
+# V2_IMAGE remains the pinned OLD image, including Worker and rollback Chromium.
+services:
+  api:
+    image: ${V2_API_IMAGE:?V2_API_IMAGE is required}
+  web:
+    image: ${V2_WEB_IMAGE:?V2_WEB_IMAGE is required}

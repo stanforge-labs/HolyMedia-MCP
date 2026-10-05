@@ -1,0 +1,432 @@
+name: v2-public-mcp-split-release-candidate
+
+on:
+  push:
+    branches:
+      - codex/public-mcp-split-release-candidate
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-mcp-split-release-candidate
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: a00817b746211a295bcb966f7fd7ef12cd6178fb
+  CURRENT_SHA: 2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
+  CURRENT_DIGEST: sha256:dfd261f8941498ee48b7431a382c706e8bbe4fd2c0434dbe692114ea652944d8
+  API_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-api-a00817b746211a295bcb966f7fd7ef12cd6178fb
+  CURRENT_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:sha-2c1153d580e73192cfd5bc8aaf103cd01b8ab86a
+  HOLYMEDIA_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+  NEXT_PUBLIC_API_BASE_URL: https://mcp.holymedia.kz
+  NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp.holymedia.kz
+  CORS_ORIGINS: https://mcp.holymedia.kz
+  PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+  PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+  V2_CONFIRMED_WRITE_ENABLED: "false"
+  V2_PREVIEW_ONLY: "true"
+  V2_INTEGRATION_TESTS: "false"
+  V2_PG18_REHEARSAL: "false"
+
+jobs:
+  source-integrity:
+    if: github.ref == 'refs/heads/codex/public-mcp-split-release-candidate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Guard harness-only changes and exact ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" HEAD
+          git merge-base --is-ancestor "$CURRENT_SHA" "$SOURCE_SHA"
+          git diff --name-only "$SOURCE_SHA" HEAD > "$RUNNER_TEMP/rc-changed-paths"
+          test -s "$RUNNER_TEMP/rc-changed-paths"
+          if grep -Ev '^\.github/workflows/v2-public-mcp-split-release-candidate\.yml$|^scripts/public_mcp_split_candidate_[a-z_]+\.(mjs|py|sh)$|^infra/(Dockerfile\.v2|web-runtime\.pnpm-workspace\.yaml|docker-compose\.v2\.public-mcp-split(-ci)?\.yml)$' "$RUNNER_TEMP/rc-changed-paths"; then
+            echo 'Unexpected runtime/schema/package edit in release harness'; exit 1
+          fi
+          git diff --exit-code "$SOURCE_SHA" HEAD -- packages/database/prisma apps packages .dockerignore pnpm-lock.yaml package.json pnpm-workspace.yaml
+          python3 scripts/public_mcp_split_candidate_source_guard.py
+          echo "Runtime source: $SOURCE_SHA; harness: $GITHUB_SHA"
+      - name: Validate harness syntax and storage/scanner safety tests
+        run: |
+          for file in scripts/public_mcp_split_candidate_*.mjs; do node --check "$file"; done
+          bash -n scripts/public_mcp_split_candidate_acceptance.sh
+          bash -n scripts/public_mcp_split_candidate_storage.sh
+          python3 -m py_compile scripts/public_mcp_split_candidate_image_scan.py scripts/public_mcp_split_candidate_image_scan_test.py
+          node --test scripts/public_mcp_split_candidate_storage_test.mjs
+          node --test scripts/public_mcp_split_candidate_browser_proxy_test.mjs
+          python3 scripts/public_mcp_split_candidate_image_scan_test.py
+
+  quality:
+    needs: source-integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: a00817b746211a295bcb966f7fd7ef12cd6178fb
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+          package_json_file: runtime/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: runtime/pnpm-lock.yaml
+      - run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm migrate:validate
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm security:secrets
+      - run: pnpm security:deps
+      - name: Record dependency severity counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rc-quality"
+          pnpm audit --json > "$RUNNER_TEMP/rc-quality/audit.json" || audit_status=$?
+          test "${audit_status:-0}" -le 1
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const file=process.env.RUNNER_TEMP+"/rc-quality/audit.json";
+            const audit=JSON.parse(fs.readFileSync(file,"utf8"));
+            const counts=audit.metadata?.vulnerabilities;
+            if (!counts || !Number.isInteger(counts.critical) || !Number.isInteger(counts.high) || !Number.isInteger(counts.moderate)) throw new Error("Audit counts unavailable");
+            if (counts.critical || counts.high) throw new Error("High/critical dependency findings");
+            const result={runtimeSource:process.env.SOURCE_SHA,quality:"PASS",security:counts,integrationTests:"disabled; no live providers"};
+            fs.writeFileSync(process.env.RUNNER_TEMP+"/rc-quality/quality.json",JSON.stringify(result,null,2));
+            console.log("QUALITY_RESULT "+JSON.stringify(result));
+          '
+          git diff --exit-code -- packages/database/prisma pnpm-lock.yaml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-mcp-split-candidate-quality
+          path: ${{ runner.temp }}/rc-quality/
+          if-no-files-found: ignore
+
+  build-api:
+    needs: source-integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.candidate.outputs.tag }}
+      digest: ${{ steps.candidate.outputs.digest }}
+    env:
+      CANDIDATE_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-api-a00817b746211a295bcb966f7fd7ef12cd6178fb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: a00817b746211a295bcb966f7fd7ef12cd6178fb
+          persist-credentials: false
+      - run: test "$(git -C runtime rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Never overwrite an existing immutable candidate tag
+        id: exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "$CANDIDATE_TAG" > "$RUNNER_TEMP/rc-existing-image" 2> "$RUNNER_TEMP/rc-image-error"; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo 'Reusing existing immutable candidate; no tag overwrite'
+          elif grep -Eqi 'not found|manifest unknown|MANIFEST_UNKNOWN' "$RUNNER_TEMP/rc-image-error"; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Cannot safely establish candidate tag absence'; exit 1
+          fi
+      - name: Build api-only runtime and push immutable split tag
+        id: image
+        if: steps.exists.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: runtime
+          file: runtime/infra/Dockerfile.v2
+          target: api-runtime
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          tags: ${{ env.CANDIDATE_TAG }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            io.holymedia.runtime-source=${{ env.SOURCE_SHA }}
+            io.holymedia.release-harness=${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+          cache-from: type=gha,scope=public-mcp-split-api
+          cache-to: type=gha,mode=max,scope=public-mcp-split-api
+      - name: Verify and record immutable candidate digest
+        id: candidate
+        env:
+          BUILT_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "$CANDIDATE_TAG" | awk '$1=="Digest:" {print $2; exit}')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          if [ -n "$BUILT_DIGEST" ]; then test "$digest" = "$BUILT_DIGEST"; fi
+          docker pull "$CANDIDATE_TAG@$digest"
+          test "$(docker image inspect -f '{{index .Config.Labels "io.holymedia.runtime-source"}}' "$CANDIDATE_TAG@$digest")" = "$SOURCE_SHA"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "tag=$CANDIDATE_TAG" >> "$GITHUB_OUTPUT"
+          echo "CANDIDATE_IMAGE $CANDIDATE_TAG"
+          echo "CANDIDATE_DIGEST $digest"
+          printf 'Candidate: `%s`\n\nDigest: `%s`\n' "$CANDIDATE_TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+  build-web:
+    needs: source-integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.candidate.outputs.tag }}
+      digest: ${{ steps.candidate.outputs.digest }}
+    env:
+      CANDIDATE_TAG: ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-web-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: test "$(git -C runtime rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Never overwrite an existing immutable candidate tag
+        id: exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "$CANDIDATE_TAG" > "$RUNNER_TEMP/rc-existing-image" 2> "$RUNNER_TEMP/rc-image-error"; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo 'Reusing existing immutable candidate; no tag overwrite'
+          elif grep -Eqi 'not found|manifest unknown|MANIFEST_UNKNOWN' "$RUNNER_TEMP/rc-image-error"; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Cannot safely establish candidate tag absence'; exit 1
+          fi
+      - name: Build web-only runtime and push immutable split tag
+        id: image
+        if: steps.exists.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: runtime
+          file: runtime/infra/Dockerfile.v2
+          target: web-runtime
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          tags: ${{ env.CANDIDATE_TAG }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            io.holymedia.runtime-source=${{ env.SOURCE_SHA }}
+            io.holymedia.release-harness=${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+          cache-from: type=gha,scope=public-mcp-split-web
+          cache-to: type=gha,mode=max,scope=public-mcp-split-web
+      - name: Verify and record immutable candidate digest
+        id: candidate
+        env:
+          BUILT_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "$CANDIDATE_TAG" | awk '$1=="Digest:" {print $2; exit}')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          if [ -n "$BUILT_DIGEST" ]; then test "$digest" = "$BUILT_DIGEST"; fi
+          docker pull "$CANDIDATE_TAG@$digest"
+          test "$(docker image inspect -f '{{index .Config.Labels "io.holymedia.runtime-source"}}' "$CANDIDATE_TAG@$digest")" = "$SOURCE_SHA"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "tag=$CANDIDATE_TAG" >> "$GITHUB_OUTPUT"
+          echo "CANDIDATE_IMAGE $CANDIDATE_TAG"
+          echo "CANDIDATE_DIGEST $digest"
+          printf 'Candidate: `%s`\n\nDigest: `%s`\n' "$CANDIDATE_TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+  storage:
+    needs: [build-api, build-web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    env:
+      API_DIGEST: ${{ needs.build-api.outputs.digest }}
+      WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+      WEB_TAG: ${{ needs.build-web.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Measure sequential pulls on this separate clean runner
+        run: bash harness/scripts/public_mcp_split_candidate_storage.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-mcp-split-candidate-storage
+          path: ${{ runner.temp }}/rc-storage/
+          if-no-files-found: error
+
+  acceptance:
+    needs: [build-api, build-web, quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
+    env:
+      API_DIGEST: ${{ needs.build-api.outputs.digest }}
+      WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+      WEB_TAG: ${{ needs.build-web.outputs.tag }}
+      COMPOSE_PROJECT_NAME: hm-public-mcp-split-ci
+      RELEASE_CANDIDATE_DISPOSABLE: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: runtime
+          ref: a00817b746211a295bcb966f7fd7ef12cd6178fb
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate disposable strict-config keys, not provider credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          session=$(openssl rand -hex 32)
+          encryption=$(openssl rand -base64 32)
+          echo "::add-mask::$session"
+          echo "::add-mask::$encryption"
+          echo "SESSION_HASH_SECRET=$session" >> "$GITHUB_ENV"
+          echo "PROVIDER_CREDENTIAL_ENCRYPTION_KEYS=1:$encryption" >> "$GITHUB_ENV"
+          echo "API_IMAGE=$API_TAG@$API_DIGEST" >> "$GITHUB_ENV"
+          echo "WEB_IMAGE=$WEB_TAG@$WEB_DIGEST" >> "$GITHUB_ENV"
+          echo "CURRENT_IMAGE=$CURRENT_TAG@$CURRENT_DIGEST" >> "$GITHUB_ENV"
+          echo "HARNESS_SCRIPTS=$GITHUB_WORKSPACE/harness/scripts" >> "$GITHUB_ENV"
+      - name: Split image scans, old Worker migration compatibility and mixed stack acceptance
+        run: bash harness/scripts/public_mcp_split_candidate_acceptance.sh
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+          package_json_file: runtime/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: runtime/pnpm-lock.yaml
+      - name: Install browser test dependencies from exact source
+        working-directory: runtime
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Support and fully mocked browser approval tests against candidate Web
+        working-directory: runtime
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          NODE_OPTIONS: --dns-result-order=ipv4first
+        run: |
+          set -euo pipefail
+          web_id=$(docker compose -f ../harness/infra/docker-compose.v2.public-mcp-split-ci.yml ps -q candidate-web)
+          test -n "$web_id"
+          test "$(docker inspect -f '{{.Image}}' "$web_id")" = "$(docker image inspect -f '{{.Id}}' "$WEB_IMAGE")"
+          network="${COMPOSE_PROJECT_NAME}_default"
+          test "$(docker network inspect -f '{{.Internal}}' "$network")" = true
+          export RC_BROWSER_WEB_IP=$(docker inspect "$web_id" | jq -er --arg network "$network" '.[0].NetworkSettings.Networks[$network].IPAddress')
+          node ../harness/scripts/public_mcp_split_candidate_browser_proxy.mjs > "$RUNNER_TEMP/rc-acceptance/browser-proxy.txt" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 --retry-connrefused --noproxy '*' http://127.0.0.1:3000/api/health
+          cp ../harness/scripts/public_mcp_split_candidate_playwright.mjs rc-playwright.config.mjs
+          pnpm exec playwright test --config rc-playwright.config.mjs
+      - name: Roll API and Web back to OLD; Worker unchanged; no SQL rollback
+        run: bash harness/scripts/public_mcp_split_candidate_acceptance.sh rollback
+      - name: Final adapter counters and sanitized runtime logs
+        if: always()
+        run: bash harness/scripts/public_mcp_split_candidate_acceptance.sh collect
+      - name: Stop only this disposable CI stack
+        if: always()
+        run: |
+          docker compose -f harness/infra/docker-compose.v2.public-mcp-split-ci.yml down -v --remove-orphans
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-mcp-split-candidate-acceptance
+          path: |
+            ${{ runner.temp }}/rc-acceptance/
+            runtime/test-results/
+          if-no-files-found: ignore
+
+  report:
+    if: always() && github.ref == 'refs/heads/codex/public-mcp-split-release-candidate'
+    needs:
+      [source-integrity, quality, build-api, build-web, storage, acceptance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report independent release gates, without deployment
+        env:
+          SOURCE_RESULT: ${{ needs.source-integrity.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          API_BUILD_RESULT: ${{ needs.build-api.result }}
+          WEB_BUILD_RESULT: ${{ needs.build-web.result }}
+          STORAGE_RESULT: ${{ needs.storage.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          API_DIGEST: ${{ needs.build-api.outputs.digest }}
+          WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+          WEB_TAG: ${{ needs.build-web.outputs.tag }}
+        shell: bash
+        run: |
+          printf 'Runtime source: `%s`\nHarness: `%s`\nAPI: `%s` @ `%s`\nWeb: `%s` @ `%s`\n\n' "$SOURCE_SHA" "$GITHUB_SHA" "$API_TAG" "$API_DIGEST" "$WEB_TAG" "$WEB_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Source=%s Quality=%s APIBuild=%s WebBuild=%s Storage=%s Acceptance=%s\n' "$SOURCE_RESULT" "$QUALITY_RESULT" "$API_BUILD_RESULT" "$WEB_BUILD_RESULT" "$STORAGE_RESULT" "$ACCEPTANCE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Production accessed/changed: NO. Main changed: NO. ZIP rebuilt: NO. No deploy performed.\n' >> "$GITHUB_STEP_SUMMARY"
+          for result in "$SOURCE_RESULT" "$QUALITY_RESULT" "$API_BUILD_RESULT" "$WEB_BUILD_RESULT" "$STORAGE_RESULT" "$ACCEPTANCE_RESULT"; do
+            if [ "$result" != success ]; then echo 'RELEASE CANDIDATE BLOCKED'; exit 1; fi
+          done
+          echo 'RELEASE CANDIDATE PASS (separate production authorization and fresh disk check still required)'
