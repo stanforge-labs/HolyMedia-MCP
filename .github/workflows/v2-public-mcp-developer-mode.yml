@@ -111,12 +111,33 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Install and test acceptance-only gateway
+      - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
+      - name: Test acceptance-only gateway
+        shell: bash
+        run: |
+          set -euo pipefail
           node --test scripts/public_mcp_devmode_gateway.test.mjs scripts/public_mcp_devmode_tunnel_target.test.mjs
+      - name: Build API workspace graph for clean-runner tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git ls-files -- packages/config/dist packages/contracts/dist packages/database/dist packages/observability/dist packages/site-audit/dist apps/api/dist)"
+          pnpm --dir packages/database run prisma:generate
+          pnpm exec turbo run build --filter=@holymedia/api...
+          test -f packages/config/dist/index.js
+          test -f packages/contracts/dist/index.js
+          test -f packages/database/dist/index.js
+          test -f packages/observability/dist/index.js
+          test -f packages/site-audit/dist/index.js
+          test -f apps/api/dist/main.js
+      - name: Run targeted Public MCP/OAuth tests
+        shell: bash
+        run: |
+          set -euo pipefail
           pnpm --filter @holymedia/api exec vitest run src/mcp/mcp-transport-boundary.http.test.ts src/mcp/oauth-authorization.service.test.ts src/mcp/mcp-public-tools.test.ts src/mcp/mcp.service.test.ts
       - name: Deploy exact integration migrations to disposable PostgreSQL 18
         shell: bash
