@@ -25,11 +25,24 @@ type ApprovalView = {
   account: string;
   campaign: string;
   operation: string;
-  field: "name" | "status";
+  field: "name" | "status" | "operations";
   before: string;
   after: string;
   expires_at: string;
   approved: boolean;
+  stage1_items?: Array<{
+    item: number;
+    keyword: string;
+    campaign_id: string;
+    campaign_name: string;
+    ad_group_id: string;
+    ad_group_name: string;
+    before: unknown;
+    after: unknown;
+    warnings: string[];
+    conflicts: unknown[];
+    provider_operations: number[];
+  }>;
   items?: Array<{
     resource_name: string;
     criterion_id: string;
@@ -73,6 +86,8 @@ const copy = {
     keywords: "Статус ключевых слов",
     keyword: "Ключевое слово / ID",
     adGroup: "Группа объявлений",
+    effects: "Все эффекты Google Ads",
+    warnings: "Предупреждения / конфликты",
   },
   en: {
     eyebrow: "HOLYMEDIA MCP",
@@ -100,6 +115,8 @@ const copy = {
     keywords: "Keyword status",
     keyword: "Keyword / ID",
     adGroup: "Ad group",
+    effects: "All Google Ads effects",
+    warnings: "Warnings / conflicts",
   },
 };
 
@@ -244,13 +261,15 @@ export default function McpApprovalPage() {
   }
 
   const operation = view
-    ? view.operation === "GOOGLE_KEYWORD_STATUS"
-      ? t.keywords
-      : view.operation === "META_CAMPAIGN_RENAME"
-        ? t.rename
-        : view.operation === "META_CAMPAIGN_PAUSE"
-          ? t.pause
-          : t.resume
+    ? view.stage1_items
+      ? view.operation
+      : view.operation === "GOOGLE_KEYWORD_STATUS"
+        ? t.keywords
+        : view.operation === "META_CAMPAIGN_RENAME"
+          ? t.rename
+          : view.operation === "META_CAMPAIGN_PAUSE"
+            ? t.pause
+            : t.resume
     : "";
 
   return (
@@ -341,7 +360,71 @@ export default function McpApprovalPage() {
                         <td>{item.before_status}</td>
                         <td>
                           {item.after_status}
-                          {item.warnings.length > 0 ? " (no-op)" : ""}
+                          {item.warnings.some((warning) =>
+                            warning.startsWith("no_op:"),
+                          )
+                            ? " (no-op)"
+                            : ""}
+                          {item.warnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {view.stage1_items && (
+              <div
+                className="mcp-approval-batch"
+                role="region"
+                aria-label={t.effects}
+                tabIndex={0}
+              >
+                <table>
+                  <caption>
+                    {t.effects} ·{" "}
+                    {view.stage1_items.reduce(
+                      (sum, item) => sum + item.provider_operations.length,
+                      0,
+                    )}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t.keyword}</th>
+                      <th scope="col">
+                        {t.campaign} / {t.adGroup}
+                      </th>
+                      <th scope="col">{t.before}</th>
+                      <th scope="col">{t.after}</th>
+                      <th scope="col">{t.warnings}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.stage1_items.map((item) => (
+                      <tr key={item.item}>
+                        <th scope="row">
+                          {item.keyword || view.operation} · #{item.item + 1}
+                        </th>
+                        <td>
+                          {item.campaign_name} · {item.campaign_id}
+                          <br />
+                          {item.ad_group_name} · {item.ad_group_id}
+                        </td>
+                        <td>
+                          <pre>{JSON.stringify(item.before, null, 2)}</pre>
+                        </td>
+                        <td>
+                          <pre>{JSON.stringify(item.after, null, 2)}</pre>
+                        </td>
+                        <td>
+                          {item.warnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                          ))}
+                          {item.conflicts.length > 0 && (
+                            <pre>{JSON.stringify(item.conflicts, null, 2)}</pre>
+                          )}
                         </td>
                       </tr>
                     ))}

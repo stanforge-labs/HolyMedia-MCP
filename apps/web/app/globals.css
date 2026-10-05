@@ -25,6 +25,12 @@
   border-spacing: 0;
   min-inline-size: 620px;
 }
+.mcp-approval-batch pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 12rem;
+  font: inherit;
+}
 .mcp-approval-batch th,
 .mcp-approval-batch td {
   padding: 10px;

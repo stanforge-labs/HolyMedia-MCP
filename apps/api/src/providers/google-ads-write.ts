@@ -28,6 +28,7 @@ export type GoogleWriteFailure = {
   code: string;
   message: string;
   google_error_code: string;
+  google_code: string;
   field_path?: string;
 };
 export type GoogleMutationResult = {
@@ -112,6 +113,7 @@ export function googleWriteFailure(
       messages[safe] ??
       `Google Ads отклонил изменение (${safe}). Проверьте разрешения и данные объекта.`,
     google_error_code: safe,
+    google_code: safe,
     ...(fieldPath ? { field_path: fieldPath } : {}),
   };
 }

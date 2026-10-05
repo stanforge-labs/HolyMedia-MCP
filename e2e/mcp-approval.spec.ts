@@ -18,6 +18,125 @@ test.beforeEach(async ({ context }) => {
   });
 });
 
+test("Stage1 approval shows both match effects, permanent intent and conflicts without writes", async ({
+  page,
+}) => {
+  let decisions = 0;
+  await page.route(
+    /^http:\/\/localhost:3000\/(?:en\/)?mcp\/approve$/,
+    async (route) => {
+      const response = await route.fetch(),
+        headers = { ...response.headers() };
+      delete headers["content-security-policy"];
+      await route.fulfill({ response, headers });
+    },
+  );
+  await page.route("**/api/v1/auth/csrf", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: cors,
+      contentType: "application/json",
+      body: JSON.stringify({ csrfToken: "test-csrf" }),
+    }),
+  );
+  await page.route(/\/api\/v1\/mcp\/public\/approval(?:\/view)?$/, (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({ status: 204, headers: cors });
+    if (!new URL(route.request().url()).pathname.endsWith("/view")) {
+      decisions++;
+      return route.fulfill({
+        status: 201,
+        headers: cors,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "approved" }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      headers: cors,
+      contentType: "application/json",
+      body: JSON.stringify({
+        provider: "Google Ads",
+        account: "TEST PPC",
+        campaign: "TEST campaign",
+        operation: "keyword_match",
+        field: "operations",
+        before: "2 items",
+        after: "3 provider operations",
+        approved: false,
+        expires_at: "2030-01-01T00:00:00Z",
+        stage1_items: [
+          {
+            item: 0,
+            keyword: "<script>not executable</script>",
+            campaign_id: "1",
+            campaign_name: "TEST campaign",
+            ad_group_id: "10",
+            ad_group_name: "TEST group",
+            before: { status: "ENABLED", match_type: "EXACT" },
+            after: {
+              new_keyword: { matchType: "PHRASE", status: "ENABLED" },
+              old_status: "PAUSED",
+            },
+            warnings: [
+              "Две операции: создать новый ключ и приостановить старый.",
+            ],
+            conflicts: [
+              {
+                affected_keyword: "clinic",
+                reason_code: "EXACT_NORMALIZED_TEXT",
+              },
+            ],
+            provider_operations: [0, 1],
+          },
+          {
+            item: 1,
+            keyword: "permanent",
+            campaign_id: "1",
+            campaign_name: "TEST campaign",
+            ad_group_id: "10",
+            ad_group_name: "TEST group",
+            before: { status: "ENABLED" },
+            after: { status: "REMOVED", reversible: false },
+            warnings: [
+              "Удалённый ключ нельзя восстановить. Используйте PAUSE.",
+            ],
+            conflicts: [],
+            provider_operations: [2],
+          },
+        ],
+      }),
+    });
+  });
+  await page.goto(`/mcp/approve#${nonce}`);
+  await expect(page.getByRole("table")).toBeVisible();
+  await expect(page.getByText("Две операции", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("Удалённый ключ нельзя восстановить", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("EXACT_NORMALIZED_TEXT", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('"old_status": "PAUSED"', { exact: false }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  expect(decisions).toBe(0);
+  await page.getByRole("button", { name: "English" }).click();
+  await expect(
+    page.getByRole("region", { name: "All Google Ads effects" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Approve change" }).click();
+  await expect(
+    page.getByText("Change approved. Return to ChatGPT/Codex to execute it."),
+  ).toBeVisible();
+  expect(decisions).toBe(1);
+});
+
 test("RU/EN approval keeps its nonce and only POST approves", async ({
   page,
 }) => {

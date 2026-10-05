@@ -188,7 +188,7 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(161);
+    expect(service.tools()).toHaveLength(170); // Existing 161 + 9 Stage1/journal/rollback tools.
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );

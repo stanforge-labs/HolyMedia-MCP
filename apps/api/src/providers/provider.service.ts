@@ -14,6 +14,8 @@ import type {
 import type { Prisma } from "@holymedia/database";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import { AuditService } from "../audit/audit.service.js";
+import type { Stage1Plan, Stage1MutationResult } from "./google-ads-stage1.js";
+import type { GoogleAdsAdapter } from "./adapters/google.ads.js";
 import { SessionService } from "../auth/session.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { BillingService } from "../billing/billing.service.js";
@@ -1151,6 +1153,42 @@ export class ProviderService {
         "Google Ads keyword write adapter недоступен.",
       );
     return { ...context, adapter };
+  }
+  public async googleStage1(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action: "build" | "read" | "validate" | "commit" | "verify",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    const adapter = ctx.adapter as unknown as GoogleAdsAdapter;
+    if (typeof adapter.buildStage1 !== "function")
+      throw new GoogleAdsWriteError(
+        "google_stage1_unavailable",
+        "Google Stage 1 adapter недоступен.",
+      );
+    const plan = input as Stage1Plan;
+    try {
+      if (action === "build") return await adapter.buildStage1(ctx.read, input);
+      if (action === "read") return await adapter.readStage1(ctx.read, plan);
+      if (action === "verify")
+        return await adapter.verifyStage1(ctx.read, plan, results ?? []);
+      return await adapter.mutateStage1(ctx.read, plan, action === "validate");
+    } catch (error) {
+      if (error instanceof GoogleAdsWriteError) throw error;
+      const failure = writeFailureFromError(error);
+      throw new GoogleAdsWriteError(
+        "google_stage1_provider_failed",
+        failure.message,
+        [failure],
+      );
+    }
   }
   public async readGoogleKeywordStates(
     workspaceId: string,

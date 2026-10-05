@@ -10,6 +10,13 @@ import type { ServiceTokenPrincipal } from "../service-tokens/service-token.serv
 import { ProviderService } from "../providers/provider.service.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import {
+  canonical,
+  parseStage1Intent,
+  type Stage1Plan,
+  type Stage1MutationResult,
+  type ResourceSnapshot,
+} from "../providers/google-ads-stage1.js";
+import {
   assertGoogleWriteAccount,
   customerId,
   keywordBatch,
@@ -412,6 +419,26 @@ export class McpPreviewService {
                 : "internal_error",
           );
         }
+      }
+      if (
+        googlePreview?.operation.startsWith("GOOGLE_STAGE1_") &&
+        googlePreview.snapshotDigest ===
+          digest(canonical(googlePreview.requestedState))
+      ) {
+        const plan = googlePreview.requestedState as unknown as Stage1Plan;
+        for (const [index] of plan.operations.entries())
+          await this.stage1Audit(
+            principal,
+            googlePreview.id,
+            plan,
+            index,
+            "rejected",
+            error instanceof PreviewError
+              ? error.code
+              : error instanceof GoogleAdsWriteError
+                ? (error.failures[0]?.google_error_code ?? error.writeCode)
+                : "internal_error",
+          );
       }
       await this.audit.record({
         eventType: "mcp_commit_attempt_failed",
@@ -864,6 +891,7 @@ export class McpPreviewService {
   private async createGoogleKeywords(
     principal: ServiceTokenPrincipal,
     input: PreviewInput,
+    expectedBefore?: GoogleKeywordSnapshot[],
   ) {
     if (
       !["pause", "update_status"].includes(input.operation) ||
@@ -903,6 +931,8 @@ export class McpPreviewService {
       account.id,
       identities,
     );
+    if (expectedBefore && canonical(before) !== canonical(expectedBefore))
+      throw new PreviewError("google_preview_stale");
     const mutations: GoogleKeywordMutation[] = identities.map((x) => ({
       ...x,
       status: status as "ENABLED" | "PAUSED",
@@ -1003,11 +1033,648 @@ export class McpPreviewService {
   }
 
   /** Reuses the existing browser route, cookie session and CSRF decision guard. */
+  public async createGoogleStage1(
+    principal: ServiceTokenPrincipal,
+    accountId: string,
+    rawIntent: unknown,
+  ) {
+    this.ensureRead(principal);
+    const intent = parseStage1Intent(rawIntent);
+    const account = await this.account(principal, customerId(accountId));
+    if (account.provider !== "GOOGLE_ADS")
+      throw new PreviewError("confirmation_context_mismatch");
+    assertGoogleWriteAccount(this.config, account.externalAccountId);
+    await this.assertControlledPrincipal(principal, account.id);
+    const plan = (await this.providers.googleStage1(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      "build",
+      intent,
+    )) as Stage1Plan;
+    return this.storeGoogleStage1(principal, account, plan);
+  }
+  private async storeGoogleStage1(
+    principal: ServiceTokenPrincipal,
+    account: Awaited<ReturnType<McpPreviewService["account"]>>,
+    plan: Stage1Plan,
+    rollbackOf: string | null = null,
+  ) {
+    const results = (await this.providers.googleStage1(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      "validate",
+      plan,
+    )) as Stage1MutationResult[];
+    const validated =
+      results.length === plan.operations.length &&
+      results.every((x) => x.success);
+    const items = plan.items.map((row) => ({
+      ...row,
+      google_validation: row.provider_operations.map(
+        (i) =>
+          results[i] ?? {
+            success: false,
+            error: googleWriteFailure("OUTCOME_UNCERTAIN"),
+          },
+      ),
+    }));
+    if (!validated)
+      return {
+        status: "validation_failed",
+        provider: "GOOGLE_ADS",
+        account_id: plan.account_id,
+        items,
+        provider_validation: "failed",
+        operation_count: plan.operations.length,
+        provider_mutation_sent: false,
+        summary: "Google отклонил проверку; preview для commit не создан.",
+      };
+    const previewToken = `hmpp_${randomBytes(32).toString("base64url")}`,
+      nonce = `hmap_${randomBytes(32).toString("base64url")}`,
+      expiresAt = new Date(Date.now() + GOOGLE_KEYWORD_PREVIEW_TTL_MS);
+    const preview = await this.database.client.mcpPreview.create({
+      data: {
+        workspaceId: principal.workspaceId,
+        principalType: "SERVICE_TOKEN",
+        serviceTokenId: principal.tokenId,
+        provider: "GOOGLE_ADS",
+        accountId: account.id,
+        connectionId: account.connectionId,
+        externalObjectId:
+          plan.operations[0]!.resource_name ?? `stage1:${plan.intent.action}`,
+        operation: `GOOGLE_STAGE1_${plan.intent.action.toUpperCase()}`,
+        payload: {
+          intent: plan.intent,
+          rollback_of: rollbackOf,
+        } as Prisma.InputJsonValue,
+        diff: { provider_validation: "passed" },
+        beforeState: plan.checks as unknown as Prisma.InputJsonValue,
+        requestedState: plan as unknown as Prisma.InputJsonValue,
+        snapshotDigest: digest(canonical(plan)),
+        previewTokenDigest: digest(previewToken),
+        approvalTokenDigest: digest(nonce),
+        expiresAt,
+        commitStatus: "PREVIEWED",
+      },
+    });
+    await this.audit.record({
+      eventType: "mcp_google_stage1_preview_created",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: preview.id,
+      metadata: {
+        provider: "GOOGLE_ADS",
+        accountId: plan.account_id,
+        operation: plan.intent.action,
+        operationCount: plan.operations.length,
+        rollbackOf,
+      },
+    });
+    return {
+      status: "preview",
+      preview_id: preview.id,
+      preview_token: previewToken,
+      expires_at: expiresAt.toISOString(),
+      provider: "GOOGLE_ADS",
+      account_id: plan.account_id,
+      operation_count: plan.operations.length,
+      items,
+      provider_validation: "passed",
+      approval_url: `${this.config.publicBaseUrl}/mcp/approve#${nonce}`,
+      commit_tool: "commit_preview",
+      provider_mutation_sent: false,
+      rollback_of: rollbackOf,
+      summary: `Google Ads: ${plan.intent.action}, ${plan.operations.length} операций. Проверьте эффекты и предупреждения в HolyMedia.`,
+    };
+  }
+  private googleStage1Stored(
+    preview: {
+      operation: string;
+      connectionId: string | null;
+      requestedState: unknown;
+      beforeState: unknown;
+      payload: unknown;
+      snapshotDigest: string | null;
+      diff: unknown;
+    },
+    account: { connectionId: string; externalAccountId: string },
+  ): Stage1Plan {
+    const plan = preview.requestedState as Stage1Plan;
+    if (
+      !plan ||
+      plan.version !== 1 ||
+      plan.account_id !== customerId(account.externalAccountId) ||
+      preview.connectionId !== account.connectionId ||
+      preview.operation !==
+        `GOOGLE_STAGE1_${plan.intent.action.toUpperCase()}` ||
+      !Array.isArray(plan.operations) ||
+      plan.operations.length < 1 ||
+      plan.operations.length > 500 ||
+      !Array.isArray(plan.checks) ||
+      preview.snapshotDigest !== digest(canonical(plan)) ||
+      canonical(preview.beforeState) !== canonical(plan.checks) ||
+      canonical(payloadRecord(preview.payload).intent) !==
+        canonical(plan.intent) ||
+      payloadRecord(preview.diff).provider_validation !== "passed"
+    )
+      throw new PreviewError("confirmation_context_mismatch");
+    return plan;
+  }
+  private async commitGoogleStage1(
+    principal: ServiceTokenPrincipal,
+    preview: Awaited<ReturnType<McpPreviewService["find"]>>,
+    account: Awaited<ReturnType<McpPreviewService["account"]>>,
+  ) {
+    const plan = this.googleStage1Stored(preview, account);
+    const current = await this.providers.googleStage1(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      "read",
+      plan,
+    );
+    if (canonical(current) !== canonical(plan.checks))
+      throw new PreviewError("google_preview_stale");
+    await this.claimGooglePreview(principal, preview, account);
+    // Durable attempt audit precedes every provider mutation; audit failure closes the claim.
+    for (const [index] of plan.operations.entries())
+      await this.stage1Audit(
+        principal,
+        preview.id,
+        plan,
+        index,
+        "attempted",
+        null,
+      );
+    let results: Stage1MutationResult[];
+    try {
+      results = (await this.providers.googleStage1(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        "commit",
+        plan,
+      )) as Stage1MutationResult[];
+    } catch (error) {
+      const failure = writeFailureFromError(error);
+      results = plan.operations.map((x) => ({
+        success: false,
+        resource_name: x.resource_name,
+        error: failure,
+      }));
+    }
+    const verified = (await this.providers.googleStage1(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      "verify",
+      plan,
+      results,
+    )) as {
+      items: unknown[];
+      actual: (ResourceSnapshot | null)[];
+      status: string;
+    };
+    await this.database.client.mcpPreview.update({
+      where: { id: preview.id },
+      data: {
+        commitStatus: verified.status,
+        providerResult: verified.items as Prisma.InputJsonValue,
+        verificationRead: verified.actual as unknown as Prisma.InputJsonValue,
+      },
+    });
+    for (const [index] of plan.operations.entries()) {
+      const row = payloadRecord(
+        (
+          verified.items[plan.operations[index]!.row] as {
+            operations: unknown[];
+          }
+        ).operations.find((x) => payloadRecord(x).operation === index),
+      );
+      await this.stage1Audit(
+        principal,
+        preview.id,
+        plan,
+        index,
+        row.success ? "success" : "failure",
+        (payloadRecord(row.error).google_error_code as string | undefined) ??
+          null,
+        verified.actual[index],
+      );
+    }
+    const commitId = await this.recordGoogleCommit(
+      principal,
+      preview,
+      account,
+      verified.status,
+    );
+    return {
+      status: verified.status,
+      commit_id: commitId,
+      preview_id: preview.id,
+      provider: "GOOGLE_ADS",
+      account_id: plan.account_id,
+      operation_count: plan.operations.length,
+      items: verified.items,
+      partial_failure: true,
+      provider_mutation_attempted: true,
+      summary: `Google Ads: ${verified.status}. Результаты подтверждены по каждой операции; повторный commit запрещён.`,
+    };
+  }
+  private stage1Audit(
+    principal: ServiceTokenPrincipal,
+    previewId: string,
+    plan: Stage1Plan,
+    index: number,
+    result: string,
+    error: string | null,
+    actual?: ResourceSnapshot | null,
+  ) {
+    const operation = plan.operations[index]!,
+      item = plan.items[operation.row]!;
+    return this.audit.record({
+      eventType: "mcp_google_stage1_operation",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: previewId,
+      success: result !== "failure",
+      metadata: {
+        provider: "GOOGLE_ADS",
+        accountId: plan.account_id,
+        campaignId: item.campaign_id,
+        adGroupId: item.ad_group_id,
+        objectId: operation.resource_name ?? actual?.resource_name ?? null,
+        serviceTokenId: principal.tokenId,
+        serviceIdentityId: principal.serviceIdentityId,
+        previewId,
+        commitId: this.googleCommitId(previewId),
+        operation: plan.intent.action,
+        providerOperation: index,
+        result,
+        googleErrorCode: error,
+        before: canonical(operation.before),
+        after: canonical(operation.expected),
+        actual: actual === undefined ? null : canonical(actual),
+      },
+    });
+  }
+  private googleCommitId(previewId: string) {
+    return `hmc_${createHash("sha256").update(`google-commit:${previewId}`).digest("base64url")}`;
+  }
+  private async recordGoogleCommit(
+    principal: ServiceTokenPrincipal,
+    preview: { id: string; operation: string },
+    account: { externalAccountId: string },
+    status: string,
+  ) {
+    const commitId = this.googleCommitId(preview.id);
+    await this.audit.record({
+      eventType: "mcp_google_commit_result",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: preview.id,
+      success: status === "VERIFIED",
+      metadata: {
+        provider: "GOOGLE_ADS",
+        accountId: customerId(account.externalAccountId),
+        commitId,
+        previewId: preview.id,
+        operation: preview.operation,
+        result: status,
+        serviceTokenId: principal.tokenId,
+        serviceIdentityId: principal.serviceIdentityId,
+      },
+    });
+    return commitId;
+  }
+  public async listChangeJournal(
+    principal: ServiceTokenPrincipal,
+    input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    this.ensureRead(principal);
+    if (
+      Object.keys(input).some(
+        (k) =>
+          ![
+            "provider",
+            "account_id",
+            "from",
+            "to",
+            "actor_user_id",
+            "operation",
+            "limit",
+            "cursor",
+          ].includes(k),
+      ) ||
+      input.provider !== "GOOGLE_ADS" ||
+      typeof input.account_id !== "string"
+    )
+      throw new GoogleAdsWriteError(
+        "journal_input_invalid",
+        "Укажите GOOGLE_ADS и разрешённый account_id; лишние поля запрещены.",
+      );
+    const account = await this.account(principal, customerId(input.account_id));
+    if (account.provider !== "GOOGLE_ADS")
+      throw new PreviewError("confirmation_context_mismatch");
+    const limit = input.limit ?? 50;
+    if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > 100)
+      throw new GoogleAdsWriteError("journal_input_invalid", "limit: 1–100.");
+    const date = (key: string) => {
+      if (input[key] === undefined) return undefined;
+      if (
+        typeof input[key] !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T/.test(input[key] as string) ||
+        !Number.isFinite(Date.parse(input[key] as string))
+      )
+        throw new GoogleAdsWriteError(
+          "journal_input_invalid",
+          "from/to: ISO timestamp.",
+        );
+      return new Date(input[key] as string);
+    };
+    const from = date("from"),
+      to = date("to");
+    if (from && to && from > to)
+      throw new GoogleAdsWriteError(
+        "journal_input_invalid",
+        "from должен быть не позже to.",
+      );
+    let cursor: { createdAt: Date; id: string } | undefined;
+    if (input.cursor !== undefined) {
+      if (
+        typeof input.cursor !== "string" ||
+        !/^hmc_[A-Za-z0-9_-]{43}$/.test(input.cursor)
+      )
+        throw new GoogleAdsWriteError(
+          "journal_input_invalid",
+          "Некорректный cursor.",
+        );
+      const entry = await this.database.client.auditEvent.findFirst({
+        where: {
+          workspaceId: principal.workspaceId,
+          eventType: "mcp_google_commit_result",
+          AND: [
+            { metadata: { path: ["commitId"], equals: input.cursor } },
+            {
+              metadata: {
+                path: ["accountId"],
+                equals: customerId(account.externalAccountId),
+              },
+            },
+          ],
+        },
+      });
+      if (!entry)
+        throw new GoogleAdsWriteError(
+          "journal_input_invalid",
+          "Cursor недоступен этому аккаунту.",
+        );
+      const previous = entry.targetId
+        ? await this.database.client.mcpPreview.findFirst({
+            where: {
+              id: entry.targetId,
+              workspaceId: principal.workspaceId,
+              accountId: account.id,
+              provider: "GOOGLE_ADS",
+              consumedAt: { not: null },
+            },
+          })
+        : null;
+      if (!previous?.commitAttemptedAt)
+        throw new GoogleAdsWriteError(
+          "journal_input_invalid",
+          "Cursor не соответствует завершённому commit.",
+        );
+      cursor = { createdAt: previous.commitAttemptedAt, id: previous.id };
+    }
+    const rows = await this.database.client.mcpPreview.findMany({
+      where: {
+        workspaceId: principal.workspaceId,
+        provider: "GOOGLE_ADS",
+        accountId: account.id,
+        consumedAt: { not: null },
+        providerResult: { not: Prisma.AnyNull },
+        ...(input.actor_user_id
+          ? { approvedByUserId: String(input.actor_user_id) }
+          : {}),
+        ...(input.operation ? { operation: String(input.operation) } : {}),
+        ...(from || to
+          ? {
+              commitAttemptedAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+        ...(cursor
+          ? {
+              OR: [
+                { commitAttemptedAt: { lt: cursor.createdAt } },
+                { commitAttemptedAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ commitAttemptedAt: "desc" }, { id: "desc" }],
+      take: Number(limit) + 1,
+      include: { serviceToken: { select: { serviceIdentityId: true } } },
+    });
+    const selected = rows.slice(0, Number(limit));
+    return {
+      items: selected.map((row) => ({
+        commit_id: this.googleCommitId(row.id),
+        preview_id: row.id,
+        who: {
+          user_id: row.approvedByUserId,
+          service_identity_id: row.serviceToken?.serviceIdentityId,
+          service_token_id: row.serviceTokenId,
+        },
+        when: row.commitAttemptedAt?.toISOString(),
+        provider: row.provider,
+        account_id: customerId(account.externalAccountId),
+        operation: row.operation,
+        before: row.beforeState,
+        after: row.providerResult,
+        actual: row.verificationRead,
+        result: row.commitStatus,
+      })),
+      next_cursor:
+        rows.length > Number(limit)
+          ? this.googleCommitId(selected.at(-1)!.id)
+          : null,
+    };
+  }
+  public async previewRollbackCommit(
+    principal: ServiceTokenPrincipal,
+    commitId: string,
+  ) {
+    this.ensureRead(principal);
+    if (!/^hmc_[A-Za-z0-9_-]{43}$/.test(commitId))
+      throw new GoogleAdsWriteError(
+        "rollback_input_invalid",
+        "Укажите commit_id из результата записи/журнала.",
+      );
+    const event = await this.database.client.auditEvent.findFirst({
+      where: {
+        workspaceId: principal.workspaceId,
+        eventType: "mcp_google_commit_result",
+        metadata: { path: ["commitId"], equals: commitId },
+      },
+    });
+    const preview = event?.targetId
+      ? await this.database.client.mcpPreview.findFirst({
+          where: {
+            id: event.targetId,
+            workspaceId: principal.workspaceId,
+            provider: "GOOGLE_ADS",
+            consumedAt: { not: null },
+          },
+        })
+      : null;
+    if (!preview || this.googleCommitId(preview.id) !== commitId)
+      throw new GoogleAdsWriteError(
+        "rollback_not_found",
+        "Commit не найден или недоступен.",
+      );
+    const account = await this.account(principal, preview.accountId);
+    assertGoogleWriteAccount(this.config, account.externalAccountId);
+    await this.assertControlledPrincipal(principal, account.id);
+    if (preview.operation === "GOOGLE_KEYWORD_STATUS") {
+      const stored = this.googleStored(preview, account),
+        results = preview.providerResult as {
+          success: boolean;
+          reread: unknown;
+        }[];
+      const eligible = stored.before.filter(
+        (row, i) =>
+          results[i]?.success && row.status !== stored.mutations[i]!.status,
+      );
+      if (!eligible.length || new Set(eligible.map((x) => x.status)).size !== 1)
+        throw new GoogleAdsWriteError(
+          "rollback_unsupported",
+          "Автоматический rollback этого commit не поддерживается; создайте отдельный status preview.",
+        );
+      const identities = eligible.map(
+        ({ campaign_id, ad_group_id, criterion_id, resource_name }) => ({
+          campaign_id,
+          ad_group_id,
+          criterion_id,
+          resource_name,
+        }),
+      );
+      const current = await this.providers.readGoogleKeywordStates(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        identities,
+      );
+      const post = eligible.map(
+        (x) => results[stored.before.indexOf(x)]!.reread,
+      );
+      if (canonical(current) !== canonical(post))
+        throw new PreviewError("google_preview_stale");
+      return this.createGoogleKeywords(
+        principal,
+        {
+          provider: "GOOGLE_ADS",
+          accountId: account.externalAccountId,
+          objectId: "rollback",
+          operation: "update_status",
+          payload: {
+            entity_type: "keyword",
+            status: eligible[0]!.status,
+            items: identities,
+          },
+        },
+        current,
+      );
+    }
+    if (
+      preview.operation !== "GOOGLE_STAGE1_KEYWORD_URL" ||
+      !["VERIFIED", "PARTIAL_FAILURE"].includes(String(preview.commitStatus))
+    )
+      throw new GoogleAdsWriteError(
+        "rollback_unsupported",
+        "Автоматический rollback доступен только для подтверждённых keyword status/final URL. REMOVED необратим; match type и negatives пока не поддерживаются.",
+      );
+    const original = this.googleStage1Stored(preview, account),
+      post = preview.verificationRead as ResourceSnapshot[];
+    const committed = preview.providerResult as {
+      operations: { operation: number; success: boolean }[];
+    }[];
+    const eligibleIndices = original.operations
+      .map((_, index) => index)
+      .filter((index) =>
+        committed.some((row) =>
+          row.operations.some((op) => op.operation === index && op.success),
+        ),
+      );
+    if (!eligibleIndices.length)
+      throw new GoogleAdsWriteError(
+        "rollback_unsupported",
+        "Нет подтверждённых успешных URL операций для rollback.",
+      );
+    const intent = {
+      action: "keyword_url",
+      items: eligibleIndices
+        .map((index) => original.operations[index]!)
+        .map((op) => ({
+          campaign_id: op.before!.campaign_id,
+          ad_group_id: op.before!.ad_group_id,
+          criterion_id: op.before!.id,
+          final_url: op.before!.final_urls[0] ?? null,
+        })),
+    };
+    const inverse = (await this.providers.googleStage1(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      "build",
+      intent,
+    )) as Stage1Plan;
+    if (
+      inverse.operations.some(
+        (op, i) =>
+          canonical(op.before) !== canonical(post[eligibleIndices[i]!]),
+      )
+    )
+      throw new PreviewError("google_preview_stale");
+    for (const [i, op] of inverse.operations.entries()) {
+      const urls = original.operations[eligibleIndices[i]!]!.before!.final_urls;
+      op.fields.finalUrls = urls;
+      op.expected.final_urls = urls;
+      inverse.items[op.row]!.after = { final_urls: urls };
+    }
+    return this.storeGoogleStage1(principal, account, inverse, commitId);
+  }
   public async googleApprovalView(human: HumanPrincipal, nonce: string) {
     const context = await this.googleBrowserContext(human, nonce);
     if (!context) return null;
-    const { preview, account } = context,
-      stored = this.googleStored(preview, account);
+    const { preview, account } = context;
+    if (preview.operation.startsWith("GOOGLE_STAGE1_")) {
+      const plan = this.googleStage1Stored(preview, account);
+      return {
+        provider: "Google Ads",
+        account: account.displayName || account.externalAccountId,
+        campaign: plan.items
+          .map((x) => x.campaign_name || x.campaign_id)
+          .filter((x, i, a) => x && a.indexOf(x) === i)
+          .join(", "),
+        operation: plan.intent.action,
+        field: "operations",
+        before: `${plan.items.length} items`,
+        after: `${plan.operations.length} provider operations`,
+        stage1_items: plan.items,
+        expires_at: preview.expiresAt.toISOString(),
+        approved: Boolean(preview.confirmedAt && preview.approvedByUserId),
+      };
+    }
+    const stored = this.googleStored(preview, account);
     return {
       provider: "Google Ads",
       account: account.displayName || account.externalAccountId,
@@ -1041,7 +1708,9 @@ export class McpPreviewService {
     const context = await this.googleBrowserContext(human, nonce);
     if (!context) return null;
     const { preview, account } = context;
-    this.googleStored(preview, account);
+    if (preview.operation.startsWith("GOOGLE_STAGE1_"))
+      this.googleStage1Stored(preview, account);
+    else this.googleStored(preview, account);
     if (preview.confirmedAt)
       throw new PreviewError("preview_already_confirmed");
     const now = new Date();
@@ -1216,6 +1885,8 @@ export class McpPreviewService {
         "confirmed_write_disabled",
         "Подтверждённая запись выключена на сервере.",
       );
+    if (preview.operation.startsWith("GOOGLE_STAGE1_"))
+      return this.commitGoogleStage1(principal, preview, account);
     const stored = this.googleStored(preview, account);
     let current: GoogleKeywordSnapshot[];
     try {
@@ -1235,6 +1906,14 @@ export class McpPreviewService {
     }
     if (canonicalJson(current) !== canonicalJson(stored.before))
       throw new PreviewError("google_preview_stale");
+    await this.claimGooglePreview(principal, preview, account);
+    return this.executeGoogleKeywords(principal, preview, account, stored);
+  }
+  private async claimGooglePreview(
+    principal: ServiceTokenPrincipal,
+    preview: Awaited<ReturnType<McpPreviewService["find"]>>,
+    account: Awaited<ReturnType<McpPreviewService["account"]>>,
+  ) {
     const now = new Date();
     const claimed = await this.database.client.mcpPreview.updateMany({
       where: {
@@ -1245,7 +1924,7 @@ export class McpPreviewService {
         provider: "GOOGLE_ADS",
         accountId: account.id,
         connectionId: account.connectionId,
-        operation: "GOOGLE_KEYWORD_STATUS",
+        operation: preview.operation,
         confirmedAt: { not: null },
         approvedByUserId: preview.approvedByUserId,
         approvalSessionId: preview.approvalSessionId,
@@ -1311,6 +1990,13 @@ export class McpPreviewService {
       },
     });
     if (claimed.count !== 1) throw new PreviewError("preview_already_consumed");
+  }
+  private async executeGoogleKeywords(
+    principal: ServiceTokenPrincipal,
+    preview: Awaited<ReturnType<McpPreviewService["find"]>>,
+    account: Awaited<ReturnType<McpPreviewService["account"]>>,
+    stored: ReturnType<McpPreviewService["googleStored"]>,
+  ) {
     const changed = stored.mutations.filter(
       (x, i) => x.status !== stored.before[i]!.status,
     );
@@ -1433,8 +2119,15 @@ export class McpPreviewService {
         row.google_error?.google_error_code ?? null,
         row.actual_status,
       );
+    const commitId = await this.recordGoogleCommit(
+      principal,
+      preview,
+      account,
+      finalStatus,
+    );
     return {
       status: finalStatus,
+      commit_id: commitId,
       preview_id: preview.id,
       provider: "GOOGLE_ADS",
       account_id: customerId(account.externalAccountId),
@@ -1477,6 +2170,7 @@ export class McpPreviewService {
         after: requested,
         actual,
         previewId,
+        commitId: this.googleCommitId(previewId),
         result,
         googleErrorCode: googleError,
       },

@@ -1,11 +1,11 @@
-# Google Ads write: W0 foundation и keyword status vertical slice
+# Google Ads write: W0 foundation + Stage 1
 
 ## Границы реализации
 
-Ветка `codex/google-ads-write-foundation`, база `a00817b746211a295bcb966f7fd7ef12cd6178fb`.
-Реализовано только изменение **положительного keyword AdGroupCriterion.status**:
-`ENABLED ↔ PAUSED`, один keyword или batch. Кампания и бюджет не изменяются.
-`REMOVED`, archive/delete, ставки, объявления, assets, campaign creation и negatives write запрещены.
+Ветка Stage 1: `codex/google-ads-write-stage1`, точная база W0 `2f6774862b8642d9e47087b9274fd8ee103bafc5`.
+Сохранён status slice `ENABLED ↔ PAUSED`; добавлены keyword creation, match-type replacement,
+final URL, explicit permanent removal, campaign/ad-group/shared negatives и shared-list lifecycle.
+Кампания, бюджет, объявления, assets и tracking templates не создаются/не изменяются.
 Google READ и Meta dispatch сохраняются. Production deploy/изменения env/реальные provider calls в этой задаче не выполняются.
 
 ## Архитектура
@@ -156,12 +156,122 @@ Browser decision аудируется с human actor. Rejected commit attempts �
 русское объяснение и безопасный field path. Raw provider message/trigger и Authorization headers не возвращаются.
 Неизвестные/malformed operation indices fail closed. Credentials, preview/approval plaintext tokens не попадают в audit.
 
-## Future rollback / расширение
+## Stage 1 typed operations / инструменты
 
-Keyword status rollback не реализован как скрытый автоматический reverse mutate.
-Будущее восстановление должно быть **новым preview** с актуальным snapshot, validate_only,
-browser approval и отдельным audit. Успешные строки partial batch не откатываются автоматически.
-Budget/creation/destructive removal будут отдельными typed operations с дополнительными money/destructive policies.
+`google-ads-stage1.ts` — typed operation builder и provider-state verification, **не второй preview service**.
+`McpPreviewService` сохраняет планы в существующем `requestedState`, snapshots в `beforeState`,
+использует тот же browser decision и общий atomic `claimGooglePreview` с W0. Migration: NONE.
+Планы и display rows digest-bound; JSONB key reordering не меняет binding. Внешний caller не может передать raw mutation payload.
+
+| Tool                                                     | Обязательный контракт кроме `provider=GOOGLE_ADS`, `account_id`                                            |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `create_keyword_from_brief`                              | `entity_type=keyword`, items: campaign_id/ad_group_id/text/match_type; optional cpc_bid/final_url          |
+| `pause_entities_preview`, `update_entity_status_preview` | W0 IDs; для resume status=ENABLED                                                                          |
+| `google_ads_change_keyword_match_type_preview`           | items: campaign_id/ad_group_id/criterion_id/new match_type                                                 |
+| `preview_update_object`                                  | entity_type=keyword, field=final_url, items: IDs + final_url (null clears)                                 |
+| `preview_delete_or_archive_object`                       | entity_type=keyword, items: IDs; permanent removal warning, PAUSE alternative                              |
+| `google_ads_negatives_preview`                           | operation=add/remove, level=campaign/ad_group; add text/match_type, remove criterion_id, scoped parent IDs |
+| `google_ads_create_shared_negative_list_preview`         | items: shared_list_name; создаётся пустой SharedSet                                                        |
+| `google_ads_shared_negative_members_preview`             | operation=add/remove; shared_set_id + text/match_type либо criterion_id                                    |
+| `google_ads_shared_negative_campaigns_preview`           | operation=attach/detach; items: campaign_id/shared_set_id                                                  |
+| `google_ads_search_term_to_negative_preview`             | target_level=campaign/ad_group/shared_list; scoped IDs + search_term/match_type                            |
+| `google_ads_search_term_to_keyword_preview`              | campaign_id/ad_group_id/search_term/match_type + optional cpc_bid/final_url                                |
+| `list_change_journal`                                    | provider/account; optional from/to ISO timestamps, actor_user_id, operation, limit 1–100, opaque cursor    |
+| `preview_rollback_commit`                                | **только commit_id**; server-side recorded before values                                                   |
+| `commit_preview`                                         | **только preview_token**; existing browser approval mandatory                                              |
+
+Все Google schema branches запрещают additionalProperties; negative contracts явно задают required поля
+для комбинаций level/operation. Meta compatibility branches/dispatch сохранены.
+Google-specific tools описывают именно preview, возвращаемые effects и отдельный commit.
+Preview annotations: readOnly=false, destructive=false, openWorld=true; journal readOnly=true;
+реальный generic commit destructive=true. Permanent intent виден в description, before/after и browser warning.
+
+### Keyword creation, money, duplicates и negatives
+
+Ad group проверяется через Google и должен принадлежать campaign/account. NFC/whitespace normalization сохраняет
+регистр исходного текста; equivalence duplicate check case-insensitive. Действующий ENABLED/PAUSED criterion
+с тем же нормализованным текстом/match type блокирует новый preview (`google_keyword_duplicate`), включая batch duplicates.
+Group/campaign/shared negative inventory проверяется по существующему `negativeMatch` (не новая семантика match).
+При конфликте preview **не молча отбрасывается**: включает отрицательный/активный ключ, parent IDs и reason_code.
+HolyMedia browser approval показывает эти warnings/conflicts; deliberate commit разрешён после approval.
+
+`cpc_bid={"amount":"150","currency":"KZT"}` — сумма в обычной валюте аккаунта, не raw micros.
+Валюта читается из Google Customer; несовпадение запрещено. Точное decimal→BigInt преобразование без float rounding,
+до 6 знаков после точки. Пример `{"amount":"0.5","currency":"USD"}` → 500000 micros.
+Final URL — абсолютный HTTP(S) без embedded credentials; null очищает `final_urls` keyword override.
+Tracking template вне Stage 1. Match replacement сохраняет старые URL и keyword CPC override.
+
+### Negatives / shared lists / search terms
+
+CampaignCriterion negative=true; AdGroupCriterion negative=true; SharedCriterion связан с выбранным
+account-scoped SharedSet типа NEGATIVE_KEYWORDS. Add/remove — разные typed operations.
+Remove требует criterion_id, а не неоднозначный текст. Shared list creation/members/attach/detach —
+отдельные previews/commits, не скрытый compound write. CampaignSharedSet attach проверяет
+конфликты всех members с активными ключами кампании; shared member add проверяет все attached campaigns.
+Detach удаляет связь, не список и не кампанию. Search-term conversion направляет в тот же builder,
+без отдельной реализации создания keyword/negative. Это конверсия указанного read-result текста,
+не автоматическое доказательство его наличия в Google SearchTermView.
+
+### Batch и composite partial failure
+
+Максимум **500 provider operations**, не строк. Match change: create нового ENABLED criterion +
+pause старого (никогда remove), максимум **250 input rows**. Превышение отклоняется до provider access,
+без truncate. В одном plan используется один typed Google resource service; raw arbitrary service запрещён.
+Preview вызывает реальный соответствующий REST mutate с `validateOnly=true`; normal commit —
+`validateOnly=false, partialFailure=true`. Все пять используемых сервисов поддерживают validate_only.
+
+Если validation любой операции не проходит, committable token **не создаётся**.
+При commit ошибки Google сохраняются по provider-operation index; успехи других строк остаются применёнными.
+Для match replacement create-only/pause-only результат **DEGRADED**, не success;
+вывод содержит actual состояния и безопасную remediation: проверить обе строки, создать отдельный status preview,
+не повторять уже consumed commit. Google не обещает транзакцию этих двух partial-failure операций.
+
+### Snapshot / reread
+
+Перед preview читаются targeted parent/resource inventories; полные selectors и нормализованные rows
+сохраняются в snapshot. Полное searchStream чтение ограничено 20 000 rows на selector; превышение
+отклоняется, не выдаёт ложное «конфликтов нет». Не используется усечённая первая страница READ cursor.
+Перед commit повторно читаются **все selectors**; изменение родителей, наличия criterion,
+URLs/status/match/bid, duplicates/negative inventory требует новый preview (`google_preview_stale`).
+Это консервативно: изменение другого keyword в выбранном inventory тоже может сделать preview stale.
+После commit каждая accepted/failed операция reread по resource_name. Созданные Google IDs проверяются
+на account/type; before/requested/actual возвращаются. Remove подтверждён только если read показывает
+REMOVED или ресурс отсутствует. HTTP 200/accepted без подтверждённого состояния не считается success.
+Нормальный batch reread использует один IN-query на service; при сбое — bounded per-resource fallback до 6 параллельных чтений, без повторной mutation.
+Никаких автоматических mutation retries после lost response/reread outage.
+
+## Journal, commit ID и rollback foundation
+
+Каждый mutation set имеет стабильный opaque `hmc_...` commit ID, детерминированно связанный с уникальным
+preview. AuditService пишет attempt/result по операции; W0 row events теперь тоже содержат commit ID.
+Существующий McpPreview содержит immutable before/requested, provider results/Google codes, verificationRead,
+commitAttemptedAt и approving user; `list_change_journal` читает эти записи с workspace/account authorization,
+которую нельзя заменить клиентским фильтром. По одному journal entry на commit, внутри все rows/effects.
+Cursor — opaque commit ID, scoped к текущему account; stable time+ID pagination. Audit result event позволяет
+найти исходный mutation set для rollback без новой параллельной audit database.
+
+`preview_rollback_commit` извлекает server-recorded before и verified post-state, заново проверяет allowlist,
+current access и неизменность post-snapshot, создаёт **новый preview**, Google validate_only, browser approval,
+обычный commit/reread/audit. Скрытого immediate reverse mutate нет.
+
+- Keyword status: поддержано для verified changed rows; no-op/failed rows не откатываются.
+- Final URL: поддержано для verified successful rows URL batch (в том числе PARTIAL_FAILURE); восстанавливается полный сохранённый `final_urls`, включая empty/reset. Failed/unverified rows исключены.
+- REMOVED: **необратимо**, rollback отклонён.
+- Match type: automatic rollback **не поддерживается**; используйте новые explicit status previews после анализа двух actual ресурсов.
+- Negatives/shared list/create rollback: **не поддерживается** в Stage 1; typed before/expected/actual и commit ID готовы для будущего inverse builder.
+
+Audit failure до mutate останавливает write. Failure финализации после mutate остаётся consumed и требует reconciliation;
+журнал попыток — источник расследования, повторный commit небезопасен. Google errors: HolyMedia code,
+русский message, `google_code` (alias existing `google_error_code`), безопасный field_path и row association;
+raw provider message/trigger/Authorization не выдаются.
+
+## Stage 0 reuse (без campaign builder сейчас)
+
+Stage 0 может переиспользовать `buildStage1Plan` keyword_add/negative_add/shared actions,
+`normalizeKeywordText`, `currencyMicros`, существующий `negativeMatch`, typed `providerOperation`,
+`GoogleAdsAdapter.mutateStage1(validateOnly=true)`, `verifyStage1Mutation`, а также существующий
+McpPreviewService storage/approval/claim/audit. Campaign builder должен явно показывать каждый следующий
+preview step и появляющиеся resource IDs; temporary multi-service campaign graphs и budgets пока не реализованы.
 
 ## Live acceptance prerequisites / диагностический checklist
 
@@ -190,15 +300,23 @@ Budget/creation/destructive removal будут отдельными typed operat
 
 ## Матрица PPC stages
 
-| Stage                | Реализовано в этой ветке                                                                                                                                                        | Статус                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| W0 foundation        | Google gate/allowlist, typed status adapter, generic preview + Google validation, secure browser approval, CAS commit, reread, row audit/errors, 500 limit, isolated mock tests | DONE                                                           |
-| First vertical slice | Keyword PAUSED/ENABLED single + batch                                                                                                                                           | DONE (mock tests; live PPC acceptance NOT RUN)                 |
-| Stage 0              | Campaign-from-brief builder                                                                                                                                                     | NOT DONE                                                       |
-| Stage 1              | Negatives/shared lists WRITE                                                                                                                                                    | NOT DONE (существующий READ не считается WRITE)                |
-| Stage 2              | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
-| Stage 3              | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
-| Stage 4              | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
+| Stage                    | Реализовано в этой ветке                                                                                                                                                        | Статус                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| W0 foundation            | Google gate/allowlist, typed status adapter, generic preview + Google validation, secure browser approval, CAS commit, reread, row audit/errors, 500 limit, isolated mock tests | DONE                                                           |
+| First vertical slice     | Keyword PAUSED/ENABLED single + batch                                                                                                                                           | DONE (mock tests; live PPC acceptance NOT RUN)                 |
+| Stage 0                  | Campaign-from-brief builder                                                                                                                                                     | NOT DONE                                                       |
+| Stage 1 keyword add      | AdGroupCriterion creation, duplicate/conflicts, account-currency optional CPC                                                                                                   | DONE (mock)                                                    |
+| Stage 1 status           | Pause/resume W0 preserved                                                                                                                                                       | DONE (mock)                                                    |
+| Stage 1 match type       | Create new + pause old, two effects, DEGRADED reporting                                                                                                                         | DONE (mock)                                                    |
+| Stage 1 final URL        | Set/replace/clear + recorded-value rollback                                                                                                                                     | DONE (mock)                                                    |
+| Stage 1 removal          | Distinct permanent remove preview, warning, approval                                                                                                                            | DONE (mock); NOT reversible                                    |
+| Stage 1 negatives        | Campaign/ad-group add/remove, duplicate/conflicts                                                                                                                               | DONE (mock)                                                    |
+| Stage 1 shared lists     | Create/members add-remove/attach-detach, separate rereads                                                                                                                       | DONE (mock)                                                    |
+| Stage 1 conversions      | Search term → keyword/negative common builders                                                                                                                                  | DONE (mock)                                                    |
+| Stage 1 journal/rollback | Stable commit ID, journal filters/cursor, status/final URL inverse preview                                                                                                      | DONE (mock); other rollback unsupported                        |
+| Stage 2                  | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
+| Stage 3                  | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
+| Stage 4                  | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
 
 ## Контроль качества / evidence
 
@@ -212,6 +330,12 @@ Meta и Google READ regression покрываются существующими
 Primary references:
 
 - [Google v24 MutateAdGroupCriteriaRequest](https://developers.google.com/google-ads/api/reference/rpc/v24/MutateAdGroupCriteriaRequest)
+- [Google CampaignCriterion resource identity](https://developers.google.com/google-ads/api/fields/v24/campaign_criterion) — `campaignCriteria/{campaign_id}~{criterion_id}`, не один criterion ID.
+- [SharedCriterion identity and fields](https://developers.google.com/google-ads/api/reference/rpc/v24/SharedCriterion)
+- [Shared sets / negative list lifecycle](https://developers.google.com/google-ads/api/docs/targeting/shared-sets)
+- [SharedSet validate_only / partial_failure](https://developers.google.com/google-ads/api/reference/rpc/v24/MutateSharedSetsRequest)
+- [SharedCriterion validate_only / partial_failure](https://developers.google.com/google-ads/api/reference/rpc/v24/MutateSharedCriteriaRequest)
+- [CampaignSharedSet validate_only / partial_failure](https://developers.google.com/google-ads/api/reference/rpc/v24/MutateCampaignSharedSetsRequest)
 - [Google resource service mutates / REST JSON fields](https://developers.google.com/google-ads/api/docs/mutating/service-mutates)
 - [Google partial failure and operation-index errors](https://developers.google.com/google-ads/api/docs/best-practices/partial-failures)
 - [ProtoJSON field presence/default values](https://protobuf.dev/programming-guides/json/#presence-and-default-values) — positive keyword query explicitly filters negatives; omitted default `negative=false` is accepted.

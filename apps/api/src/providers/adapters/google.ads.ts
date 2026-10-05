@@ -12,6 +12,14 @@ import { ProviderError } from "../provider.errors.js";
 import { providerJson } from "../provider-http.js";
 import { googleAdsApiError } from "../google-ads.error.js";
 import {
+  buildStage1Plan,
+  rereadStage1Checks,
+  providerOperation,
+  decodeStage1Mutation,
+  verifyStage1Mutation,
+  type Stage1Plan,
+} from "../google-ads-stage1.js";
+import {
   assertGoogleWriteAccount,
   keywordBatch,
   googleMutationResults,
@@ -467,6 +475,96 @@ export class GoogleAdsAdapter
         status: criterion.status as "ENABLED" | "PAUSED",
       };
     });
+  }
+  private stage1Reader(context: ProviderReadContext) {
+    return (query: string) =>
+      this.searchStream(
+        context.credentials.accessToken,
+        context.accountId,
+        this.contextLoginCustomerId(context),
+        query,
+      );
+  }
+  public buildStage1(context: ProviderReadContext, intent: unknown) {
+    assertGoogleWriteAccount(this.config, context.accountId);
+    return buildStage1Plan(
+      context.accountId,
+      intent,
+      this.stage1Reader(context),
+    );
+  }
+  public readStage1(context: ProviderReadContext, plan: Stage1Plan) {
+    assertGoogleWriteAccount(this.config, context.accountId);
+    return rereadStage1Checks(plan, this.stage1Reader(context));
+  }
+  public verifyStage1(
+    context: ProviderReadContext,
+    plan: Stage1Plan,
+    results: Parameters<typeof verifyStage1Mutation>[1],
+  ) {
+    return verifyStage1Mutation(plan, results, this.stage1Reader(context));
+  }
+  public async mutateStage1(
+    context: ProviderReadContext,
+    plan: Stage1Plan,
+    validateOnly: boolean,
+  ) {
+    assertGoogleWriteAccount(this.config, context.accountId);
+    if (
+      context.accountId.replace(/-/g, "") !== plan.account_id ||
+      !plan.operations.length ||
+      plan.operations.length > 500 ||
+      new Set(plan.operations.map((x) => x.kind)).size !== 1
+    )
+      throw new GoogleAdsWriteError(
+        "google_plan_invalid",
+        "Некорректный типизированный Google mutation batch.",
+      );
+    if (!context.credentials.scopes.includes(GOOGLE_SCOPE))
+      throw new GoogleAdsWriteError(
+        "google_scope_required",
+        "Требуется Google OAuth-разрешение adwords.",
+      );
+    if (
+      !validateOnly &&
+      (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    )
+      throw new GoogleAdsWriteError(
+        "confirmed_write_disabled",
+        "Подтверждённая запись выключена на сервере.",
+      );
+    try {
+      const response = await providerJson<unknown>(
+        `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/${plan.operations[0]!.kind}:mutate`,
+        {
+          method: "POST",
+          headers: {
+            ...this.headers(
+              context.credentials.accessToken,
+              this.contextLoginCustomerId(context),
+            ),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            operations: plan.operations.map(providerOperation),
+            validateOnly,
+            partialFailure: true,
+          }),
+        },
+        this.config.providerHttpTimeoutMs,
+        googleAdsApiError,
+      );
+      if (!response || typeof response !== "object" || Array.isArray(response))
+        throw new Error("Invalid response");
+      return decodeStage1Mutation(response, plan, validateOnly);
+    } catch (error) {
+      const failure = writeFailureFromError(error);
+      throw new GoogleAdsWriteError(
+        "google_stage1_mutation_failed",
+        failure.message,
+        [failure],
+      );
+    }
   }
   public validateKeywordStatuses(
     context: ProviderReadContext,

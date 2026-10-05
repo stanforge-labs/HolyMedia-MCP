@@ -26,6 +26,12 @@ import { validateDateRange } from "../providers/provider-normalization.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
 import { keywordStatusToolSchema } from "./mcp-google-keyword-schema.js";
+import {
+  GOOGLE_STAGE1_TOOLS,
+  stage1Description,
+  stage1ToolSchema,
+  stage1ToolIntent,
+} from "./mcp-google-stage1-schema.js";
 
 const providerAliases: Record<string, ProviderId> = {
   google_ads: "GOOGLE_ADS",
@@ -37,6 +43,7 @@ const providerAliases: Record<string, ProviderId> = {
 };
 
 export const V1_COMPATIBLE_MCP_TOOLS = [
+  ...GOOGLE_STAGE1_TOOLS,
   "analyze_audiences",
   "analyze_site_improvements",
   "archive_entities_preview",
@@ -448,22 +455,27 @@ export class McpService {
   public tools() {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
-      description: toolDescription(name),
+      description: stage1Description(name) ?? toolDescription(name),
       ...([
         "pause_entities_preview",
         "update_entity_status_preview",
         "commit_preview",
+        ...GOOGLE_STAGE1_TOOLS,
+        "create_keyword_from_brief",
+        "preview_update_object",
+        "preview_delete_or_archive_object",
       ].includes(name)
         ? {
             annotations: {
-              readOnlyHint: false,
+              readOnlyHint: name === "list_change_journal",
               destructiveHint: name === "commit_preview",
               openWorldHint: true,
               idempotentHint: false,
             },
           }
         : {}),
-      inputSchema: keywordStatusToolSchema(name) ??
+      inputSchema: stage1ToolSchema(name) ??
+        keywordStatusToolSchema(name) ??
         metaReadSchema(name) ??
         previewToolSchema(name) ??
         googleKeywordToolSchema(name) ??
@@ -488,6 +500,34 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (name === "list_change_journal")
+      return this.previews.listChangeJournal(
+        this.servicePrincipal(principal),
+        args,
+      );
+    if (name === "preview_rollback_commit") {
+      if (
+        Object.keys(args).join(",") !== "commit_id" ||
+        typeof args.commit_id !== "string"
+      )
+        throw new ProviderError(
+          "invalid_request",
+          "Rollback принимает только commit_id, без replacement values.",
+        );
+      return this.previews.previewRollbackCommit(
+        this.servicePrincipal(principal),
+        args.commit_id,
+      );
+    }
+    if (args.provider === "GOOGLE_ADS" || GOOGLE_STAGE1_TOOLS.includes(name)) {
+      const intent = stage1ToolIntent(name, args);
+      if (intent)
+        return this.previews.createGoogleStage1(
+          this.servicePrincipal(principal),
+          text(args.account_id),
+          intent,
+        );
+    }
     // Only the typed keyword status vertical slice is enabled for Google.
     if (
       text(args.provider).toLowerCase() === "google_ads" &&
