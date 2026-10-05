@@ -128,6 +128,13 @@ async function main() {
     const names = new Set(toolList.map((tool) => tool.name));
     for (const name of expectedGoogleReads)
       assert(names.has(name), `missing ${name}`);
+    for (const name of [
+      "preview_change_campaign_name",
+      "preview_pause_campaign",
+      "preview_resume_campaign",
+      "commit_confirmed_preview",
+    ])
+      assert.equal(names.has(name), false, `hidden write tool ${name}`);
     for (const tool of toolList)
       assert.equal(tool.inputSchema?.type, "object", `schema ${tool.name}`);
     const inventory = await rpc("/mcp/public", "tools/call", fixture.token, {
@@ -143,7 +150,7 @@ async function main() {
     assert.equal(blockedWrite.status, 200, "write denial transport");
     const writeResult = (await blockedWrite.json()).result;
     assert.equal(writeResult?.isError, true, "write denial");
-    assert.match(JSON.stringify(writeResult), /write_scope_required/);
+    assert.match(JSON.stringify(writeResult), /public_operation_not_available/);
 
     const authorize = new URL(`${origin.origin}/oauth/authorize`);
     for (const [key, value] of Object.entries({

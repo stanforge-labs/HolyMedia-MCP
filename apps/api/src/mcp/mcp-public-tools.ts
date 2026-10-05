@@ -94,6 +94,16 @@ export function isPublicTool(name: string): boolean {
   return isPublicReadTool(name) || isPublicWriteTool(name);
 }
 
+/** Listing and invocation must apply the same public exposure policy. */
+export function isPublicToolAvailable(
+  name: string,
+  writeScopeEnabled = false,
+): boolean {
+  return (
+    isPublicReadTool(name) || (writeScopeEnabled && isPublicWriteTool(name))
+  );
+}
+
 type ToolDescriptor = {
   name: string;
   description: string;
@@ -131,9 +141,15 @@ function publicWriteSchema(name: string): Record<string, unknown> {
   };
 }
 
-export function publicTools(legacyTools: ToolDescriptor[]) {
+export function publicTools(
+  legacyTools: ToolDescriptor[],
+  writeScopeEnabled = false,
+) {
   const existing = new Map(legacyTools.map((tool) => [tool.name, tool]));
-  return PUBLIC_TOOL_NAMES.map((name) => {
+  const availableNames = PUBLIC_TOOL_NAMES.filter((name) =>
+    isPublicToolAvailable(name, writeScopeEnabled),
+  );
+  return availableNames.map((name) => {
     const legacy = existing.get(name);
     if (!legacy && !isPublicWriteTool(name))
       throw new Error(`Public MCP tool ${name} is not implemented.`);

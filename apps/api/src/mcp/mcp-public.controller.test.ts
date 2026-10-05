@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { McpService } from "./mcp.service.js";
-import { PUBLIC_TOOL_NAMES } from "./mcp-public-tools.js";
+import { PUBLIC_READ_TOOLS, PUBLIC_TOOL_NAMES } from "./mcp-public-tools.js";
 
 function reply() {
   const value = { code: vi.fn(), header: vi.fn(), send: vi.fn() };
@@ -25,13 +25,26 @@ function request(method: string, name?: string) {
 
 describe("public MCP transport", () => {
   const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  const previousWriteScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+  const previousControlledWriteFlag =
+    process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED;
   beforeEach(() => {
     process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED = "false";
   });
   afterEach(() => {
     if (previousBaseUrl === undefined)
       delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+    if (previousWriteScopeFlag === undefined)
+      delete process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
+    else process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = previousWriteScopeFlag;
+    if (previousControlledWriteFlag === undefined)
+      delete process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED;
+    else
+      process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED =
+        previousControlledWriteFlag;
   });
   it("registers POST and GET at /mcp/public while keeping /mcp", () => {
     expect(Reflect.getMetadata("path", McpController.prototype.post)).toBe(
@@ -78,7 +91,7 @@ describe("public MCP transport", () => {
       result: { tools: Array<{ name: string }> };
     };
     expect(publicList.result.tools.map((tool) => tool.name)).toEqual([
-      ...PUBLIC_TOOL_NAMES,
+      ...PUBLIC_READ_TOOLS,
     ]);
     const legacyList = (await controller.post(
       request("tools/list"),
@@ -121,6 +134,39 @@ describe("public MCP transport", () => {
       "list_connected_resources",
       {},
     );
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("only exposes the future write inventory when write scope is explicitly enabled", async () => {
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "true";
+    const write = vi.fn();
+    const read = vi.fn();
+    const controller = new McpController(
+      {
+        tools: () => McpService.prototype.tools.call({} as McpService),
+        call: read,
+      } as never,
+      { authenticate: vi.fn() } as never,
+      {
+        authenticate: vi
+          .fn()
+          .mockResolvedValue({ kind: "oauth", workspaceId: "workspace-a" }),
+      } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      { call: write } as never,
+    );
+    const listed = (await controller.postPublic(
+      request("tools/list"),
+      reply() as never,
+    )) as {
+      result: { tools: Array<{ name: string }> };
+    };
+    expect(listed.result.tools.map((tool) => tool.name)).toEqual([
+      ...PUBLIC_TOOL_NAMES,
+    ]);
+    expect(process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED).toBe("false");
+    expect(read).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
   });
 

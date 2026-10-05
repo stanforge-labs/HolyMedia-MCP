@@ -11,12 +11,14 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           legal: "Юридическая информация",
           privacy: "Политика конфиденциальности",
           terms: "Условия использования",
+          support: "Поддержка",
           astanaHub: "Astana Hub",
         }
       : {
           legal: "Legal information",
           privacy: "Privacy policy",
           terms: "Terms of use",
+          support: "Support",
           astanaHub: "Astana Hub",
         };
 
@@ -58,6 +60,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         </a>
       </div>
       <nav className="footer__links" aria-label={copy.legal}>
+        <Link href="/support">{copy.support}</Link>
         <Link href="/privacy">{copy.privacy}</Link>
         <Link href="/terms">{copy.terms}</Link>
       </nav>
