@@ -27,6 +27,11 @@ import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
 import { keywordStatusToolSchema } from "./mcp-google-keyword-schema.js";
 import {
+  stage0ToolSchema,
+  campaignIdSchema,
+  validateBriefSchema,
+} from "./mcp-google-stage0-schema.js";
+import {
   GOOGLE_STAGE1_TOOLS,
   stage1Description,
   stage1ToolSchema,
@@ -455,7 +460,16 @@ export class McpService {
   public tools() {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
-      description: stage1Description(name) ?? toolDescription(name),
+      description:
+        name === "create_campaign_from_brief"
+          ? "Google Ads: prepare an atomic PAUSED Search campaign preview from a typed brief. Calls validate_only; returns object plan, warnings and HolyMedia approval URL. No provider write until approved commit_preview."
+          : name === "get_launch_checklist"
+            ? "Read actual campaign structure and bounded safe landing-URL checks; return PASS/WARNING/FAIL per launch prerequisite. Does not activate campaign."
+            : name === "clone_campaign_preview"
+              ? "Prepare a clone preview. Google Ads supports a bounded Search profile: target campaign, ad groups and ads remain PAUSED; unsupported source components reject preview. Returns exact plan and approval URL, not an immediate write."
+              : name === "preview_resume_campaign"
+                ? "Prepare a campaign activation preview. Google Ads checks launch prerequisites and exposes warnings; changes only campaign status, without hidden ad-group/ad activation. Requires browser approval and commit_preview."
+                : (stage1Description(name) ?? toolDescription(name)),
       ...([
         "pause_entities_preview",
         "update_entity_status_preview",
@@ -464,17 +478,25 @@ export class McpService {
         "create_keyword_from_brief",
         "preview_update_object",
         "preview_delete_or_archive_object",
+        "create_campaign_from_brief",
+        "preview_resume_campaign",
+        "get_launch_checklist",
+        "clone_campaign_preview",
       ].includes(name)
         ? {
             annotations: {
-              readOnlyHint: name === "list_change_journal",
+              readOnlyHint: [
+                "list_change_journal",
+                "get_launch_checklist",
+              ].includes(name),
               destructiveHint: name === "commit_preview",
               openWorldHint: true,
               idempotentHint: false,
             },
           }
         : {}),
-      inputSchema: stage1ToolSchema(name) ??
+      inputSchema: stage0ToolSchema(name) ??
+        stage1ToolSchema(name) ??
         keywordStatusToolSchema(name) ??
         metaReadSchema(name) ??
         previewToolSchema(name) ??
@@ -500,6 +522,34 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (
+      args.provider === "GOOGLE_ADS" &&
+      [
+        "create_campaign_from_brief",
+        "preview_resume_campaign",
+        "clone_campaign_preview",
+      ].includes(name)
+    )
+      return this.previews.createGoogleCampaign(
+        this.servicePrincipal(principal),
+        args,
+        name === "preview_resume_campaign"
+          ? "resume"
+          : name === "clone_campaign_preview"
+            ? "clone"
+            : "build",
+      );
+    if (args.provider === "GOOGLE_ADS" && name === "get_launch_checklist") {
+      validateBriefSchema(args, campaignIdSchema);
+      const account = await this.account(principal, args);
+      return this.providers.googleStage0(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        "checklist",
+        args,
+      );
+    }
     if (name === "list_change_journal")
       return this.previews.listChangeJournal(
         this.servicePrincipal(principal),

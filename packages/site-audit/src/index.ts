@@ -194,6 +194,8 @@ type SafeResponse = {
 };
 
 export type SafeGetOptions = {
+  /** HEAD uses the same DNS pinning / redirect guards for reachability checks. */
+  headOnly?: boolean;
   accept?: string;
   maxBytes?: number;
   maxRedirects?: number;
@@ -203,7 +205,7 @@ export type SafeGetOptions = {
   userAgent?: string;
 };
 
-/** GET-only fetch with pinned, pre-validated DNS and revalidation on every redirect. */
+/** Read-only GET/HEAD with pinned DNS and revalidation on every redirect. */
 export async function safeGet(
   rawUrl: string,
   options: SafeGetOptions = {},
@@ -254,7 +256,7 @@ async function safeGetOne(
     const request = transport.request(
       url,
       {
-        method: "GET",
+        method: options.headOnly ? "HEAD" : "GET",
         timeout: options.timeoutMs ?? REQUEST_TIMEOUT_MS,
         headers: {
           accept:

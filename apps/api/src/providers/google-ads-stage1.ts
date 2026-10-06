@@ -457,7 +457,7 @@ function sameText(a: string, b: string) {
     b.normalize("NFC").toLocaleLowerCase("und")
   );
 }
-function conflictReason(
+export function conflictReason(
   text: string,
   match_type: MatchType,
   keyword: string,
@@ -472,6 +472,33 @@ function conflictReason(
         EXACT: "EXACT_NORMALIZED_TEXT",
       }[match_type]
     : null;
+}
+/** Shared typed criterion constructor for existing and temporary campaign parents. */
+export function keywordCreateFields(
+  item: Stage1Item,
+  parent: { adGroup?: string; campaign?: string; sharedSet?: string },
+  negative: boolean,
+  currency: string,
+): Stage1Operation["fields"] {
+  return {
+    ...parent,
+    keyword: {
+      text: normalizeKeywordText(item.text),
+      matchType: item.match_type!,
+    },
+    ...(parent.sharedSet ? {} : { negative }),
+    ...(!negative ? { status: "ENABLED" as const } : {}),
+    ...(item.cpc_bid
+      ? {
+          cpcBidMicros: currencyMicros(
+            item.cpc_bid.amount,
+            item.cpc_bid.currency,
+            currency,
+          ),
+        }
+      : {}),
+    ...(item.final_url ? { finalUrls: [finalUrl(item.final_url)!] } : {}),
+  };
 }
 function active(row: ResourceSnapshot) {
   return (
@@ -682,34 +709,28 @@ export async function buildStage1Plan(
             "google_keyword_duplicate",
             "Batch содержит эквивалентные создаваемые критерии.",
           );
-        const mutation: Stage1Operation["fields"] = {
-          keyword: { text, matchType: match_type },
-          ...(kind === "adGroupCriteria"
+        const currency = item.cpc_bid
+          ? expectOne(
+              await query("customers"),
+              "Не удалось определить валюту аккаунта.",
+            ).currency
+          : "";
+        const mutation = keywordCreateFields(
+          { ...item, text, match_type },
+          kind === "adGroupCriteria"
             ? {
                 adGroup: `customers/${account_id}/adGroups/${item.ad_group_id}`,
-                negative,
-                ...(!negative ? { status: "ENABLED" as const } : {}),
               }
             : kind === "campaignCriteria"
               ? {
                   campaign: `customers/${account_id}/campaigns/${item.campaign_id}`,
-                  negative: true,
                 }
               : {
                   sharedSet: `customers/${account_id}/sharedSets/${item.shared_set_id}`,
-                }),
-        };
-        if (item.cpc_bid) {
-          const currency = expectOne(
-            await query("customers"),
-            "Не удалось определить валюту аккаунта.",
-          ).currency;
-          mutation.cpcBidMicros = currencyMicros(
-            item.cpc_bid.amount,
-            item.cpc_bid.currency,
-            currency,
-          );
-        }
+                },
+          negative,
+          currency,
+        );
         if (intent.action === "keyword_match") {
           mutation.finalUrls = existing!.final_urls;
           if (existing!.cpc_bid_micros !== "0")

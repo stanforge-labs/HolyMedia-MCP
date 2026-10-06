@@ -1,4 +1,4 @@
-# Google Ads write: W0 foundation + Stage 1
+# Google Ads write: W0 foundation + Stage 1 + Stage 0
 
 ## Границы реализации
 
@@ -265,13 +265,166 @@ Audit failure до mutate останавливает write. Failure финали
 русский message, `google_code` (alias existing `google_error_code`), безопасный field_path и row association;
 raw provider message/trigger/Authorization не выдаются.
 
-## Stage 0 reuse (без campaign builder сейчас)
+## Stage 0: Search campaign-from-brief
 
-Stage 0 может переиспользовать `buildStage1Plan` keyword_add/negative_add/shared actions,
-`normalizeKeywordText`, `currencyMicros`, существующий `negativeMatch`, typed `providerOperation`,
-`GoogleAdsAdapter.mutateStage1(validateOnly=true)`, `verifyStage1Mutation`, а также существующий
-McpPreviewService storage/approval/claim/audit. Campaign builder должен явно показывать каждый следующий
-preview step и появляющиеся resource IDs; temporary multi-service campaign graphs и budgets пока не реализованы.
+Ветка: `codex/google-ads-write-stage0`, точная база Stage 1
+`1c0a44ea68e9b26d5f9a75e833e681f04ad67a80`. Это только development / mock acceptance.
+
+`google-ads-stage0.ts` строит типизированный multi-resource plan. Он не создаёт отдельной
+системы подтверждения: тот же `McpPreviewService`, таблица preview, 30-minute TTL,
+hash-bound exact plan, browser creator/session/CSRF, atomic claim, AuditService,
+`commit_preview`, opaque `hmc_...` commit ID и `list_change_journal`.
+Stage 0 хранит `version=0`, операции `GOOGLE_STAGE0_CAMPAIGN_CREATE/RESUME`;
+Stage 1 по-прежнему version=1. Общий operation audit event сохранён совместимым
+(`mcp_google_stage1_operation`, metadata.operation различает тип операции).
+
+Generic tools расширены provider-aware:
+
+- `create_campaign_from_brief`: только preview, Google validation, summary + object plan + approval URL.
+- `get_launch_checklist`: READ current campaign + bounded landing URL probes; PASS/WARNING/FAIL.
+- `preview_resume_campaign`: отдельный campaign-only status preview, без скрытого включения groups/ads.
+- `clone_campaign_preview`: ограниченный fail-closed Search clone через тот же builder, target PAUSED.
+
+Google-ветви schemas concrete: unknown properties запрещены рекурсивно, размеры arrays/strings ограничены,
+все required/enums/descriptions опубликованы. Старые Meta generic schema branches сохранены;
+они не позволяют Google обойти серверную строгую проверку. Все новые Google writes доступны только
+legacy scoped service-key пути; Public catalog остаётся 42 READ tools. Gates/allowlist defaults не менялись.
+
+### Brief contract / defaults
+
+Required: `provider=GOOGLE_ADS`, `account_id`, `campaign_name`, `daily_budget={amount,currency}`,
+`locations[]`, `languages[]`, `ad_groups[]`. Money amount — decimal string обычной валютной суммы,
+не micros. Account currency/timezone читаются из Google. `currencyMicros` из Stage 1 используется
+для бюджета/default bid/keyword CPC без float rounding. Currency mismatch/zero отвергается.
+
+Group: `name`, `keywords[{text,match_type,cpc_bid?,final_url?}]`, `rsa[]`, optional `default_bid`,
+`negative_keywords[]`. Имена групп уникальны; exact-equivalent keys/negatives не дублируются внутри parent.
+`parseStage1Intent`, `normalizeKeywordText`, `keywordCreateFields`, `currencyMicros`, `conflictReason`
+переиспользуются для существующих и temporary parents. Ключи ENABLED внутри PAUSED groups/campaign;
+RSA, groups и campaign всегда PAUSED. Нет параметра для скрытого запуска.
+
+Default strategy: **MANUAL_CPC**, с обязательным явным `default_bid` каждой группы.
+Никакая ставка не угадывается по валюте/бюджету. Optional **MAXIMIZE_CONVERSIONS** требует
+explicit validated conversion actions, не принимает manual CPC overrides. Полной Stage 2 editing surface нет.
+Budget DAILY/default Google period, STANDARD delivery, explicitly_shared=false.
+Google Search ON; `targetSearchNetwork` (Search Partners) OFF, `targetContentNetwork` OFF,
+`targetPartnerSearchNetwork` OFF. Единственный opt-in network option: `networks.search_partners=true`.
+EU political declaration: DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING для этого Search brief profile.
+
+`locations[{name,country_code?,exclude?,geo_target_id?}]`: GeoTargetConstantService suggestions,
+enabled constant и повторная GAQL reference проверка. Несколько вариантов → explicit error с кандидатами,
+не guessed first result; ID уточнения выбирается только среди Google suggestions. Duplicate/conflicting
+include/exclude запрещены; нужен хотя бы один include. Include/exclude mode PRESENCE.
+Proximity/radius **не реализованы**, запрос с такими полями отклоняется.
+Languages: aliases Russian/русский/ru, Kazakh/казахский/kk, English/английский/en → реальные targetable
+LanguageConstants; неизвестные/недоступные языки отвергаются, ID не хардкодится.
+
+Optional `start_date/end_date` YYYY-MM-DD → v24 `startDateTime` 00:00:00 и `endDateTime` 23:59:59
+в account timezone. Schedule: `days[]`, `start/end` HH:MM, 15-minute granularity, end может 24:00;
+overlap/overnight отвергаются (ночь разбивать явно). Timezone включён в preview. Bid modifiers отсутствуют.
+
+### Conversion goals
+
+Requested IDs должны существовать, быть ENABLED и usable в выбранном conversion customer.
+Для полного набора primary actions по category/origin все campaign goals обновляются
+в том же atomic set через CampaignConversionGoalOperation на temporary campaign ID.
+Невыбранные категории biddable=false. Это официально поддержанный dependency pattern, не второй write phase.
+Если выбран только subset category/origin или explicit secondary action, в том же атомарном set
+создаётся CustomConversionGoal с **ровно выбранными** action references, а campaign config связывается
+с его temporary resource. Standard campaign goals становятся biddable=false; нет неявно включённых peers.
+Secondary action получает prominent warning: custom goal будет использовать его для bidding даже при
+primaryForGoal=false. Политика пользователя не заменяется более широким goal.
+Cross-account/MCC conversion customer creation тоже явно unsupported для атомарного single-customer set.
+MCC login-customer-id для обычного доступа сохранён.
+
+Recent health: actual `all_conversions` за LAST_30_DAYS; zero/unavailable — prominent warning,
+не утверждение о исправности tracking. Rolling metrics не входят в immutable stale snapshot,
+а статические action/status/goal/customer references входят. Без explicit selection manual-CPC brief
+показывает inherited-customer-goals warning; MAXIMIZE_CONVERSIONS brief без actions fails.
+
+### RSA / assets / tracking
+
+RSA: one `final_url`, 3–15 `{text,pinned_field?}` headlines (<=30), 2–4 descriptions (<=90),
+optional path1/path2 (<=15; path2 требует path1). Wide/CJK characters учитываются двойным лимитом.
+31-character headline fails before any provider request/preview. HTTP(S) URL format/credentials
+проверяются заранее, фактическая reachability — только checklist.
+
+Supported creation + CampaignAsset link: sitelinks (text<=25, optional paired descriptions<=35),
+callouts<=25, structured snippets (header + 3–10 values), supplied phone call asset,
+business name via textAsset. Google validate_only проверяет policy/eligibility.
+Images/business logos: **attachment существующих IMAGE asset IDs выбранного account**,
+никакой генерации/download/upload binary. Без заранее загруженного asset бинарное создание — limitation.
+Google сам проверяет Search eligibility, размеры и policy при validation; type=IMAGE не заменяет это.
+
+`utm.final_url_suffix` default: `utm_source=google&utm_medium=cpc&utm_campaign={campaignid}`.
+Optional HTTPS `tracking_url_template` требует `{lpurl}`. Разрешён ограниченный ValueTrack набор:
+campaignid/adgroupid/keyword/matchtype/device/network/creative/loc_physical_ms/lpurl.
+Суффикс без начального ?, unknown/malformed placeholders отвергаются; final URLs не переписываются.
+
+### Atomic lifecycle / reread / policy
+
+Temporary IDs глобально уникальны и отрицательны; parent всегда создан раньше зависимых mutations:
+budget → campaign → criteria/goals → groups → keywords/negatives/RSA → assets/links.
+Stage 0 uses **GoogleAdsService.Mutate, validateOnly=true, partialFailure=false** для preview.
+Commit отправляет тот же immutable `mutateOperations`, validateOnly=false, **partialFailure=false**:
+all-or-nothing Google transaction. Нет BatchJob и неконтролируемого второго write phase.
+Stage 1 dedicated-resource commits остаются **partialFailure=true**.
+Все underlying операции считаются, включая links/goals/schedule days; max 500, no truncation.
+Очевидный oversized brief отвергается до provider reads; окончательный лимит проверяется после reference
+resolution, **до validation/mutation**, поскольку число inherited goal categories известно только после чтения Google.
+
+Preview возвращает currency/timezone/budget/strategy/networks/dates/resolved geo/languages/actions,
+counts, UTM, warnings, each object plan, Google validation, expiry, approval URL.
+Google policy error codes, field/item paths и **sanitized provider details** показываются при validate_only
+failure, committable preview не создаётся. Healthcare policy engine не придумывается;
+успешный validate_only не означает последующую moderation approval.
+
+Commit повторно проверяет gates/scopes/allowlist/workspace/owner/approval/TTL + reference snapshots,
+campaign-name uniqueness и clone source. Atomic claim + durable attempt audit precede provider mutation.
+Reread батчится по resource kind/real IDs: campaign PAUSED, budget, groups, keywords, ads, criteria,
+goals, assets/links должны совпасть с preview. Итог VERIFIED только после reread всех операций.
+HTTP rejection — FAILED/no creations; потерянный response/5xx/неполный reread — UNVERIFIED,
+claim consumed, **не retry**. Audit/journal включает IDs/actual state, actor, before/after, commit ID/error.
+Automatic delete rollback новой кампании **unsupported**; безопасное состояние — PAUSED.
+
+### Checklist / activation / clone limits
+
+Checklist проверяет current status/budget/strategy/geo/PRESENCE/languages/groups/keywords/RSA,
+policy/moderation, usable goals + recent data, landing URLs, tracking, assets.
+`ready=true` только если все пункты PASS. Missing conversion goal: WARNING для MANUAL_CPC,
+FAIL для MAXIMIZE_CONVERSIONS. PAUSED groups/ads и unknown/pending moderation — WARNING.
+Resume запрещён при любом FAIL; остальные warnings явно входят в approval view.
+Resume меняет **только campaign.status**, groups/ads остаются прежними.
+
+Landing probes используют общий SSRF-safe pinned-DNS `safeGet`, **HEAD** first;
+405/501 → bounded GET fallback. Каждое перенаправление заново проверяется, max 3,
+timeout 4s на HTTP запрос, body max 64 KiB, max 20 unique URLs, без credentials/cookies/provider headers.
+Слишком большой GET fallback/blocked URL/HTTP failure — FAIL, не fake reachability PASS; глубокого crawl нет.
+
+Clone inputs: source_campaign_id/new_name; optional new_budget/new_locations/new_dates.
+Supported profile: Search MANUAL_CPC/MAXIMIZE_CONVERSIONS, standard groups, keyword criteria,
+RSA с одним URL, known geo/language/schedule, campaign/group negatives, sitelinks/callouts/snippets,
+existing image/logo links, compatible full-category goals/tracking. Все target entities PAUSED.
+Source snapshots входят в stale protection. Past dates могут потребовать explicit new_dates.
+Unsupported source parts fail the **whole clone preview**, не silently omitted:
+shared list links, proximity/audience/device criteria, non-keyword/non-RSA groups/ads,
+multi-final-URL overrides, custom/cross-account goals, call/business-name/unknown asset details,
+unsupported networks/bidding/geo modes. Поэтому clone статус **PARTIAL support**, не full Google clone.
+
+### Stage 0 isolated evidence / live prerequisites
+
+Automated T/U/V/W, defaults, currency, schedule, ambiguity, actions, duplicates/conflicts, URL validation,
+approval/expiry/digest tampering/allowlist/gate/scope, atomic failure, uncertain response/reread outage,
+attempt-audit failure, clone success/stale/unsupported parts, all supported asset forms, checklist URL/policy,
+public READ-only covered by mock HTTP/DB. HEAD/DNS/private redirect/loop guards tested with mock transport.
+Validation calls и mutation calls counted отдельно. Real provider calls/writes = **0**.
+
+Для live Stage 0 нужен отдельный явно разрешённый TEST account, account-currency budget и explicit
+group bids, real enabled geo/language constants, usable conversion actions, supplied RSA/URLs/text assets,
+existing image/logo IDs при необходимости, MCC/API access, allowed read/write service key и browser owner.
+Fixture T: Алматы, 2 groups ×5 keywords, 1 RSA per group, 4 sitelinks, UTM; сначала только PAUSED creation.
+Developer token level не угадывается; validation restrictions проверять отдельным разрешённым preflight.
+W activation — отдельная операция, без скрытых groups/ads changes. On Clinic/Novartis не тестировались.
 
 ## Live acceptance prerequisites / диагностический checklist
 
@@ -304,7 +457,12 @@ preview step и появляющиеся resource IDs; temporary multi-service c
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | W0 foundation            | Google gate/allowlist, typed status adapter, generic preview + Google validation, secure browser approval, CAS commit, reread, row audit/errors, 500 limit, isolated mock tests | DONE                                                           |
 | First vertical slice     | Keyword PAUSED/ENABLED single + batch                                                                                                                                           | DONE (mock tests; live PPC acceptance NOT RUN)                 |
-| Stage 0                  | Campaign-from-brief builder                                                                                                                                                     | NOT DONE                                                       |
+| Stage 0 builder          | Atomic PAUSED budget/Search/geo/languages/schedule/goals/groups/keywords/negatives/RSA/tracking                                                                                 | DONE (mock, supported brief profile)                           |
+| Stage 0 assets           | Sitelinks/callouts/snippets/call/business name; existing image/logo attachment                                                                                                  | DONE (mock); binary image/logo creation NOT DONE               |
+| Stage 0 checklist/resume | Actual state + safe URL probes + campaign-only activation, shared approval/commit/audit                                                                                         | DONE (mock)                                                    |
+| Stage 0 clone            | Supported Search subset, immutable source snapshots, no silent omission                                                                                                         | PARTIAL; unsupported source components listed above            |
+| Stage 0 custom goals     | Exact same-customer subset/secondary selection, atomic custom goal/config references                                                                                            | DONE (mock)                                                    |
+| Stage 0 extended scope   | Cross-account goal creation and proximity                                                                                                                                       | NOT DONE; explicit rejection                                   |
 | Stage 1 keyword add      | AdGroupCriterion creation, duplicate/conflicts, account-currency optional CPC                                                                                                   | DONE (mock)                                                    |
 | Stage 1 status           | Pause/resume W0 preserved                                                                                                                                                       | DONE (mock)                                                    |
 | Stage 1 match type       | Create new + pause old, two effects, DEGRADED reporting                                                                                                                         | DONE (mock)                                                    |
@@ -327,7 +485,19 @@ missing-row/read-outage, schemas/annotations и default Public read-only.
 Meta и Google READ regression покрываются существующими suites; real provider writes — **0**.
 Точные итоги команд публикуются в отчёте задачи, без объявления непройденных/live checks PASS.
 
+Stage 0 quality gate обнаружил High в транзитивном source-map-js 1.2.1.
+Минимальный workspace override `source-map-js@<1.2.2: 1.2.2` обновляет только этот пакет;
+lockfile содержит соответствующий patch. Audit после исправления: Critical 0 / High 0,
+6 Moderate baseline (не объявляются устранёнными).
+[Advisory GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+
 Primary references:
+
+- [GoogleAdsService bulk mutate and atomic creation](https://developers.google.com/google-ads/api/docs/mutating/overview)
+- [Temporary ID dependency and uniqueness rules](https://developers.google.com/google-ads/api/docs/batch-processing/temporary-ids)
+- [Campaign-specific conversion and custom goals](https://developers.google.com/google-ads/api/docs/conversions/goals/campaign-goals)
+- [Official v24 sample: campaign conversion goals on temporary campaign ID](https://github.com/googleads/google-ads-python/blob/main/examples/shopping_ads/add_performance_max_retail_campaign.py)
+- [Campaign date-time creation](https://developers.google.com/google-ads/api/docs/campaigns/create-campaigns)
 
 - [Google v24 MutateAdGroupCriteriaRequest](https://developers.google.com/google-ads/api/reference/rpc/v24/MutateAdGroupCriteriaRequest)
 - [Google CampaignCriterion resource identity](https://developers.google.com/google-ads/api/fields/v24/campaign_criterion) — `campaignCriteria/{campaign_id}~{criterion_id}`, не один criterion ID.

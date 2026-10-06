@@ -25,6 +25,11 @@ export type GoogleKeywordMutation = GoogleKeywordIdentity & {
   status: "ENABLED" | "PAUSED";
 };
 export type GoogleWriteFailure = {
+  google_details?: {
+    google_code: string;
+    message: string;
+    field_path?: string;
+  }[];
   code: string;
   message: string;
   google_error_code: string;

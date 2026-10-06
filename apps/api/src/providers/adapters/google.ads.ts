@@ -10,7 +10,19 @@ import type {
 } from "@holymedia/contracts";
 import { ProviderError } from "../provider.errors.js";
 import { providerJson } from "../provider-http.js";
-import { googleAdsApiError } from "../google-ads.error.js";
+import { googleAdsApiError, GoogleAdsApiError } from "../google-ads.error.js";
+import {
+  buildStage0Plan,
+  buildResumePlan,
+  buildClonePlan,
+  rereadStage0Checks,
+  stage0ProviderOperations,
+  decodeStage0Mutation,
+  verifyStage0Mutation,
+  launchChecklist,
+  row as stage0Row,
+  type Stage0Plan,
+} from "../google-ads-stage0.js";
 import {
   buildStage1Plan,
   rereadStage1Checks,
@@ -25,6 +37,7 @@ import {
   googleMutationResults,
   GoogleAdsWriteError,
   writeFailureFromError,
+  googleWriteFailure,
   type GoogleKeywordIdentity,
   type GoogleKeywordSnapshot,
   type GoogleKeywordMutation,
@@ -484,6 +497,148 @@ export class GoogleAdsAdapter
         this.contextLoginCustomerId(context),
         query,
       );
+  }
+  public stage0(
+    context: ProviderReadContext,
+    action:
+      | "build"
+      | "clone"
+      | "resume"
+      | "read"
+      | "validate"
+      | "commit"
+      | "verify"
+      | "checklist",
+    input: unknown,
+    results: Parameters<typeof verifyStage0Mutation>[1] = [],
+  ): Promise<unknown> {
+    if (action !== "checklist")
+      assertGoogleWriteAccount(this.config, context.accountId);
+    const read = this.stage1Reader(context),
+      plan = input as Stage0Plan;
+    if (action === "clone")
+      return buildClonePlan(
+        context.accountId,
+        input,
+        read,
+        (brief) => this.stage0(context, "build", brief) as Promise<Stage0Plan>,
+      );
+    if (action === "build")
+      return buildStage0Plan(
+        context.accountId,
+        input,
+        read,
+        async (name, country) => {
+          const response = await providerJson<unknown>(
+            `${this.apiBase()}/geoTargetConstants:suggest`,
+            {
+              method: "POST",
+              headers: {
+                ...this.headers(
+                  context.credentials.accessToken,
+                  this.contextLoginCustomerId(context),
+                ),
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({
+                locale: "ru",
+                ...(country ? { countryCode: country } : {}),
+                locationNames: { names: [name] },
+              }),
+            },
+            this.config.providerHttpTimeoutMs,
+            googleAdsApiError,
+          );
+          const suggestions = stage0Row(response).geoTargetConstantSuggestions;
+          if (!Array.isArray(suggestions) || suggestions.length > 100)
+            throw new GoogleAdsWriteError(
+              "google_geo_invalid",
+              "Google geo suggestions недоступны или слишком многочисленны.",
+            );
+          return suggestions.map(stage0Row);
+        },
+      );
+    if (action === "resume")
+      return buildResumePlan(context.accountId, input, read);
+    if (action === "checklist")
+      return launchChecklist(
+        context.accountId,
+        String(stage0Row(input).campaign_id),
+        read,
+      );
+    if (action === "read") return rereadStage0Checks(plan, read);
+    if (action === "verify") return verifyStage0Mutation(plan, results, read);
+    return this.mutateStage0(context, plan, action === "validate");
+  }
+  private async mutateStage0(
+    context: ProviderReadContext,
+    plan: Stage0Plan,
+    validateOnly: boolean,
+  ) {
+    assertGoogleWriteAccount(this.config, context.accountId);
+    if (
+      plan.account_id !== context.accountId.replaceAll("-", "") ||
+      !plan.operations.length ||
+      plan.operations.length > 500
+    )
+      throw new GoogleAdsWriteError(
+        "google_plan_invalid",
+        "Неверный атомарный campaign plan.",
+      );
+    if (!context.credentials.scopes.includes(GOOGLE_SCOPE))
+      throw new GoogleAdsWriteError(
+        "google_scope_required",
+        "Требуется Google OAuth adwords.",
+      );
+    if (
+      !validateOnly &&
+      (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    )
+      throw new GoogleAdsWriteError(
+        "confirmed_write_disabled",
+        "Подтверждённая запись выключена.",
+      );
+    try {
+      const response = await providerJson<unknown>(
+        `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/googleAds:mutate`,
+        {
+          method: "POST",
+          headers: {
+            ...this.headers(
+              context.credentials.accessToken,
+              this.contextLoginCustomerId(context),
+            ),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mutateOperations: stage0ProviderOperations(plan),
+            validateOnly,
+            partialFailure: false,
+          }),
+        },
+        this.config.providerHttpTimeoutMs,
+        googleAdsApiError,
+      );
+      return decodeStage0Mutation(response, plan, validateOnly);
+    } catch (error) {
+      const failure =
+        !validateOnly &&
+        (!(error instanceof GoogleAdsApiError) ||
+          Number(error.providerStatus) >= 500)
+          ? googleWriteFailure("OUTCOME_UNCERTAIN")
+          : writeFailureFromError(error);
+      if (error instanceof GoogleAdsApiError)
+        failure.google_details = error.errors.slice(0, 50).map((e) => ({
+          google_code: e.error_code,
+          message: e.message,
+          ...(e.field_path ? { field_path: e.field_path } : {}),
+        }));
+      return plan.operations.map(() => ({
+        success: false,
+        resource_name: null,
+        error: failure,
+      }));
+    }
   }
   public buildStage1(context: ProviderReadContext, intent: unknown) {
     assertGoogleWriteAccount(this.config, context.accountId);

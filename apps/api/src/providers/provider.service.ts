@@ -1190,6 +1190,34 @@ export class ProviderService {
       );
     }
   }
+  public async googleStage0(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action:
+      | "build"
+      | "clone"
+      | "resume"
+      | "read"
+      | "validate"
+      | "commit"
+      | "verify"
+      | "checklist",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx =
+      action === "checklist"
+        ? await this.readContext(workspaceId, connectionId, accountId)
+        : await this.googleKeywordContext(workspaceId, connectionId, accountId);
+    if (ctx.account.provider !== "GOOGLE_ADS")
+      throw new GoogleAdsWriteError(
+        "google_account_required",
+        "Требуется Google Ads аккаунт.",
+      );
+    const adapter = ctx.adapter as unknown as GoogleAdsAdapter;
+    return adapter.stage0(ctx.read, action, input, results);
+  }
   public async readGoogleKeywordStates(
     workspaceId: string,
     connectionId: string,
