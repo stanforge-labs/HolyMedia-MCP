@@ -1,0 +1,51 @@
+name: Google live acceptance API image (no production deploy)
+on:
+  push:
+    branches: [codex/google-ads-write-live-acceptance]
+    paths: [.github/workflows/google-live-acceptance-image.yml]
+permissions:
+  contents: read
+  packages: write
+env:
+  ACCEPTANCE_SOURCE: 7da2fbbe7d150072183bc5e121cae4abae019ddc
+  IMAGE: ghcr.io/stanforge-labs/holymedia-mcp-v2:google-live-acceptance-7da2fbbe7d150072183bc5e121cae4abae019ddc
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.ACCEPTANCE_SOURCE }}
+      - run: test "$(git rev-parse HEAD)" = "$ACCEPTANCE_SOURCE"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: image
+        with:
+          context: .
+          file: infra/Dockerfile.v2
+          target: api-runtime
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.ACCEPTANCE_SOURCE }}
+            org.opencontainers.image.source=https://github.com/stanforge-labs/HolyMedia-MCP
+            org.holymedia.acceptance-only=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: |
+          echo "Exact source: $ACCEPTANCE_SOURCE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Digest: ${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          docker pull "$IMAGE@${{ steps.image.outputs.digest }}"
+          test "$(docker image inspect --format '{{.Config.User}}' "$IMAGE")" = node
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "$ACCEPTANCE_SOURCE"
+          docker run --rm --entrypoint sh "$IMAGE" -ec 'test -f apps/api/dist/main.js; test -x packages/database/node_modules/.bin/prisma; test ! -d apps/web; test ! -d apps/worker; test ! -d .git; test ! -e .env'

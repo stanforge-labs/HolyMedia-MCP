@@ -1,0 +1,73 @@
+name: holymedia-google-acceptance
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [acceptance-postgres:/var/lib/postgresql]
+    healthcheck:
+      test:
+        [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: { driver: json-file, options: { max-size: 5m, max-file: "2" } }
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    environment:
+      ACCEPTANCE_REDIS_PASSWORD: ${ACCEPTANCE_REDIS_PASSWORD}
+    command:
+      [
+        sh,
+        -c,
+        'exec redis-server --appendonly yes --requirepass "$${ACCEPTANCE_REDIS_PASSWORD}"',
+      ]
+    volumes: [acceptance-redis:/data]
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'REDISCLI_AUTH="$${ACCEPTANCE_REDIS_PASSWORD}" redis-cli ping | grep -q PONG',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: { driver: json-file, options: { max-size: 5m, max-file: "2" } }
+  api:
+    image: ${ACCEPTANCE_IMAGE:?exact digest required}
+    restart: unless-stopped
+    init: true
+    env_file: acceptance.env
+    ports: ["127.0.0.1:4400:4001"]
+    volumes:
+      - ./harness:/acceptance:ro
+      - ./state:/acceptance-state
+    command:
+      [
+        sh,
+        -ec,
+        'node --import /acceptance/guard.mjs apps/api/dist/main.js & api_pid=$$!; node /acceptance/gateway.mjs & gateway_pid=$$!; trap "kill $$api_pid $$gateway_pid" TERM INT EXIT; wait $$api_pid',
+      ]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "Promise.all([fetch('http://127.0.0.1:4000/ready'),fetch('http://127.0.0.1:4001/health')]).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    logging: { driver: json-file, options: { max-size: 5m, max-file: "2" } }
+volumes:
+  acceptance-postgres:
+  acceptance-redis:
