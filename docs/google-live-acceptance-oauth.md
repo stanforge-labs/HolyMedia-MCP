@@ -44,13 +44,31 @@ The API uses a mounted Node preload guard, not an application source patch. It b
 mutate endpoint, including validate-only, and permits only v24 customer/customer_client metadata queries
 for `4378327049` and `8590146099`, with MCC login `4378327049`. Discovery first reads accessible customer
 IDs; hierarchy is preflighted with an IDs-only query before descriptive fields are requested.
-Unexpected accessible/hierarchy IDs stop further discovery and are recorded as IDs only; no
-third-party customer data requests are made. Counters contain no credentials, request bodies or headers.
+The accessible-customer list must contain TEST MCC `4378327049`; the harness filters that response
+to `4378327049` and `8590146099` before the unmodified provider adapter discovers any metadata.
+Other directly accessible IDs are ignored without metadata requests. Unexpected hierarchy children
+still stop discovery before descriptive reads. Counters contain no credentials, request bodies or headers.
 Normal provider request logs omit OAuth query parameters.
 
-Write gates remain false, all allowlists empty. This guard is intentionally proof-only: later write
-acceptance needs a new explicitly authorized task and test_account=true/hierarchy evidence first.
-Changing env alone cannot bypass the current guard.
+In the separately authorized fixture-preview phase, only the disposable Google write gate is ON
+and its allowlist is exactly `8590146099`. Public write flags and confirmed-write capability remain
+OFF; `V2_PREVIEW_ONLY=true`. Every actual mutate is blocked, including MCC writes. The guard permits
+only atomic `validateOnly=true`, `partialFailure=false` campaign-fixture creates on the TEST CLIENT
+after a fresh (30-minute maximum age) canonical test_account/hierarchy proof. No flag alone bypasses
+this requirement. Fixture reads/reference resolution are scoped to the test client and Almaty, KZ.
+
+The fixture is built through actual authenticated legacy MCP `create_campaign_from_brief`, with
+an actual controlled service key restricted to the selected client. The account currency is USD,
+so the small paused fixture uses 2 USD/day and MANUAL_CPC with 0.10 USD ad-group bid. Geo is resolved
+and confirmed as Google City `9235214` (Almaty, Kazakhstan), language Russian `1031`. Plan: 1 group,
+20 EXACT/PHRASE keywords, 1 PAUSED RSA, 26 atomic operations. Preview TTL is the existing 30 minutes.
+
+The API-only harness serves a minimal `/mcp/approve` shell with the same fragment-only approval
+contract. It uses the seeded disposable owner's real HolyMedia cookie session and CSRF protections
+and invokes only the existing `/api/v1/mcp/public/approval/view` and explicit approve/cancel endpoint.
+GET never approves; no commit route is exposed by the gateway. Approval nonces stay in browser
+memory, are removed from the address bar, and are never logged. Protected state files retain the
+service key/preview for the next task; Google tokens stay encrypted in the disposable DB.
 
 ## Verification / lifecycle
 

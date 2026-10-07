@@ -83,4 +83,32 @@ test("acceptance gateway rewrites only the exact callback and never logs its que
   assert.match(await dashboard.text(), /OAuth callback successful/);
   assert.equal((await get("/ready")).status, 200);
   assert.equal(received.at(-1), "/ready");
+  const approval = await get("/mcp/approve");
+  assert.equal(approval.status, 200);
+  assert.match(await approval.text(), /TEST CLIENT 8590146099/);
+  assert.equal(approval.headers.get("referrer-policy"), "no-referrer");
+  const js = await get("/acceptance/approval.mjs");
+  assert.equal(js.status, 200);
+  const script = await js.text();
+  assert.doesNotMatch(
+    script,
+    /commit_preview|commit_confirmed_preview|console\./,
+  );
+  const forbidden = await fetch(
+    "http://127.0.0.1:4001/api/v1/mcp/public/approval",
+    {
+      method: "POST",
+      headers: { host: "localhost:4400", origin: "https://example.invalid" },
+    },
+  );
+  assert.equal(forbidden.status, 403);
+  assert.equal(
+    (
+      await fetch("http://127.0.0.1:4001/mcp", {
+        method: "POST",
+        headers: { host: "localhost:4400" },
+      })
+    ).status,
+    404,
+  );
 });

@@ -63,14 +63,18 @@ def verify_isolation():
             redis = urlsplit(values['REDIS_URL'])
             if db.hostname != 'postgres' or db.path != '/google_acceptance' or redis.hostname != 'redis':
                 raise RuntimeError('acceptance_database_or_redis_mismatch')
-            if values['PROVIDER_GOOGLE_ADS_WRITE_ENABLED'] != 'false' or values['GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST']:
-                raise RuntimeError('acceptance_write_enabled')
+            write_gate = values['PROVIDER_GOOGLE_ADS_WRITE_ENABLED']
+            write_allowlist = values['GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST']
+            if not ((write_gate == 'false' and not write_allowlist) or (write_gate == 'true' and write_allowlist == '8590146099')):
+                raise RuntimeError('acceptance_write_gate_or_allowlist_invalid')
+            if any(values[key] != 'false' for key in ['PUBLIC_MCP_WRITE_SCOPE_ENABLED', 'PUBLIC_MCP_CONTROLLED_WRITE_ENABLED', 'V2_CONFIRMED_WRITE_ENABLED']) or values['V2_PREVIEW_ONLY'] != 'true':
+                raise RuntimeError('acceptance_commit_or_public_write_enabled')
             if any(mount['Type'] != 'bind' or not mount['Source'].startswith(str(ROOT) + '/') for mount in item['Mounts']):
                 raise RuntimeError('acceptance_api_mount_mismatch')
         else:
             if published or any(mount['Type'] != 'volume' or not mount['Name'].startswith(PROJECT + '_acceptance-') for mount in item['Mounts']):
                 raise RuntimeError('acceptance_infrastructure_mount_or_port_mismatch')
-    print('ISOLATION_PASS: dedicated network/volumes/DB/Redis; only 127.0.0.1:4400 published; exact source; writes OFF/EMPTY')
+    print('ISOLATION_PASS: dedicated network/volumes/DB/Redis; only 127.0.0.1:4400 published; exact source; public/confirmed writes OFF; no real mutate permitted')
 
 def read_env(path, allowed=None):
     values = {}
@@ -122,7 +126,7 @@ def initialize(upload):
     (ROOT / 'harness').mkdir(mode=0o755)
     (ROOT / 'state').mkdir(mode=0o700)
     os.chown(ROOT / 'state', 1000, 1000)
-    for filename in ['guard.mjs', 'gateway.mjs', 'seed.mjs']:
+    for filename in ['guard.mjs', 'gateway.mjs', 'seed.mjs', 'approval.html', 'approval.mjs', 'approval.css']:
         shutil.copyfile(upload / filename, ROOT / 'harness' / filename)
         os.chmod(ROOT / 'harness' / filename, 0o644)
     shutil.copyfile(upload / 'compose.yml', ROOT / 'compose.yml')

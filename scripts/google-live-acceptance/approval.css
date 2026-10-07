@@ -1,0 +1,55 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 1.5rem;
+  font:
+    1rem/1.5 system-ui,
+    sans-serif;
+  color: #18243b;
+  background: #f5f7fb;
+}
+main {
+  overflow-wrap: anywhere;
+  max-width: 70rem;
+  margin-inline: auto;
+  padding: 1.5rem;
+  background: white;
+  border: 1px solid #ccd5e2;
+  border-radius: 0.75rem;
+}
+h1 {
+  font-size: 1.5rem;
+}
+button {
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  margin: 0.25rem;
+  font: inherit;
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 3px solid #2456b0;
+  outline-offset: 3px;
+}
+details {
+  border-block-start: 1px solid #ccd5e2;
+  padding-block: 0.5rem;
+}
+summary {
+  cursor: pointer;
+  min-height: 2rem;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+}
+label {
+  display: block;
+  padding-block: 0.75rem;
+}
+[hidden] {
+  display: none !important;
+}

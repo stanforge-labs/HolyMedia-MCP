@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HolyMedia — подтверждение TEST fixture</title>
+    <link rel="stylesheet" href="/acceptance/approval.css" />
+    <script type="module" src="/acceptance/approval.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <h1>HolyMedia: подтверждение TEST fixture</h1>
+      <p>
+        Проверьте точный план для TEST CLIENT 8590146099. Кампания, группа и
+        объявление создаются PAUSED.
+      </p>
+      <p id="status" role="status" aria-live="polite">
+        Проверяем preview и доступ…
+      </p>
+      <section id="plan" hidden aria-label="План Google Ads"></section>
+      <form
+        id="approval"
+        method="post"
+        action="/api/v1/mcp/public/approval"
+        hidden
+      >
+        <p>
+          <label
+            ><input type="checkbox" name="reviewed" required /> Я проверил план
+            и подтверждаю подготовку этой TEST fixture.</label
+          >
+        </p>
+        <button type="submit" name="decision" value="approve">
+          Подтвердить fixture preview
+        </button>
+        <button type="submit" name="decision" value="cancel" formnovalidate>
+          Отменить preview
+        </button>
+      </form>
+      <p>
+        Подтверждение сохраняет решение в HolyMedia. Google Ads ресурсы на этом
+        шаге не создаются. Commit выполняется отдельно.
+      </p>
+      <noscript
+        >Для защищённого подтверждения требуется JavaScript. Решение не
+        сохранено.</noscript
+      >
+    </main>
+  </body>
+</html>

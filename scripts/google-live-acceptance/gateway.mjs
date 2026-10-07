@@ -1,9 +1,10 @@
 // Loopback-only SSH entry. OAuth is started via the real authenticated API route.
 import { createServer, request } from "node:http";
+import { readFileSync } from "node:fs";
 const api = "http://127.0.0.1:4000",
   origin = "http://localhost:4400";
 let starting = false;
-async function start() {
+async function localLogin() {
   const csrf = await fetch(`${api}/api/v1/auth/csrf`);
   if (!csrf.ok) throw new Error("csrf_failed");
   let cookies = csrf.headers
@@ -28,14 +29,16 @@ async function start() {
   const workspaceId = (await login.json()).workspace?.id;
   if (typeof workspaceId !== "string" || !/^[A-Za-z0-9-]+$/.test(workspaceId))
     throw new Error("workspace_missing");
-  cookies = login.headers
-    .getSetCookie()
-    .map((x) => x.split(";")[0])
-    .join("; ");
+  const setCookies = login.headers.getSetCookie();
+  cookies = setCookies.map((x) => x.split(";")[0]).join("; ");
   const token = cookies
     .split("; ")
     .find((x) => x.startsWith("hm_v2_csrf="))
     ?.slice("hm_v2_csrf=".length);
+  return { workspaceId, cookies, token, setCookies };
+}
+async function start() {
+  const { workspaceId, cookies, token } = await localLogin();
   const response = await fetch(
     `${api}/api/v1/workspaces/${workspaceId}/connections/GOOGLE_ADS/oauth/start`,
     {
@@ -69,6 +72,89 @@ createServer(async (req, res) => {
     return;
   }
   const url = new URL(req.url, origin);
+  const assets = {
+    "/mcp/approve": ["approval.html", "text/html; charset=utf-8"],
+    "/acceptance/approval.mjs": [
+      "approval.mjs",
+      "text/javascript; charset=utf-8",
+    ],
+    "/acceptance/approval.css": ["approval.css", "text/css; charset=utf-8"],
+  };
+  if (req.method === "GET" && assets[url.pathname]) {
+    const [file, type] = assets[url.pathname];
+    res.setHeader("Content-Type", type);
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    );
+    res.end(readFileSync(new URL(file, import.meta.url)));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/acceptance/session") {
+    if (req.headers.origin !== origin || req.headers.authorization) {
+      res.writeHead(403).end();
+      return;
+    }
+    try {
+      const session = await localLogin();
+      res.setHeader("Set-Cookie", session.setCookies);
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ csrfToken: session.token }));
+    } catch {
+      res.writeHead(503).end();
+    }
+    return;
+  }
+  if (
+    req.method === "POST" &&
+    [
+      "/api/v1/mcp/public/approval/view",
+      "/api/v1/mcp/public/approval",
+    ].includes(url.pathname)
+  ) {
+    if (req.headers.origin !== origin || req.headers.authorization) {
+      res.writeHead(403).end();
+      return;
+    }
+    let length = 0;
+    const chunks = [];
+    for await (const chunk of req) {
+      length += chunk.length;
+      if (length > 4096) {
+        res.writeHead(413).end();
+        return;
+      }
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks);
+    const upstream = request(
+      `${api}${url.pathname}`,
+      {
+        method: "POST",
+        headers: {
+          host: "localhost:4400",
+          "content-type": "application/json",
+          "content-length": body.length,
+          origin,
+          cookie: req.headers.cookie ?? "",
+          "x-csrf-token": req.headers["x-csrf-token"] ?? "",
+        },
+      },
+      (response) => {
+        res.writeHead(response.statusCode, response.headers);
+        response.pipe(res);
+      },
+    );
+    upstream.on("error", () => {
+      if (!res.headersSent) res.writeHead(502);
+      res.end();
+    });
+    upstream.setTimeout(15000, () => upstream.destroy());
+    upstream.end(body);
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/acceptance/oauth/start") {
     if (starting) {
       res.writeHead(429).end("OAuth start pending");
