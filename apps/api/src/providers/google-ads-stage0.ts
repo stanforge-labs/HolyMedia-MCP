@@ -64,7 +64,7 @@ const resources = {
     "campaign_budget",
     "campaignBudget",
     "campaignBudgets",
-    "campaign_budget.resource_name, campaign_budget.amount_micros, campaign_budget.explicitly_shared, campaign_budget.delivery_method",
+    "campaign_budget.resource_name, campaign_budget.name, campaign_budget.amount_micros, campaign_budget.explicitly_shared, campaign_budget.delivery_method",
   ],
   campaign: [
     "campaign",
@@ -623,6 +623,7 @@ export async function buildStage0Plan(
     method: "create" | "update" = "create",
     mask: string | null = null,
     before: JsonRow | null = null,
+    expected: JsonRow = fields,
   ) => {
     const index = operations.length;
     operations.push({
@@ -632,19 +633,23 @@ export async function buildStage0Plan(
       resource_name:
         typeof fields.resourceName === "string" ? fields.resourceName : null,
       update_mask: mask,
-      expected: fields,
+      expected,
       before,
       row: index,
     });
     items.push({
       item: index,
-      keyword: String(fields.name ?? row(fields.keyword).text ?? kind),
+      keyword: String(
+        kind === "campaignBudget" && fields.explicitlyShared === false
+          ? `Budget for ${brief.campaign_name}`
+          : (fields.name ?? row(fields.keyword).text ?? kind),
+      ),
       campaign_id: "new",
       campaign_name: String(brief.campaign_name),
       ad_group_id: String(fields.adGroup ?? ""),
       ad_group_name: "",
       before,
-      after: fields,
+      after: expected,
       warnings: [],
       conflicts: [],
       duplicate_status: "none",
@@ -653,12 +658,16 @@ export async function buildStage0Plan(
   };
   const budgetName = temp("campaignBudgets"),
     campaignName = temp("campaigns");
-  add("campaignBudget", {
+  const budgetFields = {
     resourceName: budgetName,
-    name: `${brief.campaign_name} — daily`,
     amountMicros: budgetMicros,
     explicitlyShared: false,
     deliveryMethod: "STANDARD",
+  };
+  // Non-shared budget names are managed by Google, not independently writable.
+  add("campaignBudget", budgetFields, "create", null, null, {
+    ...budgetFields,
+    name: brief.campaign_name,
   });
   add("campaign", {
     resourceName: campaignName,
@@ -1083,6 +1092,31 @@ export async function verifyStage0Mutation(
     const expected = row(replaceTemps(op.expected, references));
     // Resource IDs may be generated; update-only goal objects encode temporary campaign IDs.
     delete expected.resourceName;
+    let budgetAssociationVerified = true;
+    if (op.kind === "campaignBudget" && expected.explicitlyShared === false) {
+      // Also handles immutable legacy plans with a now-invalid "— daily" name.
+      // Derive from the previewed campaign, then prove the actual association.
+      const attached = plan.operations.filter(
+        (candidate) =>
+          candidate.kind === "campaign" &&
+          replaceTemps(candidate.expected.campaignBudget, references) ===
+            result?.resource_name,
+      );
+      const campaignExpected = row(
+        replaceTemps(attached[0]?.expected, references),
+      );
+      const campaignActual = foundByResource.get(
+        String(campaignExpected.resourceName),
+      );
+      expected.name = campaignExpected.name;
+      budgetAssociationVerified = Boolean(
+        attached.length === 1 &&
+        typeof expected.name === "string" &&
+        expected.name.length > 0 &&
+        campaignActual?.name === expected.name &&
+        campaignActual.campaignBudget === result?.resource_name,
+      );
+    }
     if (op.kind === "campaign") {
       delete expected.manualCpc;
       delete expected.maximizeConversions;
@@ -1090,7 +1124,10 @@ export async function verifyStage0Mutation(
       expected.biddingStrategyType = plan.summary.strategy;
     }
     const verified = Boolean(
-      result?.success && entity && contains(entity, expected),
+      result?.success &&
+      entity &&
+      budgetAssociationVerified &&
+      contains(entity, expected),
     );
     actual.push(entity);
     items.push({

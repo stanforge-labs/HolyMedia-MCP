@@ -363,6 +363,22 @@ campaignid/adgroupid/keyword/matchtype/device/network/creative/loc_physical_ms/l
 
 ### Atomic lifecycle / reread / policy
 
+Non-shared Stage 0 budget (`explicitlyShared=false`) не имеет независимо заданного provider name:
+create payload **не отправляет `name`**. Google получает и синхронизирует его из имени связанной
+campaign. Preview label `Budget for <campaign>` — только display, не Google поле.
+Expected post-state явно содержит `name=<campaign name>`, без суффикса `— daily`.
+Reread выбирает `resource_name/name/amount_micros/explicitly_shared/delivery_method`.
+Verifier разрешает temporary budget/campaign references через mutate results и проверяет реальную
+связь `campaign.campaign_budget`, имя previewed campaign и derived budget name; wrong amount,
+sharing flag, delivery method, association/name всё ещё дают UNVERIFIED.
+Immutable legacy plans с `— daily` проверяются с этими же provider semantics без изменения плана.
+Для будущих **shared** budgets независимое имя остаётся точным проверяемым контрактом.
+[Google v24 CampaignBudget name/shared semantics](https://developers.google.com/google-ads/api/reference/rpc/v24/CampaignBudget).
+
+READ-only reconciliation ранее созданного ресурса может повторно применить corrected verifier,
+но не повторяет commit/mutate и не меняет historical UNVERIFIED preview/audit result.
+Отдельный reconciliation audit/evidence должен указывать original result и новый verification result.
+
 Temporary IDs глобально уникальны и отрицательны; parent всегда создан раньше зависимых mutations:
 budget → campaign → criteria/goals → groups → keywords/negatives/RSA → assets/links.
 Stage 0 uses **GoogleAdsService.Mutate, validateOnly=true, partialFailure=false** для preview.
@@ -490,6 +506,11 @@ Stage 0 quality gate обнаружил High в транзитивном source-
 lockfile содержит соответствующий patch. Audit после исправления: Critical 0 / High 0,
 6 Moderate baseline (не объявляются устранёнными).
 [Advisory GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+
+Budget verification fix quality scan (2026-10-07) также обнаружил новый High в sharp <0.35.5.
+Точечный override обновлён до sharp 0.35.5 (вместе с его platform binaries/libvips),
+без смены Next.js или другого product API.
+[Sharp/librsvg advisory GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w).
 
 Primary references:
 
