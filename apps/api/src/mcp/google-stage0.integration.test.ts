@@ -211,6 +211,9 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
       amountMicros: "15000000000",
       explicitlyShared: false,
     });
+    expect(p.operations[0]!.fields).not.toHaveProperty("name");
+    expect(p.operations[0]!.expected.name).toBe(brief().campaign_name);
+    expect(p.items[0]!.keyword).toBe(`Budget for ${brief().campaign_name}`);
     expect(
       p.operations
         .filter((o) => ["campaign", "adGroup", "adGroupAd"].includes(o.kind))

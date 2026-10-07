@@ -292,6 +292,11 @@ export function fixture(stage0 = false) {
               : value.maximizeConversions
                 ? "MAXIMIZE_CONVERSIONS"
                 : old.biddingStrategyType;
+            // Google owns the name of a non-shared budget and syncs it to its campaign.
+            const budget = object(
+              resources.get(String(value.campaignBudget))?.campaignBudget,
+            );
+            if (budget.explicitlyShared === false) budget.name = value.name;
           }
           if (kind === "campaignConversionGoal") {
             const [campaignId, category, origin] = name
