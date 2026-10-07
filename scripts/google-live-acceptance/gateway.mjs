@@ -116,6 +116,6 @@ createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(502);
     res.end();
   });
-  upstream.setTimeout(30000, () => upstream.destroy());
+  upstream.setTimeout(120000, () => upstream.destroy());
   upstream.end();
 }).listen(4001, "0.0.0.0");

@@ -2,6 +2,8 @@ name: holymedia-google-acceptance
 services:
   postgres:
     image: postgres:18-alpine
+    mem_limit: 512m
+    cpus: 0.5
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,6 +19,8 @@ services:
     logging: { driver: json-file, options: { max-size: 5m, max-file: "2" } }
   redis:
     image: redis:7.4-alpine
+    mem_limit: 128m
+    cpus: 0.25
     restart: unless-stopped
     environment:
       ACCEPTANCE_REDIS_PASSWORD: ${ACCEPTANCE_REDIS_PASSWORD}
@@ -39,6 +43,8 @@ services:
     logging: { driver: json-file, options: { max-size: 5m, max-file: "2" } }
   api:
     image: ${ACCEPTANCE_IMAGE:?exact digest required}
+    mem_limit: 768m
+    cpus: 1.0
     restart: unless-stopped
     init: true
     env_file: acceptance.env

@@ -24,7 +24,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reuse published immutable image when present
+        id: published
+        run: |
+          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            docker pull "$IMAGE"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/build-push-action@v6
+        if: steps.published.outputs.exists != 'true'
         id: image
         with:
           context: .
@@ -42,10 +53,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - run: |
+          reference="$IMAGE@${{ steps.published.outputs.digest || steps.image.outputs.digest }}"
           echo "Exact source: $ACCEPTANCE_SOURCE" >> "$GITHUB_STEP_SUMMARY"
           echo "Image: $IMAGE" >> "$GITHUB_STEP_SUMMARY"
-          echo "Digest: ${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
-          docker pull "$IMAGE@${{ steps.image.outputs.digest }}"
-          test "$(docker image inspect --format '{{.Config.User}}' "$IMAGE")" = node
-          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "$ACCEPTANCE_SOURCE"
-          docker run --rm --entrypoint sh "$IMAGE" -ec 'test -f apps/api/dist/main.js; test -x packages/database/node_modules/.bin/prisma; test ! -d apps/web; test ! -d apps/worker; test ! -d .git; test ! -e .env'
+          echo "Digest: ${{ steps.published.outputs.digest || steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          docker pull "$reference"
+          test "$(docker image inspect --format '{{.Config.User}}' "$reference")" = node
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$reference")" = "$ACCEPTANCE_SOURCE"
+          docker run --rm --entrypoint sh "$reference" -ec 'test -f apps/api/dist/main.js; test -x packages/database/node_modules/.bin/prisma; test ! -d apps/web; test ! -d apps/worker; test ! -d .git; test ! -e .env'
