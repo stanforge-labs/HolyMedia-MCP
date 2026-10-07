@@ -99,7 +99,26 @@ REST использует JSON/proto field mapping:
 
 `validateOnly=true` — Google protobuf `validate_only=true`: запрос валидируется, но не исполняется.
 Отсутствие results при успешной validation нормально. `partialFailureError` разбирается по operation indices; неизвестный/global error блокирует валидность, а не создаёт ложный success.
-HTTP/API error не даёт committable preview. При per-row validation errors возвращаются `status=validation_failed`, `provider_validation=failed`, items; preview token/approval URL **не создаются**.
+Глобальная HTTP/API, permission или transport ошибка не даёт committable preview.
+Для keyword status batch известная недоступная строка обрабатывается отдельно:
+bounded per-row snapshot reads (до 4 параллельных) сохраняют валидные строки.
+Все input identities проходят account/resource/duplicate checks **до** provider access.
+Missing/parent-mismatch строка имеет `row_error.source=HOLYMEDIA`,
+`stage=snapshot_read`, `code=google_keyword_unavailable`, `google_code=null`;
+это **не** ошибка Google mutation API и такая строка не отправляется в mutate.
+Валидные changed rows проходят Google `validateOnly=true`. Per-operation Google
+validation errors сохраняют `source=GOOGLE_ADS`, `stage=validate_only` и original code.
+Preview и browser review показывают все input rows, включая `eligible_for_commit=false`.
+`operation_count` считает только validated changed mutations; `requested_operation_count`
+и `excluded_operation_count` объясняют полную пачку. Если допустимых изменений нет,
+возвращается `status=validation_failed` без preview token/approval URL.
+Иначе approved immutable payload содержит точный eligible mutation subset **и**
+digest-bound excluded identities/snapshots/errors; commit не может добавить исключённую строку.
+Excluded snapshots также перечитываются перед claim: появившийся missing criterion
+или изменение validation-rejected объекта требует нового preview (`google_preview_stale`).
+Mixed commit возвращает все rows в input order, `PARTIAL_FAILURE`, per-row source/code
+и отдельный durable `mcp_google_keyword_row_rejected` audit. Stage 1
+`partialFailure=true` сохранён; Stage 0 atomic `partialFailure=false` не изменён.
 
 Успешный preview возвращает `preview_id`, secure `preview_token`, `expires_at`, `provider`,
 account, operation_count, items с before/after, Google validation и warnings, approval URL.

@@ -36,8 +36,9 @@ import {
   googleWriteFailure,
   writeFailureFromError,
   type GoogleKeywordSnapshot,
-  type GoogleKeywordMutation,
   type GoogleMutationResult,
+  type GoogleKeywordIdentity,
+  type GoogleWriteFailure,
 } from "../providers/google-ads-write.js";
 import {
   evaluateMetaAppReviewPrecondition,
@@ -48,6 +49,19 @@ import {
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
+type GoogleKeywordRejection = {
+  index: number;
+  identity: GoogleKeywordIdentity;
+  snapshot: GoogleKeywordSnapshot | null;
+  error: {
+    source: "HOLYMEDIA" | "GOOGLE_ADS";
+    stage: "snapshot_read" | "validate_only";
+    code: string;
+    message: string;
+    google_code: string | null;
+  };
+  provider_error: GoogleWriteFailure | null;
+};
 const OPERATIONS = new Set([
   "archive_entities",
   "archive_object",
@@ -937,26 +951,117 @@ export class McpPreviewService {
       account.externalAccountId,
       input.payload.items,
     );
-    const before = await this.providers.readGoogleKeywordStates(
-      principal.workspaceId,
-      account.connectionId,
-      account.id,
-      identities,
-    );
-    if (expectedBefore && canonical(before) !== canonical(expectedBefore))
+    // Identity/account validation above is whole-request and cannot be bypassed
+    // by a mixed batch. Only a known unavailable snapshot is row-local.
+    let snapshots: GoogleKeywordSnapshot[];
+    const rejections: GoogleKeywordRejection[] = [];
+    try {
+      snapshots = await this.providers.readGoogleKeywordStates(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        identities,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof GoogleAdsWriteError) ||
+        error.writeCode !== "google_keyword_unavailable"
+      )
+        throw error;
+      const found: Array<GoogleKeywordSnapshot | null> = identities.map(
+        () => null,
+      );
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(4, identities.length) }, async () => {
+          while (next < identities.length) {
+            const index = next++,
+              identity = identities[index]!;
+            try {
+              const rows = await this.providers.readGoogleKeywordStates(
+                principal.workspaceId,
+                account.connectionId,
+                account.id,
+                [identity],
+              );
+              if (rows.length !== 1)
+                throw new GoogleAdsWriteError(
+                  "google_response_invalid",
+                  "Google вернул неполный snapshot.",
+                );
+              found[index] = rows[0]!;
+            } catch (rowError) {
+              if (
+                !(rowError instanceof GoogleAdsWriteError) ||
+                rowError.writeCode !== "google_keyword_unavailable"
+              )
+                throw rowError;
+              rejections.push({
+                index,
+                identity,
+                snapshot: null,
+                error: {
+                  source: "HOLYMEDIA",
+                  stage: "snapshot_read",
+                  code: "google_keyword_unavailable",
+                  message:
+                    "Ключевое слово не найдено или не соответствует выбранной кампании/группе. Эта строка исключена из commit.",
+                  google_code: null,
+                },
+                provider_error: null,
+              });
+            }
+          }
+        }),
+      );
+      snapshots = found.filter(
+        (row): row is GoogleKeywordSnapshot => row !== null,
+      );
+    }
+    if (
+      snapshots.length + rejections.length !== identities.length ||
+      new Set(snapshots.map((x) => x.resource_name)).size !==
+        snapshots.length ||
+      snapshots.some((row) => {
+        const identity = identities.find(
+          (x) => x.resource_name === row.resource_name,
+        );
+        return (
+          !identity ||
+          row.account_id !== customerId(account.externalAccountId) ||
+          row.campaign_id !== identity.campaign_id ||
+          row.ad_group_id !== identity.ad_group_id ||
+          row.criterion_id !== identity.criterion_id ||
+          !["ENABLED", "PAUSED"].includes(row.status)
+        );
+      })
+    )
+      throw new GoogleAdsWriteError(
+        "google_response_invalid",
+        "Google вернул некорректные identities snapshot.",
+      );
+    if (expectedBefore && canonical(snapshots) !== canonical(expectedBefore))
       throw new PreviewError("google_preview_stale");
-    const mutations: GoogleKeywordMutation[] = identities.map((x) => ({
-      ...x,
+    const candidates = snapshots.map((x) => ({
+      campaign_id: x.campaign_id,
+      ad_group_id: x.ad_group_id,
+      criterion_id: x.criterion_id,
+      resource_name: x.resource_name,
       status: status as "ENABLED" | "PAUSED",
     }));
-    const changed = mutations.filter((x, i) => before[i]!.status !== x.status);
-    if (!changed.length) throw new PreviewError("preview_no_change");
-    const validation = await this.providers.validateGoogleKeywordStatuses(
-      principal.workspaceId,
-      account.connectionId,
-      account.id,
-      changed,
+    const changed = candidates.filter(
+      (x, i) => snapshots[i]!.status !== x.status,
     );
+    if (!changed.length && !rejections.length)
+      throw new PreviewError("preview_no_change");
+    const validation = changed.length
+      ? await this.providers.validateGoogleKeywordStatuses(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          changed,
+        )
+      : [];
     if (validation.length !== changed.length)
       throw new GoogleAdsWriteError(
         "google_response_invalid",
@@ -965,23 +1070,67 @@ export class McpPreviewService {
     const byResource = new Map(
       changed.map((x, i) => [x.resource_name, validation[i]!]),
     );
-    const items = before.map((x, i) => ({
-      ...x,
-      before_status: x.status,
-      after_status: mutations[i]!.status,
-      google_validation: byResource.get(x.resource_name) ?? {
-        success: true,
-        error: null,
-        status: "not_required_no_op",
-      },
-      warnings: x.status === status ? ["no_op: статус уже установлен"] : [],
-    }));
-    if (validation.some((x) => !x.success))
+    for (const [index, identity] of identities.entries()) {
+      const check = byResource.get(identity.resource_name);
+      if (check && !check.success) {
+        const failure = check.error ?? googleWriteFailure("OUTCOME_UNCERTAIN");
+        rejections.push({
+          index,
+          identity,
+          snapshot: snapshots.find(
+            (x) => x.resource_name === identity.resource_name,
+          )!,
+          error: {
+            source: "GOOGLE_ADS",
+            stage: "validate_only",
+            code: failure.code,
+            message: failure.message,
+            google_code: failure.google_code,
+          },
+          provider_error: failure,
+        });
+      }
+    }
+    rejections.sort((a, b) => a.index - b.index);
+    const excluded = new Set(rejections.map((x) => x.identity.resource_name));
+    const before = snapshots.filter((x) => !excluded.has(x.resource_name));
+    const mutations = candidates.filter((x) => !excluded.has(x.resource_name));
+    const items = identities.map((identity, index) => {
+      const rejected = rejections.find((x) => x.index === index);
+      const row = snapshots.find(
+        (x) => x.resource_name === identity.resource_name,
+      );
+      return {
+        ...(row ?? identity),
+        before_status: row?.status ?? null,
+        after_status: status,
+        eligible_for_commit: !rejected,
+        row_error: rejected?.error ?? null,
+        google_validation: rejected?.provider_error
+          ? { success: false, error: rejected.provider_error }
+          : (byResource.get(identity.resource_name) ??
+            (row
+              ? { success: true, error: null, status: "not_required_no_op" }
+              : {
+                  success: false,
+                  error: null,
+                  status: "not_sent_snapshot_rejected",
+                })),
+        warnings: rejected
+          ? [rejected.error.message]
+          : row?.status === status
+            ? ["no_op: статус уже установлен"]
+            : [],
+      };
+    });
+    if (!mutations.some((x, i) => before[i]!.status !== x.status))
       return {
         status: "validation_failed",
         provider: "GOOGLE_ADS",
         account_id: customerId(account.externalAccountId),
-        operation_count: changed.length,
+        requested_operation_count: identities.length,
+        operation_count: 0,
+        excluded_operation_count: rejections.length,
         items,
         provider_validation: "failed",
         provider_mutation_sent: false,
@@ -989,7 +1138,15 @@ export class McpPreviewService {
     const previewToken = `hmpp_${randomBytes(32).toString("base64url")}`,
       nonce = `hmap_${randomBytes(32).toString("base64url")}`,
       expiresAt = new Date(Date.now() + GOOGLE_KEYWORD_PREVIEW_TTL_MS);
-    const payload = { entity_type: "keyword", status, items: identities };
+    const payload = {
+      entity_type: "keyword",
+      status,
+      items: identities,
+      ...(rejections.length ? { batch_rejections: rejections } : {}),
+    };
+    const eligibleChanged = mutations.filter(
+      (x, i) => before[i]!.status !== x.status,
+    );
     const preview = await this.database.client.mcpPreview.create({
       data: {
         workspaceId: principal.workspaceId,
@@ -1004,7 +1161,13 @@ export class McpPreviewService {
         diff: { items, provider_validation: "passed" } as Prisma.InputJsonValue,
         beforeState: before as Prisma.InputJsonValue,
         requestedState: mutations as Prisma.InputJsonValue,
-        snapshotDigest: digest(canonicalJson([before, mutations])),
+        snapshotDigest: digest(
+          canonicalJson(
+            rejections.length
+              ? [before, mutations, rejections]
+              : [before, mutations],
+          ),
+        ),
         previewTokenDigest: digest(previewToken),
         approvalTokenDigest: digest(nonce),
         expiresAt,
@@ -1024,7 +1187,8 @@ export class McpPreviewService {
         serviceIdentityId: principal.serviceIdentityId,
         operation: "GOOGLE_KEYWORD_STATUS",
         providerValidation: "passed",
-        operationCount: changed.length,
+        operationCount: eligibleChanged.length,
+        rejectedRowCount: rejections.length,
       },
     });
     return {
@@ -1034,13 +1198,15 @@ export class McpPreviewService {
       expires_at: expiresAt.toISOString(),
       provider: "GOOGLE_ADS",
       account_id: customerId(account.externalAccountId),
-      operation_count: changed.length,
+      operation_count: eligibleChanged.length,
+      requested_operation_count: identities.length,
+      excluded_operation_count: rejections.length,
       items,
       provider_validation: "passed",
       approval_url: `${this.config.publicBaseUrl}/mcp/approve#${nonce}`,
       commit_tool: "commit_preview",
       provider_mutation_sent: false,
-      summary: `Google Ads: ${changed.length} ключевых слов → ${status}. Подтвердите preview в HolyMedia.`,
+      summary: `Google Ads: ${eligibleChanged.length} ключевых слов → ${status}; исключено строк: ${rejections.length}. Подтвердите только допустимые изменения в HolyMedia.`,
     };
   }
 
@@ -1644,12 +1810,14 @@ export class McpPreviewService {
     if (preview.operation === "GOOGLE_KEYWORD_STATUS") {
       const stored = this.googleStored(preview, account),
         results = preview.providerResult as {
+          resource_name: string;
           success: boolean;
           reread: unknown;
         }[];
       const eligible = stored.before.filter(
         (row, i) =>
-          results[i]?.success && row.status !== stored.mutations[i]!.status,
+          results.find((result) => result.resource_name === row.resource_name)
+            ?.success && row.status !== stored.mutations[i]!.status,
       );
       if (!eligible.length || new Set(eligible.map((x) => x.status)).size !== 1)
         throw new GoogleAdsWriteError(
@@ -1671,7 +1839,9 @@ export class McpPreviewService {
         identities,
       );
       const post = eligible.map(
-        (x) => results[stored.before.indexOf(x)]!.reread,
+        (x) =>
+          results.find((result) => result.resource_name === x.resource_name)!
+            .reread,
       );
       if (canonical(current) !== canonical(post))
         throw new PreviewError("google_preview_stale");
@@ -1781,18 +1951,28 @@ export class McpPreviewService {
         .join(", "),
       operation: preview.operation,
       field: "status",
-      before: `${stored.before.length} keywords`,
+      before: `${stored.allIdentities.length} keywords (${stored.rejections.length} excluded)`,
       after: String(payloadRecord(preview.payload).status),
       // Render the same immutable, digest-bound state that commit executes.
-      items: stored.before.map((row, index) => ({
-        ...row,
-        before_status: row.status,
-        after_status: stored.mutations[index]!.status,
-        warnings:
-          row.status === stored.mutations[index]!.status
-            ? ["no_op: статус уже установлен"]
-            : [],
-      })),
+      items: stored.allIdentities.map((identity, index) => {
+        const rejection = stored.rejections.find((x) => x.index === index);
+        const row =
+          stored.before.find(
+            (x) => x.resource_name === identity.resource_name,
+          ) ?? rejection?.snapshot;
+        return {
+          ...(row ?? identity),
+          before_status: row?.status ?? null,
+          after_status: String(payloadRecord(preview.payload).status),
+          eligible_for_commit: !rejection,
+          row_error: rejection?.error ?? null,
+          warnings: rejection
+            ? [rejection.error.message]
+            : row?.status === payloadRecord(preview.payload).status
+              ? ["no_op: статус уже установлен"]
+              : [],
+        };
+      }),
       expires_at: preview.expiresAt.toISOString(),
       approved: Boolean(preview.confirmedAt && preview.approvedByUserId),
     };
@@ -1914,27 +2094,89 @@ export class McpPreviewService {
     account: { connectionId: string; externalAccountId: string },
   ) {
     const payload = payloadRecord(preview.payload);
+    const rejectionValue = payload.batch_rejections;
+    const rejections = (rejectionValue ?? []) as GoogleKeywordRejection[];
+    const invalid = () => new PreviewError("confirmation_context_mismatch");
     if (
       preview.operation !== "GOOGLE_KEYWORD_STATUS" ||
       preview.connectionId !== account.connectionId ||
       payload.entity_type !== "keyword" ||
       !["ENABLED", "PAUSED"].includes(String(payload.status)) ||
-      Object.keys(payload).sort().join(",") !== "entity_type,items,status" ||
-      payloadRecord(preview.diff).provider_validation !== "passed"
+      Object.keys(payload).sort().join(",") !==
+        (rejectionValue === undefined
+          ? "entity_type,items,status"
+          : "batch_rejections,entity_type,items,status") ||
+      payloadRecord(preview.diff).provider_validation !== "passed" ||
+      !Array.isArray(rejections) ||
+      (rejectionValue !== undefined && !rejections.length)
     )
-      throw new PreviewError("confirmation_context_mismatch");
-    const identities = keywordBatch(account.externalAccountId, payload.items),
-      mutations = identities.map((x) => ({
-        ...x,
-        status: payload.status as "ENABLED" | "PAUSED",
-      }));
+      throw invalid();
+    const allIdentities = keywordBatch(
+      account.externalAccountId,
+      payload.items,
+    );
+    if (new Set(rejections.map((x) => x?.index)).size !== rejections.length)
+      throw invalid();
+    for (const rejection of rejections) {
+      if (
+        !rejection ||
+        !Number.isInteger(rejection.index) ||
+        rejection.index < 0 ||
+        rejection.index >= allIdentities.length ||
+        canonicalJson(rejection.identity) !==
+          canonicalJson(allIdentities[rejection.index]) ||
+        !rejection.error ||
+        !["HOLYMEDIA", "GOOGLE_ADS"].includes(rejection.error.source) ||
+        !["snapshot_read", "validate_only"].includes(rejection.error.stage)
+      )
+        throw invalid();
+      if (rejection.error.source === "HOLYMEDIA") {
+        if (
+          rejection.snapshot !== null ||
+          rejection.provider_error !== null ||
+          rejection.error.stage !== "snapshot_read" ||
+          rejection.error.code !== "google_keyword_unavailable" ||
+          rejection.error.google_code !== null
+        )
+          throw invalid();
+      } else if (
+        !rejection.snapshot ||
+        !rejection.provider_error ||
+        rejection.error.stage !== "validate_only" ||
+        rejection.snapshot.resource_name !== rejection.identity.resource_name ||
+        rejection.snapshot.account_id !==
+          customerId(account.externalAccountId) ||
+        rejection.snapshot.campaign_id !== rejection.identity.campaign_id ||
+        rejection.snapshot.ad_group_id !== rejection.identity.ad_group_id ||
+        rejection.snapshot.criterion_id !== rejection.identity.criterion_id ||
+        !["ENABLED", "PAUSED"].includes(rejection.snapshot.status) ||
+        rejection.error.google_code !== rejection.provider_error.google_code
+      )
+        throw invalid();
+    }
+    const excluded = new Set(rejections.map((x) => x.identity.resource_name));
+    const identities = allIdentities.filter(
+      (x) => !excluded.has(x.resource_name),
+    );
+    const mutations = identities.map((x) => ({
+      ...x,
+      status: payload.status as "ENABLED" | "PAUSED",
+    }));
     const before = preview.beforeState as GoogleKeywordSnapshot[];
     if (
+      !identities.length ||
       !Array.isArray(before) ||
       before.length !== identities.length ||
-      preview.externalObjectId !== identities[0]!.resource_name ||
+      preview.externalObjectId !== allIdentities[0]!.resource_name ||
       canonicalJson(preview.requestedState) !== canonicalJson(mutations) ||
-      preview.snapshotDigest !== digest(canonicalJson([before, mutations])) ||
+      preview.snapshotDigest !==
+        digest(
+          canonicalJson(
+            rejections.length
+              ? [before, mutations, rejections]
+              : [before, mutations],
+          ),
+        ) ||
       before.some(
         (x, i) =>
           x.account_id !== customerId(account.externalAccountId) ||
@@ -1945,8 +2187,8 @@ export class McpPreviewService {
           !["ENABLED", "PAUSED"].includes(x.status),
       )
     )
-      throw new PreviewError("confirmation_context_mismatch");
-    return { before, identities, mutations };
+      throw invalid();
+    return { before, identities, mutations, allIdentities, rejections };
   }
   private async commitGoogleKeywords(
     principal: ServiceTokenPrincipal,
@@ -2003,6 +2245,28 @@ export class McpPreviewService {
     }
     if (canonicalJson(current) !== canonicalJson(stored.before))
       throw new PreviewError("google_preview_stale");
+    for (const rejection of stored.rejections) {
+      let row: GoogleKeywordSnapshot | null = null;
+      try {
+        row =
+          (
+            await this.providers.readGoogleKeywordStates(
+              principal.workspaceId,
+              account.connectionId,
+              account.id,
+              [rejection.identity],
+            )
+          )[0] ?? null;
+      } catch (error) {
+        if (
+          !(error instanceof GoogleAdsWriteError) ||
+          error.writeCode !== "google_keyword_unavailable"
+        )
+          throw error;
+      }
+      if (canonicalJson(row) !== canonicalJson(rejection.snapshot))
+        throw new PreviewError("google_preview_stale");
+    }
     await this.claimGooglePreview(principal, preview, account);
     return this.executeGoogleKeywords(principal, preview, account, stored);
   }
@@ -2107,6 +2371,31 @@ export class McpPreviewService {
         "attempted",
         null,
       );
+    for (const rejection of stored.rejections)
+      await this.audit.record({
+        eventType: "mcp_google_keyword_row_rejected",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        success: false,
+        metadata: {
+          provider: "GOOGLE_ADS",
+          accountId: account.externalAccountId,
+          serviceTokenId: principal.tokenId,
+          serviceIdentityId: principal.serviceIdentityId,
+          commitId: this.googleCommitId(preview.id),
+          previewId: preview.id,
+          objectId: rejection.identity.criterion_id,
+          resourceName: rejection.identity.resource_name,
+          before: rejection.snapshot?.status ?? null,
+          after: String(payloadRecord(preview.payload).status),
+          result: "rejected",
+          errorSource: rejection.error.source,
+          errorCode: rejection.error.code,
+          googleErrorCode: rejection.error.google_code,
+        },
+      });
     let mutation: GoogleMutationResult[];
     try {
       mutation = await this.providers.commitGoogleKeywordStatuses(
@@ -2164,7 +2453,7 @@ export class McpPreviewService {
         },
       ]),
     );
-    const items = stored.before.map((x, i) => {
+    const validItems = stored.before.map((x, i) => {
       const desired = stored.mutations[i]!.status,
         noOp = x.status === desired,
         result = results.get(x.resource_name),
@@ -2188,6 +2477,26 @@ export class McpPreviewService {
         reread: after,
       };
     });
+    const items = stored.allIdentities.map((identity, index) => {
+      const rejected = stored.rejections.find((x) => x.index === index);
+      if (!rejected)
+        return validItems.find(
+          (x) => x.resource_name === identity.resource_name,
+        )!;
+      return {
+        ...identity,
+        keyword: rejected.snapshot?.keyword ?? null,
+        match_type: rejected.snapshot?.match_type ?? null,
+        old_status: rejected.snapshot?.status ?? null,
+        requested_status: String(payloadRecord(preview.payload).status),
+        actual_status: rejected.snapshot?.status ?? null,
+        success: false,
+        result: "rejected",
+        row_error: rejected.error,
+        google_error: rejected.provider_error,
+        reread: rejected.snapshot,
+      };
+    });
     const finalStatus = items.every((x) => x.success)
       ? "VERIFIED"
       : items.some((x) => x.success)
@@ -2205,7 +2514,7 @@ export class McpPreviewService {
           : Prisma.JsonNull,
       },
     });
-    for (const row of items)
+    for (const row of validItems)
       await this.googleAuditRow(
         principal,
         preview.id,

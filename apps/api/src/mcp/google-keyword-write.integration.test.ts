@@ -414,6 +414,233 @@ function fixture(initialStatus = "ENABLED", allowlist = customer) {
 }
 
 describe("Google keyword status full generic lifecycle (mock provider only)", () => {
+  it("C: 19 valid + 1 missing produces 20 review rows but only 19 immutable provider mutations", async () => {
+    const f = fixture();
+    for (let id = 104; id <= 119; id++) {
+      const row = structuredClone(f.states.get("101")!);
+      row.adGroupCriterion.criterionId = String(id);
+      row.adGroupCriterion.resourceName = identity(String(id)).resource_name;
+      f.states.set(String(id), row);
+    }
+    const p = await f.preview("PAUSED", [
+      "999",
+      ...Array.from({ length: 19 }, (_, i) => String(101 + i)),
+    ]);
+    expect(p).toMatchObject({
+      status: "preview",
+      operation_count: 19,
+      requested_operation_count: 20,
+      excluded_operation_count: 1,
+    });
+    expect(p.items).toHaveLength(20);
+    expect(p.items[0]).toMatchObject({
+      criterion_id: "999",
+      before_status: null,
+      eligible_for_commit: false,
+      row_error: {
+        source: "HOLYMEDIA",
+        stage: "snapshot_read",
+        code: "google_keyword_unavailable",
+        google_code: null,
+      },
+    });
+    expect(f.writes()).toBe(0);
+    const view = await f.browser.approvalView(
+      human,
+      p.approval_url.split("#")[1]!,
+    );
+    const reviewRows = (view as { items: Array<Record<string, unknown>> })
+      .items;
+    expect(reviewRows).toHaveLength(20);
+    expect(reviewRows[0]).toMatchObject({
+      criterion_id: "999",
+      eligible_for_commit: false,
+    });
+    await expect(
+      f.previews.commit(principal, p.preview_token),
+    ).rejects.toMatchObject({ code: "preview_not_confirmed" });
+    await f.approve(p);
+    const result = await f.previews.commit(principal, p.preview_token);
+    expect(result).toMatchObject({
+      status: "PARTIAL_FAILURE",
+      operation_count: 19,
+      partial_failure: true,
+    });
+    const resultRows = (result as { items: Array<Record<string, unknown>> })
+      .items;
+    expect(resultRows.filter((x) => x.success)).toHaveLength(19);
+    expect(resultRows[0]).toMatchObject({
+      success: false,
+      result: "rejected",
+      google_error: null,
+      row_error: { source: "HOLYMEDIA", google_code: null },
+    });
+    const commit = f.requests.filter((x) => x.url.endsWith(":mutate")).at(-1)!;
+    expect(commit.body.partialFailure).toBe(true);
+    expect(commit.body.operations).toHaveLength(19);
+    expect(JSON.stringify(commit.body)).not.toContain("~999");
+    expect(f.audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "mcp_google_keyword_row_rejected",
+        metadata: expect.objectContaining({
+          objectId: "999",
+          errorSource: "HOLYMEDIA",
+          googleErrorCode: null,
+        }),
+      }),
+    );
+    expect(f.audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "mcp_google_commit_result",
+        metadata: expect.objectContaining({ result: "PARTIAL_FAILURE" }),
+      }),
+    );
+  });
+  it("all missing is a non-committable result with no validation or write", async () => {
+    const f = fixture(),
+      p = await f.preview("PAUSED", ["998", "999"]);
+    expect(p).toMatchObject({
+      status: "validation_failed",
+      operation_count: 0,
+      excluded_operation_count: 2,
+    });
+    expect(p.preview_token).toBeUndefined();
+    expect(f.requests.some((x) => x.url.endsWith(":mutate"))).toBe(false);
+    expect(f.database.client.mcpPreview.create).not.toHaveBeenCalled();
+  });
+  it("malformed or foreign snapshot is never accepted as a mixed-batch mutation", async () => {
+    for (const malformed of ["empty", "foreign"]) {
+      const f = fixture();
+      const row = {
+        ...identity("101"),
+        account_id: "5555555555",
+        campaign_name: "TEST PPC",
+        campaign_status: "PAUSED",
+        ad_group_name: "TEST group",
+        ad_group_status: "ENABLED",
+        keyword: "test 101",
+        match_type: "EXACT",
+        status: "ENABLED" as const,
+      };
+      f.providers.readGoogleKeywordStates.mockResolvedValueOnce(
+        malformed === "foreign" ? [row] : [],
+      );
+      await expect(f.preview("PAUSED", ["101", "999"])).rejects.toMatchObject({
+        writeCode: "google_response_invalid",
+      });
+      expect(f.requests).toHaveLength(0);
+      expect(f.writes()).toBe(0);
+    }
+  });
+  it("mixed batch still rejects duplicate and foreign-account identities before Google access", async () => {
+    for (const items of [
+      [identity("101"), identity("101"), identity("999")],
+      [
+        identity("101"),
+        {
+          ...identity("999"),
+          resource_name: "customers/5555555555/adGroupCriteria/10~999",
+        },
+      ],
+    ]) {
+      const f = fixture();
+      await expect(
+        f.mcp.call(principal, "pause_entities_preview", {
+          provider: "GOOGLE_ADS",
+          account_id: customer,
+          entity_type: "keyword",
+          items,
+        }),
+      ).rejects.toThrow();
+      expect(f.requests).toHaveLength(0);
+      expect(f.writes()).toBe(0);
+    }
+  });
+  it("mixed batch rechecks both valid snapshot and formerly missing rows before commit", async () => {
+    for (const changed of ["valid", "missing"]) {
+      const f = fixture(),
+        p = await f.preview("PAUSED", ["101", "999"]);
+      await f.approve(p);
+      if (changed === "valid") f.stale();
+      else {
+        const row = structuredClone(f.states.get("101")!);
+        row.adGroupCriterion.criterionId = "999";
+        row.adGroupCriterion.resourceName = identity("999").resource_name;
+        f.states.set("999", row);
+      }
+      await expect(
+        f.previews.commit(principal, p.preview_token),
+      ).rejects.toMatchObject({ code: "google_preview_stale" });
+      expect(f.writes()).toBe(0);
+    }
+  });
+  it("rejection payload tampering cannot bypass approval/digest or add mutation targets", async () => {
+    const f = fixture(),
+      p = await f.preview("PAUSED", ["101", "999"]);
+    (
+      f.row().payload as {
+        batch_rejections: Array<{ error: { message: string } }>;
+      }
+    ).batch_rejections[0]!.error.message = "tampered";
+    await expect(f.approve(p)).rejects.toMatchObject({
+      code: "confirmation_context_mismatch",
+    });
+    expect(f.writes()).toBe(0);
+  });
+  it("provider validation errors remain Google-sourced while valid rows can commit", async () => {
+    const f = fixture();
+    f.setValidateFail();
+    const p = await f.preview("PAUSED", ["101", "102"]);
+    expect(p.items[0]).toMatchObject({
+      eligible_for_commit: false,
+      row_error: {
+        source: "GOOGLE_ADS",
+        stage: "validate_only",
+        google_code: "USER_PERMISSION_DENIED",
+      },
+    });
+    await f.approve(p);
+    const result = await f.previews.commit(principal, p.preview_token);
+    expect(result).toMatchObject({
+      status: "PARTIAL_FAILURE",
+      items: [
+        {
+          criterion_id: "101",
+          success: false,
+          google_error: { google_code: "USER_PERMISSION_DENIED" },
+        },
+        { criterion_id: "102", success: true },
+      ],
+    });
+    expect(f.writes()).toBe(1);
+  });
+  it("mixed batch does not turn permission/network errors into row skips", async () => {
+    const f = fixture();
+    f.providers.readGoogleKeywordStates.mockRejectedValueOnce(
+      new Error("fixture transport outage"),
+    );
+    await expect(f.preview("PAUSED", ["101", "999"])).rejects.toThrow(
+      "fixture transport outage",
+    );
+    expect(f.database.client.mcpPreview.create).not.toHaveBeenCalled();
+    expect(f.writes()).toBe(0);
+  });
+  it("a durable rejected-row audit failure prevents the valid provider write too", async () => {
+    const f = fixture(),
+      p = await f.preview("PAUSED", ["101", "999"]);
+    await f.approve(p);
+    f.audit.record.mockImplementation(async (input) => {
+      if (
+        (input as { eventType: string }).eventType ===
+        "mcp_google_keyword_row_rejected"
+      )
+        throw new Error("audit down");
+    });
+    await expect(f.previews.commit(principal, p.preview_token)).rejects.toThrow(
+      "audit down",
+    );
+    expect(f.writes()).toBe(0);
+  });
   it("concurrent commits execute the approved batch at most once", async () => {
     const f = fixture(),
       p = await f.preview();

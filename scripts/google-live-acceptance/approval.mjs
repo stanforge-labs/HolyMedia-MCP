@@ -2,15 +2,25 @@
 export function approvalRows(view) {
   if (Array.isArray(view.stage1_items)) return view.stage1_items;
   return (view.items ?? []).map((item) => ({
-    kind: "Keyword status",
-    keyword: `${item.keyword} (${item.match_type}, criterion ${item.criterion_id})`,
+    kind:
+      item.eligible_for_commit === false
+        ? "ИСКЛЮЧЕНО ИЗ COMMIT"
+        : "Keyword status",
+    keyword: `${item.keyword ?? "Не найдено"} (${item.match_type ?? "unknown"}, criterion ${item.criterion_id})`,
     before: {
       resource_name: item.resource_name,
       campaign_id: item.campaign_id,
       ad_group_id: item.ad_group_id,
       status: item.before_status,
     },
-    after: { status: item.after_status },
+    after: {
+      status:
+        item.eligible_for_commit === false
+          ? "NO PROVIDER CHANGE"
+          : item.after_status,
+      eligible_for_commit: item.eligible_for_commit !== false,
+      row_error: item.row_error ?? null,
+    },
     warnings: item.warnings ?? [],
   }));
 }

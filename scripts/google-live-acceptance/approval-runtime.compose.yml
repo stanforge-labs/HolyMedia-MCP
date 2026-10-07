@@ -1,0 +1,44 @@
+services:
+  approval_api:
+    image: ${ACCEPTANCE_IMAGE:?exact digest required}
+    mem_limit: 512m
+    cpus: 0.5
+    init: true
+    env_file: /opt/holymedia-google-acceptance/acceptance.env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=192
+      HOLYMEDIA_PUBLIC_BASE_URL: http://localhost:4401
+      CORS_ORIGINS: http://localhost:4401
+      V2_PREVIEW_ONLY: "true"
+      V2_CONFIRMED_WRITE_ENABLED: "false"
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+    ports: ["127.0.0.1:4401:4001"]
+    volumes:
+      - /opt/holymedia-google-acceptance/harness:/acceptance:ro
+      - /opt/holymedia-google-acceptance/state:/acceptance-state
+      - /opt/holymedia-google-acceptance/harness/mcp-preview-mixed-fixed.js:/workspace/apps/api/dist/mcp/mcp-preview.service.js:ro
+    networks: [acceptance]
+    command:
+      [
+        sh,
+        -ec,
+        'node --import /acceptance/approval-runtime-guard.mjs apps/api/dist/main.js >/dev/null 2>&1 & api_pid=$$!; node /acceptance/approval-gateway.mjs & gateway_pid=$$!; trap "kill $$api_pid $$gateway_pid" TERM INT EXIT; wait $$api_pid',
+      ]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "Promise.all([fetch('http://127.0.0.1:4000/ready'),fetch('http://127.0.0.1:4001/health')]).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    logging: { driver: json-file, options: { max-size: 1m, max-file: "2" } }
+networks:
+  acceptance:
+    external: true
+    name: holymedia-google-acceptance_default

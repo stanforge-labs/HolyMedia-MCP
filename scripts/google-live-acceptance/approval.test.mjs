@@ -46,3 +46,23 @@ test("Stage 0/1 rows are unchanged and no load ever approves automatically", () 
   assert.equal(approvalRows({ stage1_items: items }), items);
   assert.equal(calls, 0);
 });
+test("excluded mixed-batch row never looks like an approved status mutation", () => {
+  const [row] = approvalRows({
+    items: [
+      {
+        criterion_id: "999",
+        eligible_for_commit: false,
+        before_status: null,
+        after_status: "PAUSED",
+        row_error: { source: "HOLYMEDIA", google_code: null },
+        warnings: ["Не найдено"],
+      },
+    ],
+  });
+  assert.match(row.kind, /ИСКЛЮЧЕНО/);
+  assert.equal(row.before.status, null);
+  assert.equal(row.after.status, "NO PROVIDER CHANGE");
+  assert.equal(row.after.eligible_for_commit, false);
+  assert.equal(row.after.row_error.source, "HOLYMEDIA");
+  assert.equal(calls, 0);
+});
