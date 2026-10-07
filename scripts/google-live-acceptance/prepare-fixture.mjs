@@ -25,8 +25,19 @@ try {
   const existing = existsSync("/acceptance-state/fixture-context.json")
     ? JSON.parse(readFileSync("/acceptance-state/fixture-context.json", "utf8"))
     : null;
-  if (existing?.preview?.status === "preview")
-    throw new Error("preview_already_prepared_stop");
+  if (existing?.preview?.status === "preview") {
+    const previous = await db.client.mcpPreview.findUnique({
+      where: { id: existing.preview.preview_id },
+      select: { expiresAt: true, consumedAt: true, commitAttemptedAt: true },
+    });
+    if (!previous || previous.consumedAt || previous.commitAttemptedAt)
+      throw new Error("previous_preview_committed_or_unavailable_stop");
+    if (previous.expiresAt > new Date())
+      throw new Error("preview_already_prepared_stop");
+    // Rebuild through the actual MCP tool. Never extend/reset the old record,
+    // approval nonce or snapshot; Google must validate the new preview again.
+    console.log(JSON.stringify({ expired_preview_renewal: true }));
+  }
   const proof = JSON.parse(
     readFileSync("/acceptance-state/test-proof.json", "utf8"),
   );
