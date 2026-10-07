@@ -29,6 +29,15 @@ Then open `http://localhost:4400/acceptance/oauth/start`. State TTL is 10 minute
 Do not copy code, state or tokens from the browser. Callback uses the real provider controller,
 one-time state/session checks and AES-256-GCM vault. Return to Codex after successful callback.
 
+The gateway rewrites only `GET /api/v1/oauth/GOOGLE_ADS/callback` to the API's actual
+`/oauth/GOOGLE_ADS/callback` route. It preserves the original query string byte for byte and
+never logs callback parameters. Google redirect URI and the production callback contract stay
+unchanged. Parameterless callback smoke checks must return 302 with `invalid_callback`, not 404;
+`/dashboard/connections` is a gateway-owned 200 HTML outcome page. Regression coverage:
+`node --test scripts/google-live-acceptance/gateway.test.mjs` (mock upstream, synthetic query only).
+After a failed/exposed attempt, start from `/acceptance/oauth/start` to generate a new one-time
+state; never replay the old callback URL, code or state.
+
 ## Additional acceptance-only transport guard
 
 The API uses a mounted Node preload guard, not an application source patch. It blocks every Google

@@ -104,8 +104,15 @@ createServer(async (req, res) => {
     res.writeHead(404).end();
     return;
   }
+  // The unmodified API excludes provider callbacks from its api/v1 prefix.
+  // Slice the original request target so the entire raw query is preserved.
+  const upstreamPath =
+    url.pathname === "/api/v1/oauth/GOOGLE_ADS/callback"
+      ? "/oauth/GOOGLE_ADS/callback" +
+        req.url.slice("/api/v1/oauth/GOOGLE_ADS/callback".length)
+      : req.url;
   const upstream = request(
-    `${api}${req.url}`,
+    `${api}${upstreamPath}`,
     { method: "GET", headers: { host: "localhost:4400" } },
     (response) => {
       res.writeHead(response.statusCode, response.headers);
