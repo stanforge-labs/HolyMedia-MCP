@@ -72,6 +72,39 @@ service key/preview for the next task; Google tokens stay encrypted in the dispo
 
 ## Verification / lifecycle
 
+### Existing fixture budget reconciliation (2026-10-07)
+
+The already-approved fixture `HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z` was created once,
+with atomic 26-operation commit `hmc_WYmKzVTcdxdkNxEP_jrzTjNP-sZX4X3aEt4mUIew0Ag`.
+Original HolyMedia verification/journal result remains **UNVERIFIED**: budget naming was incorrectly
+treated as independent and the budget reread omitted `name`.
+
+Product fix `4cead41ea4e430dc00698cee29511425ffb20661` removes non-shared create `name`, explicitly
+verifies the provider-derived campaign name and real campaign/budget association, and adds the name SELECT.
+It is cherry-picked into live acceptance, not main. Shared names stay exact; other budget fields remain strict.
+
+READ-only reconciliation uses `reconcile-fixture.mjs` and `reconcile-read-guard.mjs`, with the built
+product verifier mounted read-only into a one-off container from the existing immutable acceptance image.
+It does **not** replace the running acceptance API/image or publish ports, restart infrastructure, create
+a preview, call commit, retry a mutate, or run validate-only. The child process has write gates OFF/EMPTY.
+Its guard permits only canonical TEST-client metadata and the exact created resource-name reread queries;
+all mutation endpoints, MCC/foreign account requests and authorization-code exchanges are blocked.
+Normal stored-token refresh is allowed without logging token values.
+
+The corrected verifier rereads all six created resource kinds and confirms **26/26 VERIFIED**:
+campaign/budget/group, 20 keywords, RSA, Almaty and Russian criteria. Canonical `test_account=true`
+proof is repeated with MCC login. This reconciliation performed **7 Google Ads READ calls, 0 writes,
+0 validate-only**. The historical single creation mutation remains the only Google Ads write.
+
+Original preview and audit rows are compared before/after and remain immutable. Existing AuditService
+appends `mcp_google_commit_reconciled`, with original result UNVERIFIED, reconciled result VERIFIED,
+commit/preview IDs, verifier source/hash, timestamp and resource count. No migration or historical
+journal rewrite is performed. Protected VPS evidence: `/acceptance-state/fixture-budget-reconciliation.json`.
+Safe IDs/results are retained in `artifacts/google-live-acceptance/fixture-budget-reconciliation-20261007.json`.
+
+Automatic destructive cleanup/rollback remains unsupported; campaign/group/RSA stay PAUSED.
+Further live acceptance mutations require a new explicit user task.
+
 - Baseline verifies all five production services healthy and records IDs, image IDs, start times,
   restart counts and protected configuration hashes; verify requires them unchanged afterward.
 - Exact image source label, non-root runtime and immutable digest are verified before starting API.
