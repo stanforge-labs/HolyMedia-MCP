@@ -34,7 +34,8 @@ one-time state/session checks and AES-256-GCM vault. Return to Codex after succe
 The API uses a mounted Node preload guard, not an application source patch. It blocks every Google
 mutate endpoint, including validate-only, and permits only v24 customer/customer_client metadata queries
 for `4378327049` and `8590146099`, with MCC login `4378327049`. Discovery first reads accessible customer
-IDs. Unexpected accessible/hierarchy IDs stop further discovery and are recorded as IDs only; no
+IDs; hierarchy is preflighted with an IDs-only query before descriptive fields are requested.
+Unexpected accessible/hierarchy IDs stop further discovery and are recorded as IDs only; no
 third-party customer data requests are made. Counters contain no credentials, request bodies or headers.
 Normal provider request logs omit OAuth query parameters.
 

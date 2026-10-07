@@ -6,7 +6,8 @@ import { join } from "node:path";
 process.env.ACCEPTANCE_STATE_DIR = mkdtempSync(
   join(tmpdir(), "google-acceptance-guard-"),
 );
-const { validateRequest, validateAccessible } = await import("./guard.mjs");
+const { validateRequest, validateAccessible, validateHierarchy } =
+  await import("./guard.mjs");
 const url = (id) =>
   `https://googleads.googleapis.com/v24/customers/${id}/googleAds:searchStream`;
 const init = {
@@ -55,6 +56,21 @@ test("Wrong API version, origin and query-string ambiguity fail closed", () => {
   );
   assert.throws(() => validateRequest(url("8590146099") + "?x=1", init));
 });
+test("Hierarchy IDs-only probe blocks unexpected children before descriptive reads", () => {
+  const request = {
+    ...init,
+    body: JSON.stringify({
+      query: "SELECT customer_client.id FROM customer_client",
+    }),
+  };
+  assert.equal(validateRequest(url("4378327049"), request).hierarchy, true);
+  validateHierarchy([{ results: [{ customerClient: { id: "8590146099" } }] }]);
+  assert.throws(() =>
+    validateHierarchy([
+      { results: [{ customerClient: { id: "1234567890" } }] },
+    ]),
+  );
+});
 test("Unexpected accessible accounts stop discovery and record only IDs", () => {
   validateAccessible({ resourceNames: ["customers/4378327049"] });
   assert.throws(() =>
@@ -65,7 +81,10 @@ test("Unexpected accessible accounts stop discovery and record only IDs", () => 
       readFileSync(
         join(process.env.ACCEPTANCE_STATE_DIR, "provider-counts.jsonl"),
         "utf8",
-      ),
+      )
+        .trim()
+        .split("\n")
+        .at(-1),
     ),
     { type: "unexpected_accessible_ids", ids: ["1234567890"] },
   );

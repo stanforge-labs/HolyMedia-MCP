@@ -41,6 +41,37 @@ def verify_production():
     if production() != json.loads((ROOT / 'production-baseline.json').read_text()):
         raise RuntimeError('production_changed_stop')
 
+def verify_isolation():
+    from urllib.parse import urlsplit
+    ids = command(['docker', 'ps', '-q', '--filter', 'label=com.docker.compose.project=' + PROJECT]).split()
+    if len(ids) != 3:
+        raise RuntimeError('acceptance_service_count_mismatch')
+    for item in json.loads(command(['docker', 'inspect'] + ids)):
+        service = item['Config']['Labels']['com.docker.compose.service']
+        if item['State'].get('Health', {}).get('Status') != 'healthy':
+            raise RuntimeError('acceptance_unhealthy:' + service)
+        if set(item['NetworkSettings']['Networks']) != {PROJECT + '_default'}:
+            raise RuntimeError('acceptance_network_mismatch')
+        published = {key: value for key, value in item['NetworkSettings']['Ports'].items() if value}
+        if service == 'api':
+            if published != {'4001/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '4400'}]}:
+                raise RuntimeError('acceptance_port_binding_mismatch')
+            if item['Config']['Labels'].get('org.opencontainers.image.revision') != SOURCE:
+                raise RuntimeError('acceptance_source_mismatch')
+            values = dict(x.split('=', 1) for x in item['Config']['Env'])
+            db = urlsplit(values['DATABASE_URL'])
+            redis = urlsplit(values['REDIS_URL'])
+            if db.hostname != 'postgres' or db.path != '/google_acceptance' or redis.hostname != 'redis':
+                raise RuntimeError('acceptance_database_or_redis_mismatch')
+            if values['PROVIDER_GOOGLE_ADS_WRITE_ENABLED'] != 'false' or values['GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST']:
+                raise RuntimeError('acceptance_write_enabled')
+            if any(mount['Type'] != 'bind' or not mount['Source'].startswith(str(ROOT) + '/') for mount in item['Mounts']):
+                raise RuntimeError('acceptance_api_mount_mismatch')
+        else:
+            if published or any(mount['Type'] != 'volume' or not mount['Name'].startswith(PROJECT + '_acceptance-') for mount in item['Mounts']):
+                raise RuntimeError('acceptance_infrastructure_mount_or_port_mismatch')
+    print('ISOLATION_PASS: dedicated network/volumes/DB/Redis; only 127.0.0.1:4400 published; exact source; writes OFF/EMPTY')
+
 def read_env(path, allowed=None):
     values = {}
     for line in Path(path).read_text().splitlines():
@@ -156,6 +187,8 @@ try:
         verify_production()
         print('PRODUCTION_UNCHANGED_HEALTHY')
         print(compose('ps', '--format', '{{.Service}} {{.State}} {{.Health}}'))
+        if compose('ps', '-q', 'api').strip():
+            verify_isolation()
     else:
         raise RuntimeError('unsupported_action')
 except Exception as error:
