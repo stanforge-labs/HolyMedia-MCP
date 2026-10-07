@@ -1,4 +1,19 @@
 // UI only: actual HolyMedia session, CSRF and browser-approval endpoints decide.
+export function approvalRows(view) {
+  if (Array.isArray(view.stage1_items)) return view.stage1_items;
+  return (view.items ?? []).map((item) => ({
+    kind: "Keyword status",
+    keyword: `${item.keyword} (${item.match_type}, criterion ${item.criterion_id})`,
+    before: {
+      resource_name: item.resource_name,
+      campaign_id: item.campaign_id,
+      ad_group_id: item.ad_group_id,
+      status: item.before_status,
+    },
+    after: { status: item.after_status },
+    warnings: item.warnings ?? [],
+  }));
+}
 const status = document.querySelector("#status"),
   plan = document.querySelector("#plan"),
   form = document.querySelector("#approval");
@@ -32,7 +47,7 @@ async function load() {
   const description = document.createElement("p");
   description.textContent = `${view.provider} · ${view.account} · ${view.after}. Ссылка действует до ${new Date(view.expires_at).toLocaleString()}.`;
   plan.append(heading, description);
-  for (const item of view.stage1_items ?? []) {
+  for (const item of approvalRows(view)) {
     const details = document.createElement("details"),
       summary = document.createElement("summary"),
       content = document.createElement("pre");
@@ -43,6 +58,7 @@ async function load() {
       2,
     );
     details.append(summary, content);
+    details.open = true;
     plan.append(details);
   }
   plan.hidden = false;
@@ -70,7 +86,7 @@ form.addEventListener("submit", async (event) => {
     form.hidden = true;
     status.textContent =
       result.status === "approved"
-        ? "Fixture preview подтверждён. Google Ads ресурсы ещё не созданы. Вернитесь в Codex."
+        ? "Preview подтверждён. Google Ads ещё не изменён. Commit выполняется отдельно; вернитесь в Codex."
         : "Preview отменён.";
   } catch {
     status.textContent =

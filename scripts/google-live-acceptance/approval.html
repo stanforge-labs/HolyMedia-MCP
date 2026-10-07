@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HolyMedia — подтверждение TEST fixture</title>
+    <title>HolyMedia — подтверждение TEST операции</title>
     <link rel="stylesheet" href="/acceptance/approval.css" />
     <script type="module" src="/acceptance/approval.mjs"></script>
   </head>
   <body>
     <main>
-      <h1>HolyMedia: подтверждение TEST fixture</h1>
+      <h1>HolyMedia: подтверждение TEST операции</h1>
       <p>
-        Проверьте точный план для TEST CLIENT 8590146099. Кампания, группа и
-        объявление создаются PAUSED.
+        Проверьте точный план для TEST CLIENT 8590146099 и значения BEFORE /
+        AFTER. Кампания, группа и объявление fixture должны оставаться PAUSED.
       </p>
       <p id="status" role="status" aria-live="polite">
         Проверяем preview и доступ…
@@ -27,19 +27,19 @@
         <p>
           <label
             ><input type="checkbox" name="reviewed" required /> Я проверил план
-            и подтверждаю подготовку этой TEST fixture.</label
+            и подтверждаю только указанную TEST операцию.</label
           >
         </p>
         <button type="submit" name="decision" value="approve">
-          Подтвердить fixture preview
+          Подтвердить preview
         </button>
         <button type="submit" name="decision" value="cancel" formnovalidate>
           Отменить preview
         </button>
       </form>
       <p>
-        Подтверждение сохраняет решение в HolyMedia. Google Ads ресурсы на этом
-        шаге не создаются. Commit выполняется отдельно.
+        Подтверждение сохраняет решение в HolyMedia. Google Ads на этом шаге не
+        изменяется. Commit выполняется отдельно.
       </p>
       <noscript
         >Для защищённого подтверждения требуется JavaScript. Решение не
