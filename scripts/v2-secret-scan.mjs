@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { hasForbiddenValue } from "./v2-secret-scan-policy.mjs";
 
 const tracked = execFileSync(
   "git",
@@ -33,7 +34,7 @@ const findings = [];
 for (const file of files) {
   if (pathFindings.includes(file) || contentIgnoredPaths.has(file)) continue;
   const content = readFileSync(file, "utf8");
-  if (forbiddenValue.test(content)) findings.push(file);
+  if (hasForbiddenValue(file, content, forbiddenValue)) findings.push(file);
 }
 
 if (pathFindings.length || findings.length) {

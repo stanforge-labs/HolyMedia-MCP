@@ -17,7 +17,7 @@
     "test:compat": "node scripts/v2-compatibility-smoke.mjs",
     "migrate:validate": "pnpm --dir packages/database run prisma:validate",
     "migrate:status": "pnpm --dir packages/database run prisma:status",
-    "security:secrets": "node scripts/v2-secret-scan.mjs",
+    "security:secrets": "node --test scripts/v2-secret-scan.test.mjs && node scripts/v2-secret-scan.mjs",
     "security:deps": "pnpm audit --audit-level high",
     "compose:up": "docker compose -f infra/docker-compose.v2.yml up --build",
     "compose:down": "docker compose -f infra/docker-compose.v2.yml down -v",
