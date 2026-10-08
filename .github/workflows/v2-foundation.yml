@@ -16,6 +16,8 @@ jobs:
     env:
       NODE_ENV: test
       V2_INTEGRATION_TESTS: "true"
+      V2_PG18_REHEARSAL: "true"
+      V2_PG18_TEST_DATABASE_URL: postgresql://holymedia:change-me-local-only@127.0.0.1:5432/public_mcp_upgrade
       PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
       GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: ""
       PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
@@ -98,6 +100,12 @@ jobs:
           restored_workspaces=$(docker exec "$postgres_container" psql -U holymedia -d holymedia_v2_restore -Atc 'SELECT COUNT(*) FROM workspaces')
           test "$restored_users" -ge 1
           test "$restored_workspaces" -ge 1
+      - name: Prepare separate disposable PostgreSQL 18 preview database
+        env:
+          DATABASE_URL: postgresql://holymedia:change-me-local-only@127.0.0.1:5432/public_mcp_upgrade
+        run: |
+          docker exec ${{ job.services.postgres.id }} createdb -U holymedia public_mcp_upgrade
+          pnpm --filter @holymedia/database prisma:deploy
       - run: pnpm test
       - run: pnpm build
       - name: API readiness integration smoke
