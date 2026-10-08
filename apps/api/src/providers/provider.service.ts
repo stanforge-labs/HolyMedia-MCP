@@ -1190,6 +1190,26 @@ export class ProviderService {
       );
     }
   }
+  public async googleStage2(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action: "build" | "read" | "validate" | "commit" | "verify",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return (ctx.adapter as unknown as GoogleAdsAdapter).stage2(
+      ctx.read,
+      action,
+      input,
+      results,
+    );
+  }
   public async googleStage0(
     workspaceId: string,
     connectionId: string,

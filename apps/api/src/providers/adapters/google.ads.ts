@@ -1,4 +1,12 @@
 import { createHash } from "node:crypto";
+import {
+  assertStage2Gate,
+  assertStage2Plan,
+  buildStage2Plan,
+  rereadStage2Checks,
+  verifyStage2Mutation,
+  type Stage2Plan,
+} from "../google-ads-stage2.js";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import type {
   ProviderAccountSummary,
@@ -651,6 +659,102 @@ export class GoogleAdsAdapter
       intent,
       this.stage1Reader(context),
     );
+  }
+  public async stage2(
+    context: ProviderReadContext,
+    action: "build" | "read" | "validate" | "commit" | "verify",
+    input: unknown,
+    results: Parameters<typeof verifyStage2Mutation>[1] = [],
+  ) {
+    assertStage2Gate(this.config, context.accountId);
+    if (!context.credentials.scopes.includes(GOOGLE_SCOPE))
+      throw new GoogleAdsWriteError(
+        "google_scope_required",
+        "Требуется Google OAuth adwords.",
+      );
+    const read = this.stage1Reader(context);
+    if (action === "build")
+      return buildStage2Plan(context.accountId, input, read);
+    const plan = input as Stage2Plan;
+    assertStage2Plan(plan, context.accountId);
+    if (action === "read") return rereadStage2Checks(plan, read);
+    if (action === "verify") return verifyStage2Mutation(plan, results, read);
+    const validateOnly = action === "validate";
+    if (
+      !validateOnly &&
+      (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    )
+      throw new GoogleAdsWriteError(
+        "confirmed_write_disabled",
+        "Подтверждённая запись выключена.",
+      );
+    // One request per resource service, partial failure retained within each group.
+    // Never repeat a group after an uncertain result or continue dependent writes.
+    const output: Parameters<typeof verifyStage2Mutation>[1] = Array.from(
+      { length: plan.operations.length },
+      () => ({
+        success: false,
+        resource_name: null,
+        error: googleWriteFailure("OUTCOME_UNCERTAIN"),
+      }),
+    );
+    for (const kind of new Set(plan.operations.map((o) => o.kind))) {
+      const entries = plan.operations
+        .map((operation, index) => ({ operation, index }))
+        .filter((x) => x.operation.kind === kind);
+      try {
+        const response = await providerJson<unknown>(
+          `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/${kind}:mutate`,
+          {
+            method: "POST",
+            headers: {
+              ...this.headers(
+                context.credentials.accessToken,
+                this.contextLoginCustomerId(context),
+              ),
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              operations: entries.map((x) => ({
+                update: x.operation.fields,
+                updateMask: x.operation.update_mask,
+              })),
+              validateOnly,
+              partialFailure: true,
+            }),
+          },
+          this.config.providerHttpTimeoutMs,
+          googleAdsApiError,
+        );
+        const decoded = decodeStage1Mutation(
+          response,
+          {
+            account_id: plan.account_id,
+            operations: entries.map((x) => x.operation),
+          },
+          validateOnly,
+        );
+        entries.forEach((entry, i) => {
+          output[entry.index] = decoded[i]!;
+        });
+      } catch (error) {
+        const failure =
+          !validateOnly &&
+          (!(error instanceof GoogleAdsApiError) ||
+            Number(error.providerStatus) >= 500)
+            ? googleWriteFailure("OUTCOME_UNCERTAIN")
+            : writeFailureFromError(error);
+        entries.forEach((entry) => {
+          output[entry.index] = {
+            success: false,
+            resource_name: entry.operation.resource_name,
+            error: failure,
+          };
+        });
+        break;
+      }
+    }
+    return output;
   }
   public readStage1(context: ProviderReadContext, plan: Stage1Plan) {
     assertGoogleWriteAccount(this.config, context.accountId);

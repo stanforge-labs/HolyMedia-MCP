@@ -46,6 +46,7 @@ const rawConfigSchema = z.object({
     .regex(/^v?\d+$/)
     .default("v24"),
   PROVIDER_GOOGLE_ADS_WRITE_ENABLED: booleanFromEnv.default(false),
+  PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: booleanFromEnv.default(false),
   GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID: z.string().optional(),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: z.string().optional(),
@@ -185,6 +186,7 @@ export type AppConfig = {
   providerGoogleLoginCustomerId: string | undefined;
   providerGoogleApiVersion: string;
   providerGoogleAdsWriteEnabled: boolean;
+  providerGoogleAdsStage2WriteEnabled: boolean;
   googleAdsWriteAccountAllowlist: string[];
   providerGoogleSearchConsoleClientId: string | undefined;
   providerGoogleSearchConsoleClientSecret: string | undefined;
@@ -473,6 +475,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginCustomerId: value.PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID,
     providerGoogleApiVersion: value.PROVIDER_GOOGLE_API_VERSION,
     providerGoogleAdsWriteEnabled: value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED,
+    providerGoogleAdsStage2WriteEnabled:
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED,
     googleAdsWriteAccountAllowlist,
     providerGoogleSearchConsoleClientId:
       value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID,

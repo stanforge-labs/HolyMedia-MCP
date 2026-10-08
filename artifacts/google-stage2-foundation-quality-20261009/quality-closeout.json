@@ -1,0 +1,51 @@
+{
+  "checked_at": "2026-10-08T20:42:00Z",
+  "branch": "codex/google-ads-write-stage2-foundation",
+  "integration_base_head": "371f67768d0b9d3f8318fbcc44595ee711979f89",
+  "source_identity": "Stage 2 implementation commit containing this evidence; final SHA is in persistent checkpoint",
+  "scope": "Package A bid/budget foundation, stock controlled workflow, mock HTTP and disposable databases only",
+  "stage2_result": "IMPLEMENTED_MOCK_VERIFIED_NOT_LIVE_ACCEPTED",
+  "package_b": "NOT IMPLEMENTED: strategy editing, portfolio lifecycle, device/geo/schedule modifiers, bulk filters",
+  "checks": {
+    "format_check": "PASS",
+    "lint": "PASS full monorepo; final API changes targeted rerun PASS",
+    "typecheck": "PASS full monorepo; final API changes targeted rerun PASS",
+    "prisma_validate": "PASS",
+    "test": "PASS fresh TURBO_FORCE=true",
+    "build": "PASS fresh full monorepo; final API rebuild PASS",
+    "secret_scan": "PASS standard scanner + 7 regression tests",
+    "dependencies": { "critical": 0, "high": 0, "moderate": 6 },
+    "next_version": "16.3.8 candidate only; production not upgraded"
+  },
+  "tests": {
+    "stage2_mock": { "passed": 42, "failed": 0, "real_external_calls": 0 },
+    "stage0_stage1_stage2_and_mcp_targeted": { "passed": 126, "failed": 0 },
+    "full_package_tests": { "passed": 612, "skipped_without_infrastructure": 26, "failed": 0 },
+    "root_node_tests": { "passed": 13, "failed": 0 },
+    "disposable_integration_repeat": { "database_passed": 3, "api_passed": 21, "worker_passed": 2, "total_passed": 26, "skipped": 0, "failed": 0 },
+    "packages_with_no_unit_test_files": ["web", "testing"],
+    "browser_or_cross_client_live_stage2": "NOT RUN"
+  },
+  "disposable_infrastructure": {
+    "project": "holymedia-google-stage2-qa-20261009",
+    "postgres": "18",
+    "redis": "7.4, isolated DB3 for test rate counters",
+    "production_resources_used": false,
+    "acceptance_db_or_redis_used": false,
+    "provider_credentials_used": false,
+    "containers_and_volumes_removed": true,
+    "protected_generated_secrets_not_exported": true
+  },
+  "source_hashes": {
+    "apps/api/src/providers/google-ads-stage2.ts": "144fc95b5b1f23ad98f1728d591c52a2653be5dbb2612b923b7a735651b0f74e",
+    "apps/api/src/mcp/mcp-google-stage2-schema.ts": "1ad992bbba003177d4836ee0df5ff569ac6fbdb8d6b36d167f53ea2790317ae6"
+  },
+  "migration": "NONE",
+  "feature_gate_default": "OFF",
+  "public_mcp_exposure_changed": false,
+  "stage2_real_provider_read_calls": 0,
+  "stage2_validate_only_calls": 0,
+  "stage2_real_provider_write_calls": 0,
+  "production_changed": false,
+  "main_changed": false
+}

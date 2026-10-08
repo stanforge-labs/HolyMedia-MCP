@@ -1,0 +1,50 @@
+{
+  "integration_base_HEAD": "221371fd2c488a128c44c9f37b9de7195748a3c7",
+  "scope": "independent disposable PG18/Redis; fake providers only",
+  "provider_calls": 0,
+  "provider_writes": 0,
+  "production_changed": false,
+  "main_changed": false,
+  "steps": [
+    {
+      "name": "migrate",
+      "exit_code": 0,
+      "tests": null,
+      "skips": false
+    },
+    {
+      "name": "migrate-status",
+      "exit_code": 0,
+      "tests": null,
+      "skips": false
+    },
+    {
+      "name": "database-integration",
+      "exit_code": 0,
+      "tests": [
+        "Tests  3 passed (3)"
+      ],
+      "skips": false
+    },
+    {
+      "name": "api-integration",
+      "exit_code": 0,
+      "tests": [
+        "Tests  21 passed (21)"
+      ],
+      "skips": false
+    },
+    {
+      "name": "worker-integration",
+      "exit_code": 0,
+      "tests": [
+        "Tests  2 passed (2)"
+      ],
+      "skips": false
+    }
+  ],
+  "result": "PASS",
+  "disposable_redis_database": 3,
+  "stage2_source": "working tree; changed source files recorded separately",
+  "timestamp": "2026-10-08T20:34:33.362Z"
+}

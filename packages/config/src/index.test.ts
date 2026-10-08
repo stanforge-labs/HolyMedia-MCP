@@ -6,6 +6,7 @@ describe("v2 configuration", () => {
   it("defaults Google writes OFF and normalizes a separate deny-by-default account allowlist", () => {
     const config = loadConfig({ NODE_ENV: "test" });
     expect(config.providerGoogleAdsWriteEnabled).toBe(false);
+    expect(config.providerGoogleAdsStage2WriteEnabled).toBe(false);
     expect(config.googleAdsWriteAccountAllowlist).toEqual([]);
     expect(
       loadConfig({
