@@ -2,7 +2,8 @@ name: HolyMedia MCP v2 foundation
 
 on:
   push:
-    branches: [main, "v2/**", "feat/**"]
+    branches:
+      [main, "v2/**", "feat/**", "codex/google-ads-stage01-integration-final"]
   pull_request:
 
 permissions:
@@ -11,9 +12,14 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
       NODE_ENV: test
       V2_INTEGRATION_TESTS: "true"
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: ""
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
       DATABASE_URL: postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2
       REDIS_URL: redis://127.0.0.1:6379
       SESSION_HASH_SECRET: ci-only-session-hash-secret-01234567890123456789
@@ -52,6 +58,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Secret gate before dependency execution
+        run: node --test scripts/v2-secret-scan.test.mjs && node scripts/v2-secret-scan.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint

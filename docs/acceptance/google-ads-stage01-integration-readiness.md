@@ -41,6 +41,20 @@ Candidate dependency audit: Critical0, High0, Moderate6. Separate release branch
 
 Deployment recovery: restore the previous pinned application image/gates after explicit authorization; do not delete audit/history or assume image rollback undoes provider writes. Production Google/Public write flags remain OFF. Google resource restoration always uses a new scoped preview with human approval, immutable commit and real reread; no raw cleanup.
 
+## Final provider closeout, 2026-10-09
+
+W resume and separately human-approved PAUSE restoration both VERIFIED. Campaign24339483523 is PAUSED; both groups and RSA remained PAUSED throughout. Stock journal contains two separate commits. Both available non-REMOVED TEST campaigns are PAUSED. Stage1 A/B/C/D/E/F/M/O/P and Stage0 T/U/V/W are LIVE PASS for their specified scopes; this is not cross-client or release completion.
+
+Final safe evidence: `artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json`. Aggregate READ1794 / VALIDATE_ONLY27 / REAL_WRITE17, all writes only customer8590146099. OAuth refresh23 is counted separately. Historical UNVERIFIED commit and separate VERIFIED reconciliation are preserved.
+
+One additional harness preflight falsely compared unordered GAQL rows. Targeted correction delegates to existing `rereadStage0Checks`; order-equivalent rows match, real status changes still differ. No product guard or approved plan changed; the initial blocked attempt never invoked MCP commit. No Google mutation was retried.
+
+Linux foundation CI now also triggers for this exact integration branch, using hosted Ubuntu PostgreSQL18/Redis7.4 and explicit Google/Public write defaults OFF. It has read-only repository permissions, no provider credentials, no image publication or production deploy. Record actual run completion before release; adding the trigger is not CI PASS.
+
+Cross-client definitions are now explicit: Q=A/B/C/M through real ChatGPT MCP client; R=equivalent real second-client cases; S=human consent before immutable commit. Q/R remain BLOCKED until these clients are connected; stock HTTP harness calls are not client LIVE evidence. Existing W human approvals demonstrate S only in this harness flow. Never repeat destructive or real mutation cases without new separate approval.
+
+Stage2 foundation scope is authorized by the current user request, only in a separate branch from the verified integrated base, mock/disposable tests and gates OFF. It must not be merged into this Stage0+1 release candidate. Future live Stage2 operations still require explicit test-account scope and human approval. Stage3/4 remain backlog only.
+
 ## Closeout update, 2026-10-09
 
 Stage1 A/B/C/D/E/F/M/O/P COMPLETE. O stock commit rejected google_preview_stale before mutation after the real externally changed PHRASE was reread. Historical evidence remains immutable.
