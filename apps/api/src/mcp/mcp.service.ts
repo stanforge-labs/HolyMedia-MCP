@@ -469,7 +469,9 @@ export class McpService {
               ? "Prepare a clone preview. Google Ads supports a bounded Search profile: target campaign, ad groups and ads remain PAUSED; unsupported source components reject preview. Returns exact plan and approval URL, not an immediate write."
               : name === "preview_resume_campaign"
                 ? "Prepare a campaign activation preview. Google Ads checks launch prerequisites and exposes warnings; changes only campaign status, without hidden ad-group/ad activation. Requires browser approval and commit_preview."
-                : (stage1Description(name) ?? toolDescription(name)),
+                : name === "preview_pause_campaign"
+                  ? "Prepare a campaign pause preview. Google Ads supports ENABLED Search campaigns: validates only, requires browser approval and separate commit_preview, then rereads PAUSED. Does not change groups/ads; stopping delivery does not require launch readiness. Existing Meta semantics unchanged."
+                  : (stage1Description(name) ?? toolDescription(name)),
       ...([
         "pause_entities_preview",
         "update_entity_status_preview",
@@ -480,6 +482,7 @@ export class McpService {
         "preview_delete_or_archive_object",
         "create_campaign_from_brief",
         "preview_resume_campaign",
+        "preview_pause_campaign",
         "get_launch_checklist",
         "clone_campaign_preview",
       ].includes(name)
@@ -527,6 +530,7 @@ export class McpService {
       [
         "create_campaign_from_brief",
         "preview_resume_campaign",
+        "preview_pause_campaign",
         "clone_campaign_preview",
       ].includes(name)
     )
@@ -535,9 +539,11 @@ export class McpService {
         args,
         name === "preview_resume_campaign"
           ? "resume"
-          : name === "clone_campaign_preview"
-            ? "clone"
-            : "build",
+          : name === "preview_pause_campaign"
+            ? "pause"
+            : name === "clone_campaign_preview"
+              ? "clone"
+              : "build",
       );
     if (args.provider === "GOOGLE_ADS" && name === "get_launch_checklist") {
       validateBriefSchema(args, campaignIdSchema);

@@ -320,7 +320,7 @@ export const campaignBriefSchema = obj(
   ],
 );
 export const campaignIdSchema = obj(
-  "Read the real launch checklist, or prepare a separate campaign-only activation preview. No hidden activation of groups/ads.",
+  "Read the real launch checklist, or prepare a separate campaign-only activation/pause preview. No hidden status changes to groups/ads.",
   {
     provider: en("Explicit provider.", ["GOOGLE_ADS"]),
     account_id: campaignBriefSchema.properties!.account_id!,
@@ -433,7 +433,13 @@ export function stage0ToolSchema(
         },
       ],
     };
-  if (["get_launch_checklist", "preview_resume_campaign"].includes(name))
+  if (
+    [
+      "get_launch_checklist",
+      "preview_resume_campaign",
+      "preview_pause_campaign",
+    ].includes(name)
+  )
     return {
       oneOf: [
         campaignIdSchema,

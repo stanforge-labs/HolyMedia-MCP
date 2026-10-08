@@ -191,6 +191,21 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
     const latest = f.previewsRows[1]!.requestedState as Stage0Plan;
     expect(latest.operations).toHaveLength(1);
     expect(latest.operations[0]!.update_mask).toBe("status");
+    const childrenBeforePause = structuredClone({
+      groups: resource(f, "adGroup"),
+      ads: resource(f, "adGroupAd"),
+    });
+    const pause = await f.call("preview_pause_campaign", { campaign_id: id });
+    expect(resource(f, "campaign")[0]!.status).toBe("ENABLED");
+    await expect(
+      f.previews.commit(principal, String(pause.preview_token)),
+    ).rejects.toMatchObject({ code: "preview_not_confirmed" });
+    expect((await f.commit(pause)).status).toBe("VERIFIED");
+    expect(resource(f, "campaign")[0]!.status).toBe("PAUSED");
+    expect({
+      groups: resource(f, "adGroup"),
+      ads: resource(f, "adGroupAd"),
+    }).toEqual(childrenBeforePause);
   });
   it("Safe defaults: partners/display OFF, presence, paused entities and exact currency micros", async () => {
     const f = fixture(true);

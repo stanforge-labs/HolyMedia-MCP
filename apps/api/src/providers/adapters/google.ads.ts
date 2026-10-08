@@ -14,6 +14,7 @@ import { googleAdsApiError, GoogleAdsApiError } from "../google-ads.error.js";
 import {
   buildStage0Plan,
   buildResumePlan,
+  buildPausePlan,
   buildClonePlan,
   rereadStage0Checks,
   stage0ProviderOperations,
@@ -504,6 +505,7 @@ export class GoogleAdsAdapter
       | "build"
       | "clone"
       | "resume"
+      | "pause"
       | "read"
       | "validate"
       | "commit"
@@ -560,6 +562,8 @@ export class GoogleAdsAdapter
       );
     if (action === "resume")
       return buildResumePlan(context.accountId, input, read);
+    if (action === "pause")
+      return buildPausePlan(context.accountId, input, read);
     if (action === "checklist")
       return launchChecklist(
         context.accountId,
