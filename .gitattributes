@@ -1,3 +1,22 @@
+* text=auto eol=lf
+
+# Binary assets must never be rewritten during checkout or normalization.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+*.zip binary
+*.docx binary
+*.pptx binary
+*.xlsx binary
+*.mp4 binary
+
 *.sh text eol=lf
 *.service.example text eol=lf
 *.conf text eol=lf
