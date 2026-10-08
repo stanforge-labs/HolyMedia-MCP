@@ -1,0 +1,39 @@
+{
+  "source_branch": "codex/google-ads-stage01-integration-final",
+  "source_HEAD": "f67043207cf7e896cc09f0f0a9d358a9bd2aeb1b",
+  "modules": [
+    {
+      "file": "mcp-preview.service.js",
+      "target": "apps/api/dist/mcp/mcp-preview.service.js",
+      "sha256": "1d9a584579c9d33b2cf9f5d9dbc1e6f2891ce81980a4bb9a62480d450cd19e76"
+    },
+    {
+      "file": "mcp.service.js",
+      "target": "apps/api/dist/mcp/mcp.service.js",
+      "sha256": "5441b2321921d03d8cab2335c7680b7b41543df6bcdd077150809142db5d4c09"
+    },
+    {
+      "file": "mcp-google-stage0-schema.js",
+      "target": "apps/api/dist/mcp/mcp-google-stage0-schema.js",
+      "sha256": "0ab6d7730463f6ad04d7e8b2f5fed2a2dd0907ba8eccd14dd52627d1b055ff84"
+    },
+    {
+      "file": "google-ads-stage0.js",
+      "target": "apps/api/dist/providers/google-ads-stage0.js",
+      "sha256": "8a92cc8049c7c35b3fdd7fb41d01beb70de227638fe9d3e6f152477da857f957"
+    },
+    {
+      "file": "google.ads.js",
+      "target": "apps/api/dist/providers/adapters/google.ads.js",
+      "sha256": "c49018720e823fd96b73c1f4a049bf41f1182b290da033350d73a321091d40ef"
+    },
+    {
+      "file": "provider.service.js",
+      "target": "apps/api/dist/providers/provider.service.js",
+      "sha256": "b7166db7b61b4e574ca69e3115f985743f081bbfb5d36bb7ed3257e1fb996a82"
+    }
+  ],
+  "runtime_image_source": "7da2fbbe7d150072183bc5e121cae4abae019ddc",
+  "isolated_one_off": true,
+  "permanent_api_unchanged": true
+}

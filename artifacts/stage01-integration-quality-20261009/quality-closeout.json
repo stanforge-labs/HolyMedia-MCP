@@ -1,0 +1,93 @@
+{
+  "checked_at": "2026-10-08T19:22:38Z",
+  "branch": "codex/google-ads-stage01-integration-final",
+  "source_HEAD": "f67043207cf7e896cc09f0f0a9d358a9bd2aeb1b",
+  "cache": "TURBO_FORCE=true; no cached tasks",
+  "checks": {
+    "format:check": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "lint": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "typecheck": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "migrate:validate": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "test": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "build": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "security:secrets": {
+      "exit_code": 0,
+      "status": "PASS"
+    },
+    "security:deps": {
+      "exit_code": 0,
+      "status": "PASS"
+    }
+  },
+  "tests": {
+    "package_pass": 570,
+    "package_skipped": 26,
+    "node_pass": 11,
+    "node_skipped": 0,
+    "secret_scan_regression_pass": 7,
+    "secret_scan_skipped": 0,
+    "T_commit_guard_pass": 6,
+    "provider_id_guard_pass": 3,
+    "W_preview_guard_pass": 5,
+    "web_unit_suite": "NO_TEST_FILES",
+    "testing_package_unit_suite": "NO_TEST_FILES"
+  },
+  "security": {
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "next_version": "16.3.8",
+    "standard_secret_scan": "PASS",
+    "new_finding_review": "17 public-literal matches in 9 SHA-pinned artifacts; all added credential families rejected",
+    "production_dependency_version_changed": false
+  },
+  "integration": {
+    "stage0_ancestor": true,
+    "stage1_ancestor": true,
+    "live_fix_ancestor": true,
+    "new_migrations": false,
+    "write_defaults": "OFF",
+    "public_write_defaults": "OFF",
+    "linux_ci": "NOT_RUN",
+    "database_redis_dependent_tests": "26 SKIPPED; required before release",
+    "cross_client_manual": "NOT_RUN"
+  },
+  "main_changed": false,
+  "production_changed": false,
+  "followup": {
+    "targeted_test_fix": "f4e435cf8d9a5ff152b74198b8129dbefcbb01fa",
+    "infrastructure_tests_pass": 26,
+    "infrastructure_tests_skipped": 0,
+    "prisma_migrations": "CLEAN",
+    "QA_provider_calls": 0,
+    "QA_provider_writes": 0,
+    "QA_containers_volumes_removed": true,
+    "initial_failures_preserved": [
+      "write_scope_required",
+      "RateLimitExceededError"
+    ],
+    "rerun": "integration-tests.json PASS",
+    "targeted_format_lint_typecheck": "PASS",
+    "linux_ci": "NOT_RUN",
+    "cross_client": "NOT_RUN",
+    "PPC_stage2_4_traceability": "MISSING; proposed tasks only"
+  }
+}

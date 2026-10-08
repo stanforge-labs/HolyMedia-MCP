@@ -1,0 +1,21 @@
+
+ RUN  v4.1.11 C:/Users/Станислав/Documents/MCP/mcp-for-ads-google-stage01-integration/apps/api
+
+{"level":30,"time":1791488102599,"service":"holymedia-mcp-v2-email","kind":"email_verification","recipientDomain":"example.test","msg":"email delivery queued"}
+{"level":30,"time":1791488102919,"service":"holymedia-mcp-v2-provider-metrics","metric":"oauth_success","provider":"TEST_PROVIDER","durationMs":204,"msg":"provider metric"}
+{"level":30,"time":1791488102965,"service":"holymedia-mcp-v2-provider-metrics","metric":"oauth_failure","provider":"TEST_PROVIDER","msg":"provider metric"}
+{"level":30,"time":1791488103374,"service":"holymedia-mcp-v2-mcp","mcpMethod":"initialize","msg":"MCP request authenticated"}
+{"level":30,"time":1791488103403,"service":"holymedia-mcp-v2-provider-metrics","metric":"oauth_success","provider":"TEST_PROVIDER","durationMs":199,"msg":"provider metric"}
+{"level":30,"time":1791488103444,"service":"holymedia-mcp-v2-provider-metrics","metric":"oauth_failure","provider":"TEST_PROVIDER","msg":"provider metric"}
+{"level":30,"time":1791488103468,"service":"holymedia-mcp-v2-mcp","mcpMethod":"tools/list","msg":"MCP request authenticated"}
+{"level":30,"time":1791488103629,"service":"holymedia-mcp-v2-mcp","mcpMethod":"initialize","msg":"MCP request authenticated"}
+{"level":30,"time":1791488103755,"service":"holymedia-mcp-v2-provider-metrics","metric":"account_discovery_success","provider":"TEST_PROVIDER","durationMs":54,"msg":"provider metric"}
+{"level":30,"time":1791488103863,"service":"holymedia-mcp-v2-email","kind":"email_verification","recipientDomain":"example.test","msg":"email delivery queued"}
+{"level":30,"time":1791488104327,"service":"holymedia-mcp-v2-provider-metrics","metric":"token_refresh_success","provider":"TEST_PROVIDER","durationMs":41,"msg":"provider metric"}
+
+ Test Files  8 passed (8)
+      Tests  21 passed (21)
+   Start at  00:35:00
+   Duration  4.47s (transform 2.36s, setup 0ms, import 11.33s, tests 10.74s, environment 1ms)
+
+

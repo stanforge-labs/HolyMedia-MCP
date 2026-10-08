@@ -1,0 +1,190 @@
+{
+  "source": "artifacts/google-live-acceptance/T-live-commit-20261008T185500Z/evidence.json",
+  "source_sha256": "76f0a12b9a9a2bf7884b73c4efdeb8ccdb2d021808f26d1bd049312c909a0a31",
+  "resources": [
+    {
+      "kind": "campaignBudget",
+      "resource_name": "customers/8590146099/campaignBudgets/15932267169",
+      "id": "15932267169",
+      "operation": 0
+    },
+    {
+      "kind": "campaign",
+      "resource_name": "customers/8590146099/campaigns/24339483523",
+      "id": "24339483523",
+      "operation": 1
+    },
+    {
+      "kind": "campaignCriterion",
+      "resource_name": "customers/8590146099/campaignCriteria/24339483523~9235214",
+      "id": "9235214",
+      "parent_id": "24339483523",
+      "operation": 2
+    },
+    {
+      "kind": "campaignCriterion",
+      "resource_name": "customers/8590146099/campaignCriteria/24339483523~1031",
+      "id": "1031",
+      "parent_id": "24339483523",
+      "operation": 3
+    },
+    {
+      "kind": "adGroup",
+      "resource_name": "customers/8590146099/adGroups/200180930839",
+      "id": "200180930839",
+      "operation": 4
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180930839~2503219799254",
+      "id": "2503219799254",
+      "parent_id": "200180930839",
+      "operation": 5
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180930839~2503219799414",
+      "id": "2503219799414",
+      "parent_id": "200180930839",
+      "operation": 6
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180930839~2503219799454",
+      "id": "2503219799454",
+      "parent_id": "200180930839",
+      "operation": 7
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180930839~2503219799494",
+      "id": "2503219799494",
+      "parent_id": "200180930839",
+      "operation": 8
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180930839~2503219799654",
+      "id": "2503219799654",
+      "parent_id": "200180930839",
+      "operation": 9
+    },
+    {
+      "kind": "adGroupAd",
+      "resource_name": "customers/8590146099/adGroupAds/200180930839~827487091340",
+      "id": "827487091340",
+      "parent_id": "200180930839",
+      "operation": 10
+    },
+    {
+      "kind": "adGroup",
+      "resource_name": "customers/8590146099/adGroups/200180931039",
+      "id": "200180931039",
+      "operation": 11
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180931039~2502515569602",
+      "id": "2502515569602",
+      "parent_id": "200180931039",
+      "operation": 12
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180931039~2502515569642",
+      "id": "2502515569642",
+      "parent_id": "200180931039",
+      "operation": 13
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180931039~2502515571002",
+      "id": "2502515571002",
+      "parent_id": "200180931039",
+      "operation": 14
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180931039~2502515569802",
+      "id": "2502515569802",
+      "parent_id": "200180931039",
+      "operation": 15
+    },
+    {
+      "kind": "adGroupCriterion",
+      "resource_name": "customers/8590146099/adGroupCriteria/200180931039~2502515569842",
+      "id": "2502515569842",
+      "parent_id": "200180931039",
+      "operation": 16
+    },
+    {
+      "kind": "adGroupAd",
+      "resource_name": "customers/8590146099/adGroupAds/200180931039~827362851813",
+      "id": "827362851813",
+      "parent_id": "200180931039",
+      "operation": 17
+    },
+    {
+      "kind": "asset",
+      "resource_name": "customers/8590146099/assets/428652751435",
+      "id": "428652751435",
+      "operation": 18
+    },
+    {
+      "kind": "campaignAsset",
+      "resource_name": "customers/8590146099/campaignAssets/24339483523~428652751435~SITELINK",
+      "id": "428652751435",
+      "parent_id": "24339483523",
+      "field_type": "SITELINK",
+      "operation": 19
+    },
+    {
+      "kind": "asset",
+      "resource_name": "customers/8590146099/assets/428652751447",
+      "id": "428652751447",
+      "operation": 20
+    },
+    {
+      "kind": "campaignAsset",
+      "resource_name": "customers/8590146099/campaignAssets/24339483523~428652751447~SITELINK",
+      "id": "428652751447",
+      "parent_id": "24339483523",
+      "field_type": "SITELINK",
+      "operation": 21
+    },
+    {
+      "kind": "asset",
+      "resource_name": "customers/8590146099/assets/428550249722",
+      "id": "428550249722",
+      "operation": 22
+    },
+    {
+      "kind": "campaignAsset",
+      "resource_name": "customers/8590146099/campaignAssets/24339483523~428550249722~SITELINK",
+      "id": "428550249722",
+      "parent_id": "24339483523",
+      "field_type": "SITELINK",
+      "operation": 23
+    },
+    {
+      "kind": "asset",
+      "resource_name": "customers/8590146099/assets/428652751471",
+      "id": "428652751471",
+      "operation": 24
+    },
+    {
+      "kind": "campaignAsset",
+      "resource_name": "customers/8590146099/campaignAssets/24339483523~428652751471~SITELINK",
+      "id": "428652751471",
+      "parent_id": "24339483523",
+      "field_type": "SITELINK",
+      "operation": 25
+    }
+  ],
+  "rsa_ids": [
+    "827487091340",
+    "827362851813"
+  ],
+  "historical_evidence_unchanged": true,
+  "new_provider_calls": 0
+}

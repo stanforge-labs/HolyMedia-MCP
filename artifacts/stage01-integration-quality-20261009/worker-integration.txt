@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 C:/Users/Станислав/Documents/MCP/mcp-for-ads-google-stage01-integration/apps/worker
+
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  00:35:05
+   Duration  772ms (transform 39ms, setup 0ms, import 376ms, tests 701ms, environment 0ms)
+
+

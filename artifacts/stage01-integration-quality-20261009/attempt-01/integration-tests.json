@@ -1,0 +1,42 @@
+{
+  "source_HEAD": "f67043207cf7e896cc09f0f0a9d358a9bd2aeb1b",
+  "scope": "independent disposable PG18/Redis; fake providers only",
+  "provider_calls": 0,
+  "provider_writes": 0,
+  "production_changed": false,
+  "main_changed": false,
+  "steps": [
+    {
+      "name": "migrate",
+      "exit_code": 0,
+      "tests": null,
+      "skips": false
+    },
+    {
+      "name": "migrate-status",
+      "exit_code": 0,
+      "tests": null,
+      "skips": false
+    },
+    {
+      "name": "database-integration",
+      "exit_code": 0,
+      "tests": [
+        "Tests  3 passed (3)"
+      ],
+      "skips": false
+    },
+    {
+      "name": "api-integration",
+      "exit_code": 1,
+      "tests": [
+        "Tests 1 ⎯⎯⎯⎯⎯⎯⎯"
+      ],
+      "skips": false
+    }
+  ],
+  "result": "BLOCKED",
+  "failure_stage": "api-integration",
+  "code": "QA_step_failed",
+  "timestamp": "2026-10-08T19:32:31.347Z"
+}

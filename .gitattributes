@@ -33,3 +33,7 @@ artifacts/google-live-acceptance/stage0-readiness-v4-20261008/harness/stage0-v4-
 artifacts/google-live-acceptance/stage01-parallel-recovery-stage0-checkpoint-20261008.json -text
 artifacts/google-live-acceptance/stage1-final-live-acceptance-20261008T183050Z.json -text
 artifacts/google-live-acceptance/stage1-completion-checkpoint-20261008-e-created-members-awaiting-approval.json -text
+artifacts/google-live-acceptance/T-live-commit-20261008T185500Z/evidence.json -text
+artifacts/google-live-acceptance/T-live-commit-20261008T185500Z/resource-ids-supplement.json -text
+artifacts/google-live-acceptance/W-readiness-20261008T192300Z/preflight-evidence.json -text
+artifacts/stage01-integration-quality-20261009/integration-tests.json -text

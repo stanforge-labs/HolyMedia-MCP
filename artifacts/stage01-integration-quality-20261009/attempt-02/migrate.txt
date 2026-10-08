@@ -1,0 +1,11 @@
+Datasource "db": PostgreSQL database "public_mcp_upgrade", schema "public" at "127.0.0.1:55419"
+
+34 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+
+$ prisma migrate deploy --config prisma.config.ts
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.

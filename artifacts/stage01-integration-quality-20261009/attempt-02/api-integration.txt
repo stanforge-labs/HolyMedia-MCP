@@ -1,0 +1,48 @@
+
+ RUN  v4.1.11 C:/Users/Станислав/Documents/MCP/mcp-for-ads-google-stage01-integration/apps/api
+
+ ❯ src/identity.integration.test.ts (4 tests | 4 skipped) 321ms
+ ❯ src/providers/provider.integration.test.ts (8 tests | 8 skipped) 216ms
+{"level":30,"time":1791488019657,"service":"holymedia-mcp-v2-mcp","mcpMethod":"initialize","msg":"MCP request authenticated"}
+{"level":30,"time":1791488020095,"service":"holymedia-mcp-v2-mcp","mcpMethod":"tools/list","msg":"MCP request authenticated"}
+{"level":30,"time":1791488020264,"service":"holymedia-mcp-v2-mcp","mcpMethod":"initialize","msg":"MCP request authenticated"}
+
+ Test Files  2 failed | 6 passed (8)
+      Tests  9 passed | 12 skipped (21)
+   Start at  00:33:35
+   Duration  4.34s (transform 2.68s, setup 0ms, import 11.28s, tests 7.97s, environment 1ms)
+
+
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/identity.integration.test.ts > v2 identity integration
+RateLimitExceededError: Rate limit exceeded
+ ❯ RedisRateLimitService.consume src/infrastructure/redis-rate-limit.service.ts:36:15
+     34|       const count = Number(result?.[0]?.[1] ?? 0);
+     35|       if (count > limit) {
+     36|         throw new RateLimitExceededError();
+       |               ^
+     37|       }
+     38|     } catch (error) {
+ ❯ AuthService.limit src/auth/auth.service.ts:540:5
+ ❯ AuthService.signup src/auth/auth.service.ts:78:5
+ ❯ src/identity.integration.test.ts:79:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/providers/provider.integration.test.ts > v2 provider framework integration
+RateLimitExceededError: Rate limit exceeded
+ ❯ RedisRateLimitService.consume src/infrastructure/redis-rate-limit.service.ts:36:15
+     34|       const count = Number(result?.[0]?.[1] ?? 0);
+     35|       if (count > limit) {
+     36|         throw new RateLimitExceededError();
+       |               ^
+     37|       }
+     38|     } catch (error) {
+ ❯ AuthService.limit src/auth/auth.service.ts:540:5
+ ❯ AuthService.signup src/auth/auth.service.ts:78:5
+ ❯ src/providers/provider.integration.test.ts:77:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

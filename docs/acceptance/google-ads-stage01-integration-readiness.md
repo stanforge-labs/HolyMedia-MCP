@@ -40,3 +40,25 @@ Candidate dependency audit: Critical0, High0, Moderate6. Separate release branch
 6. Explicitly authorized integration PR/review, approved main merge, pinned image build and separately authorized deployment. Do not perform any of these automatically.
 
 Deployment recovery: restore the previous pinned application image/gates after explicit authorization; do not delete audit/history or assume image rollback undoes provider writes. Production Google/Public write flags remain OFF. Google resource restoration always uses a new scoped preview with human approval, immutable commit and real reread; no raw cleanup.
+
+## Closeout update, 2026-10-09
+
+Stage1 A/B/C/D/E/F/M/O/P COMPLETE. O stock commit rejected google_preview_stale before mutation after the real externally changed PHRASE was reread. Historical evidence remains immutable.
+
+T LIVE PASS: one atomic mutation,26/26 independently VERIFIED. Preview2c770f7a-e205-4e23-a572-193ade55c4db; commit hmc_jf43iiz8tg-P_rRNhkYjbNan02u9Azemp6xEjdtpj48. Campaign24339483523, budget15932267169, groups200180930839/200180931039, RSA827487091340/827362851813. USD2/day, MANUAL_CPC, Almaty/Russian,10keywords,4sitelinks,UTM. Campaign/groups/RSA PAUSED. Separate IDs supplement corrects only harness RSA display, not historical evidence.
+
+U/V prior actual input-rejection/read-only evidence is sufficient. MANUAL_CPC missing goal WARNING and ready=false do not imply conversion health or full launch readiness.
+
+W fresh stock checklist has no FAIL, can_resume=true. Goal/data/moderation/paused-child warnings explicit. Only campaign changes; no hidden group/ad activation. Candidate pause dispatch hash-pinned in isolated one-off runtime. Resume and PAUSE restoration each require new human approval. W LIVE PASS not claimed yet.
+
+Fresh Windows format/lint/typecheck/Prisma/tests/build/secrets/deps PASS without Turbo cache. Package570PASS/26SKIP; all26 then ran separately on independent PG18/Redis7.4:26PASS/0SKIP. Migrations/status CLEAN. QA provider calls0; no production/acceptance DB/Redis/vault. QA containers/volumes removed. Initial failures preserved.
+
+PG18 mock test now explicitly sets/resets own origin/flags, not application guards/defaults. Repeat QA run used separate QA Redis DB after preserved rate counters; no limiter bypass or shared Redis flush.
+
+Next16.3.8 integrated, Critical0/High0/Moderate6. New scanner matches reviewed independently:17public literals in9SHA-pinned artifacts. Exact path/content/match digests, scanner active, regression0SKIP. LF policy plus exact immutable-byte exceptions preserved.
+
+Source ancestry includes W0/Stage1/Stage0/budget/batch/live fixes. Prisma diff against origin/main empty; no new migrations. Google/Public default writes OFF, empty allowlists. No main merge/production deploy.
+
+Remaining: W resume+PAUSE live proof; fresh Linux CI/image check; ChatGPT+named second-client manual acceptance; original Stage2-4 detailed PPC traceability. No invented Q/R/S PASS.
+
+Release sequence: integration review -> explicitly authorized PR/main merge -> immutable image/disposable migration rehearsal -> separately authorized production deploy with baseline/backups and write gates OFF. Image rollback does not undo provider writes. Preserve journal; recovery requires new human approval; Stage0 creation has no automatic destructive rollback.

@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 C:/Users/Станислав/Documents/MCP/mcp-for-ads-google-stage01-integration/packages/database
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  00:33:33
+   Duration  1.12s (transform 185ms, setup 0ms, import 380ms, tests 543ms, environment 0ms)
+
+
