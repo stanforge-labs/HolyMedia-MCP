@@ -1,0 +1,8 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {pathToFileURL} from 'node:url';import {resolve} from 'node:path';import {readFileSync} from 'node:fs';
+import {canonical} from './W-completion-contract.mjs';
+const {rereadStage0Checks}=await import(pathToFileURL(resolve(process.env.W_PRODUCT_ROOT,'apps/api/dist/providers/google-ads-stage0.js')).href);
+const rows=[{adGroupCriterion:{resourceName:'customers/8590146099/adGroupCriteria/1~1',status:'ENABLED',keyword:{text:'one',matchType:'EXACT'}}},{adGroupCriterion:{resourceName:'customers/8590146099/adGroupCriteria/1~2',status:'ENABLED',keyword:{text:'two',matchType:'PHRASE'}}}];
+const plan={checks:[{query:'SELECT ad_group_criterion.resource_name FROM ad_group_criterion',rows:rows.toSorted((a,b)=>canonical(a).localeCompare(canonical(b),'en'))}]};
+test('real product snapshot accepts identical unordered GAQL rows',async()=>{let reads=0;const got=await rereadStage0Checks(plan,async()=>{reads++;return [...rows].reverse();});assert.equal(canonical(got),canonical(plan.checks));assert.equal(reads,1);});
+test('real field change still differs after normalization',async()=>{const got=await rereadStage0Checks(plan,async()=>[{...rows[0],adGroupCriterion:{...rows[0].adGroupCriterion,status:'PAUSED'}},rows[1]]);assert.notEqual(canonical(got),canonical(plan.checks));});
+test('harness delegates to same stock snapshot implementation; no guard weakening',()=>{const source=readFileSync(new URL('./W-continuation-rerun.mjs',import.meta.url),'utf8');assert.ok(source.includes('rereadStage0Checks(approved.requestedState,read)'));assert.ok(source.includes("throw Error('W_stale_snapshot_stop_no_write')"));assert.ok(source.includes('await approvalProof(db,config)'));});
