@@ -1,3 +1,8 @@
+*.sh text eol=lf
+*.service.example text eol=lf
+*.conf text eol=lf
+*.env.example text eol=lf
+
 # Immutable reviewed evidence: preserve the exact historical bytes across OS.
 artifacts/google-live-acceptance/acceptance-stage0-v4-readiness-preflight-20261008.json -text
 artifacts/google-live-acceptance/build-stage0-T-renew-20261008T171901Z.mjs -text
