@@ -148,9 +148,10 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
     expect(f.previewsRows).toHaveLength(0);
   });
   it("V: missing conversion goal is a warning for manual CPC and failure for conversions strategy", async () => {
-    const f = fixture(true),
+    const f = fixture(true, { strictCampaignAssetGaql: true }),
       b = brief();
     delete b.conversion_actions;
+    delete b.assets;
     await f.commit(await f.call("create_campaign_from_brief", b));
     // The simulated campaign intentionally has no inherited campaign goals.
     const id = String(resource(f, "campaign")[0]!.id),
@@ -160,11 +161,90 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
         .status,
     ).toBe("WARNING");
     expect(check.ready).toBe(false);
+    expect((check.structure as MockRow).assets).toEqual([]);
     resource(f, "campaign")[0]!.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+    const conversions = await f.call("get_launch_checklist", {
+      campaign_id: id,
+    });
+    expect(conversions.can_resume).toBe(false);
     expect(
-      ((await f.call("get_launch_checklist", { campaign_id: id })) as MockRow)
-        .can_resume,
-    ).toBe(false);
+      (conversions.checklist as MockRow[]).find(
+        (c) => c.code === "conversion_goal",
+      )!.status,
+    ).toBe("FAIL");
+    expect(
+      f.requests.filter((r) =>
+        String(r.body.query).includes(" FROM campaign_asset "),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          body: expect.objectContaining({
+            query: expect.stringContaining(
+              `WHERE campaign_asset.campaign = '${prefix}/campaigns/${id}'`,
+            ),
+          }),
+        }),
+      ]),
+    );
+  });
+  it("campaign asset GAQL uses its direct scoped reference, not an unselected campaign segment", async () => {
+    const f = fixture(true, { strictCampaignAssetGaql: true }),
+      b = brief();
+    await f.commit(await f.call("create_campaign_from_brief", b));
+    const id = String(resource(f, "campaign")[0]!.id),
+      writesBefore = f.writes();
+    const existing = structuredClone(
+      [...f.resources.values()].find((r) => r.campaignAsset)!,
+    );
+    object(existing.campaignAsset).resourceName =
+      `${prefix}/campaignAssets/999~888~SITELINK`;
+    object(existing.campaignAsset).campaign = `${prefix}/campaigns/999`;
+    f.resources.set(
+      String(object(existing.campaignAsset).resourceName),
+      existing,
+    );
+    const check = await f.call("get_launch_checklist", { campaign_id: id });
+    expect((check.structure as MockRow).assets as MockRow[]).toHaveLength(4);
+    expect(
+      ((check.structure as MockRow).assets as MockRow[]).every(
+        (a) => a.campaign === `${prefix}/campaigns/${id}`,
+      ),
+    ).toBe(true);
+    expect(f.writes()).toBe(writesBefore);
+    // Reproduce the legacy provider contract on mocked HTTP; campaign.id is a
+    // segmenting reference here and requires SELECT, not globally invalid.
+    const direct = f.requests.find((r) =>
+      String(r.body.query).includes(
+        `WHERE campaign_asset.campaign = '${prefix}/campaigns/${id}'`,
+      ),
+    )!;
+    const oldQuery = String(direct.body.query).replace(
+      `campaign_asset.campaign = '${prefix}/campaigns/${id}'`,
+      `campaign.id = ${id}`,
+    );
+    const rejected = await fetch(direct.url, {
+      method: "POST",
+      body: JSON.stringify({ query: oldQuery }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({
+      error: {
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            errors: [
+              {
+                errorCode: {
+                  queryError: "EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(f.writes()).toBe(writesBefore);
   });
   it("W: activation is separate approved preview; campaign enabled, groups and ads unchanged", async () => {
     const f = fixture(true);

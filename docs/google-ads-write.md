@@ -427,6 +427,13 @@ Automatic delete rollback новой кампании **unsupported**; безо�
 
 Checklist проверяет current status/budget/strategy/geo/PRESENCE/languages/groups/keywords/RSA,
 policy/moderation, usable goals + recent data, landing URLs, tracking, assets.
+CampaignAsset inventory использует прямой account-scoped filter
+`campaign_asset.campaign = 'customers/<customer>/campaigns/<campaign>'`.
+Предыдущий `WHERE campaign.id=...` без campaign.id в SELECT вызвал на изолированном TEST
+READ `QueryError.EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE` (HTTP400 INVALID_ARGUMENT):
+campaign здесь segmenting reference, а не globally unsupported field. Тот же SELECT с direct
+resource reference вернул HTTP200/0 rows. Empty asset inventory не заменяет conversion-goal
+checks и не даёт fake ready PASS. Goal/config selectors не изменены без отдельного evidence.
 `ready=true` только если все пункты PASS. Missing conversion goal: WARNING для MANUAL_CPC,
 FAIL для MAXIMIZE_CONVERSIONS. PAUSED groups/ads и unknown/pending moderation — WARNING.
 Resume запрещён при любом FAIL; остальные warnings явно входят в approval view.
