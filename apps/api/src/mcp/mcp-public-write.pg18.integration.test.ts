@@ -1,5 +1,5 @@
 import { createDatabase, closeDatabase } from "@holymedia/database";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
 import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 
@@ -16,6 +16,15 @@ const enabled =
 describe.skipIf(!enabled)(
   "PostgreSQL 18 disposable public preview lifecycle",
   () => {
+    // This suite injects fake provider methods. Its resource and commit flags
+    // must be explicit, not inherited from a real acceptance/API environment.
+    beforeEach(() => {
+      vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp.holymedia.kz");
+      vi.stubEnv("PUBLIC_MCP_WRITE_SCOPE_ENABLED", "true");
+      vi.stubEnv("PUBLIC_MCP_CONTROLLED_WRITE_ENABLED", "true");
+    });
+    afterEach(() => vi.unstubAllEnvs());
+
     it("keeps legacy preview compatibility and atomically claims one browser-approved OAuth preview", async () => {
       const database = createDatabase(localUrl!);
       const suffix = Math.random().toString(36).slice(2);
