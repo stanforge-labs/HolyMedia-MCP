@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "checkpoint": "PARALLEL_RECOVERY_STAGE0_ACCELERATION",
+  "timestamp": "2026-10-08 12:25:42 UTC",
+  "acceptance_branch": "codex/google-ads-write-live-acceptance",
+  "acceptance_HEAD": "7ee9d30047872a25020fed8076494dd9d9504e7a",
+  "integration_branch": "codex/google-ads-stage01-integration-review",
+  "integration_HEAD": "27f9026836324b2ec293671c5958c03056e5f39e",
+  "integration_pushed": true,
+  "previous_checkpoint": "stage01-completion-checkpoint-20261008-o-browser-automation-blocked.json",
+  "safety": {
+    "test_customer_id": "8590146099",
+    "test_account": true,
+    "login_customer_id": "4378327049",
+    "allowlist": [
+      "8590146099"
+    ],
+    "public_write_flags": false,
+    "provider_writes_this_turn": 0,
+    "production_changed": false,
+    "main_changed": false,
+    "running_acceptance_api_changed": false,
+    "historical_evidence_unchanged": true,
+    "existing_dirty_files_preserved": true
+  },
+  "stage1": {
+    "A": "PASS_PREVIOUS",
+    "B": "PASS_PREVIOUS",
+    "C": "PASS_PREVIOUS",
+    "D": "PASS_PREVIOUS",
+    "E": "PASS_PREVIOUS",
+    "F": "PASS_PREVIOUS",
+    "M": "PASS_PREVIOUS",
+    "P": "PASS_PREVIOUS",
+    "O": {
+      "status": "BLOCKED_BROWSER_UI",
+      "previous_preview_id": "d20eabe1-86c9-4ee9-9d94-4cd01c378645",
+      "expires_at": "2026-10-08T11:55:56.464Z",
+      "expired": true,
+      "confirmed": true,
+      "consumed": false,
+      "commit_attempted": false,
+      "ui_changes": 0,
+      "expected_code": "google_preview_stale",
+      "fresh_preview_created": false,
+      "root_cause": "Main kernel write-assets os-error3 unresolved; child kernel worked but browser providers were unavailable; authorized Google Ads session unverified",
+      "next": "Recover supported browser surface/user TEST login. Only then fresh JIT O preview, manual approval, actual UI change, stock stale rejection, approved PAUSE recovery."
+    }
+  },
+  "fixture": {
+    "campaign_id": "24324170853",
+    "budget_id": "15934365976",
+    "ad_group_id": "206587491811",
+    "rsa_id": "827349040712",
+    "original_keywords": 20,
+    "original_keywords_status": "ENABLED",
+    "extra_phrase_id": "11479221",
+    "extra_phrase_status": "PAUSED",
+    "campaign_status": "PAUSED",
+    "group_status": "PAUSED",
+    "rsa_status": "PAUSED",
+    "shared_set_id": "12261567996",
+    "shared_exact_members": 3,
+    "active_shared_links": 0,
+    "active_test_conflict": false,
+    "original_stage0_result": "UNVERIFIED",
+    "separate_reconciliation": "VERIFIED",
+    "fresh_provider_read_before_after_unchanged": true
+  },
+  "stage0": {
+    "T": {
+      "status": "PREVIEW_VALIDATION_PASS_LIVE_CREATE_NOT_RUN",
+      "preview_id": "907c2698-e4fb-4ec8-88a0-f3273e3e2b61",
+      "expires_at": "2026-10-08T12:54:03.827Z",
+      "campaign_name": "HM_MCP_STAGE0_T_20261008T121731Z",
+      "operation_count": 26,
+      "provider_validation": "PASS",
+      "partial_failure": false,
+      "campaign_exists_before_commit": false,
+      "commit": "NOT_RUN",
+      "approval": "PENDING_HUMAN",
+      "budget": {
+        "amount": 2,
+        "currency": "USD"
+      },
+      "planned": {
+        "ad_groups": 2,
+        "keywords": "ENABLED_INSIDE_PAUSED_PARENTS",
+        "RSA": 2,
+        "sitelinks": 4,
+        "UTM": true,
+        "geo": "Алматы",
+        "language": "Russian",
+        "strategy": "MANUAL_CPC",
+        "campaign_groups_RSA": "PAUSED"
+      },
+      "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-stage0-readiness-v4-20261008-protected-context.json",
+      "next": "Manual approval and explicit commit continuation authorization; independently prepared exact immutable commit harness required before mutation. No auto commit/retry."
+    },
+    "U": {
+      "status": "LIVE_INPUT_REJECTION_PASS",
+      "code": "google_brief_invalid",
+      "field": "ad_groups[0].rsa[0].headlines[0].text",
+      "headline_length": 31,
+      "provider_calls_during_U": 0,
+      "provider_writes_during_U": 0,
+      "preview_created": false
+    },
+    "V": {
+      "status": "LIVE_READ_ONLY_PASS_ON_PINNED_FIXED_MODULE",
+      "campaign_id": "24324170853",
+      "missing_conversion_goal": "WARNING",
+      "ready": false,
+      "can_resume": true,
+      "full_launch_ready": false
+    },
+    "W": {
+      "status": "MOCK_PAUSE_RESTORE_PASS_LIVE_NOT_RUN",
+      "resume_plan_prepared": true,
+      "resume_validation": "NOT_RUN",
+      "activation": "NOT_RUN",
+      "restoration_fix": "ca91ec5a41ca6c735c3f12a08c6bfbdaf4fcb76e",
+      "runtime_pause_dispatch": "NOT_DEPLOYED; old runtime remains unchanged",
+      "next": "Explicitly prepare reviewed candidate runtime and paired distinct manual approvals before live resume; final campaign PAUSED required"
+    }
+  },
+  "fixes": {
+    "release": {
+      "branch": "codex/google-ads-release-readiness-fix",
+      "HEAD": "5829e9918c20a27a08fb404bbec23df5973dc1d7",
+      "next": "16.3.8",
+      "CRLF": "LF_POLICY_REGRESSION_PASS",
+      "pushed": true
+    },
+    "campaign_pause": {
+      "branch": "codex/google-ads-campaign-pause-preview-fix",
+      "HEAD": "e9097d66a4358b40d1e2704d8e3b99c43694046b",
+      "pause_commit": "ca91ec5a41ca6c735c3f12a08c6bfbdaf4fcb76e",
+      "checklist_commit": "e9097d66a4358b40d1e2704d8e3b99c43694046b",
+      "pushed": true
+    },
+    "integration_commits": [
+      "2b9e4853b9d030de91cf186af9c2dc115086fb07",
+      "ec6b68961b853b454def95600332f1bc56df90e5",
+      "1e4d279bfed70614d2f927ef38615ff3e66b1a0d",
+      "27f9026836324b2ec293671c5958c03056e5f39e"
+    ]
+  },
+  "runtime_overlays": {
+    "base_image_source": "7da2fbbe7d150072183bc5e121cae4abae019ddc",
+    "mcp_module_sha256": "1d9a584579c9d33b2cf9f5d9dbc1e6f2891ce81980a4bb9a62480d450cd19e76",
+    "standalone_stage0_sha256": "8a92cc8049c7c35b3fdd7fb41d01beb70de227638fe9d3e6f152477da857f957",
+    "stage0_source_commit": "e9097d66a4358b40d1e2704d8e3b99c43694046b",
+    "mode": "ONE_OFF_READ_ONLY_OR_VALIDATE_ONLY; NOT_FULL_INTEGRATION_IMAGE",
+    "no_persistent_api_replacement": true
+  },
+  "counters": {
+    "scope": "CURRENT_RECOVERY_CYCLE_ONLY",
+    "READ": 165,
+    "VALIDATE_ONLY": 1,
+    "REAL_WRITE": 0,
+    "OAuth_refresh": 2,
+    "breakdown": {
+      "initial_failed_preflight": 21,
+      "v2_failed_preflight": 21,
+      "v3_failed_preflight": 21,
+      "asset_diagnostics": 6,
+      "v4_successful_readiness": 62,
+      "T_preview": 34
+    },
+    "initial_counter_correction": "Initial evidence reported0 due to prepare/preview filename mismatch. Separate append-only per-call log reconciliation confirms21READ0VALIDATE0WRITE. Later namespaces count correctly; historical evidence unchanged.",
+    "prior_working_block_excluding_A_B_P": {
+      "READ": 857,
+      "VALIDATE_ONLY": 15,
+      "REAL_WRITE": 11
+    },
+    "combined_same_scope": {
+      "READ": 1022,
+      "VALIDATE_ONLY": 16,
+      "REAL_WRITE": 11
+    }
+  },
+  "quality": {
+    "integration": {
+      "format": "PASS",
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "Prisma": "PASS_NO_MIGRATION",
+      "test": "PASS; 570package+11node;26infra-dependentSKIP",
+      "build": "PASS",
+      "standard_secret_scan": "PASS;5regressions",
+      "security_deps": "PASS",
+      "critical": 0,
+      "high": 0,
+      "moderate": 6,
+      "shared_cache_replayed": true,
+      "targeted_fresh_tests": 143,
+      "harness_regressions": 7,
+      "initial_setup_failure": "Direct Vitest lacked built workspace dependencies; generated Prisma/build dependencies, final targeted suitesPASS",
+      "new_harness_enum_false_positive": "Diagnosed in new diagnostic labels; shortened labels and added detection regression, no scanner exemptions/bypass; committed source passes"
+    },
+    "release_branch": {
+      "full_fresh_tests": 554,
+      "skipped": 26,
+      "LF_tests": 4,
+      "browser_mock_desktop_mobile": 36,
+      "standard_secret_scan": "PASS"
+    },
+    "native_linux_full_gate": "NOT_RUN",
+    "production_next_remediated": false,
+    "release_ready": false
+  },
+  "integration_readiness": "REVIEW_CANDIDATE_PREPARED_NOT_RELEASE_READY",
+  "Stage2_4": "20proposed workpackages/dependencies documented; no implementation/provider mutations; original detailed PPC spec absent, needs traceability confirmation",
+  "cross_client": "READINESS_DRAFT_ONLY; Q/R/S semantics absent; ChatGPT+named second client manual evidence NOT_RUN",
+  "evidence": {
+    "browser": [
+      "artifacts/browser-recovery-20261008/browser-recovery-diagnostic.json",
+      "artifacts/browser-recovery-20261008/browser-recovery-hidden-probe.json"
+    ],
+    "stage0_preflight": "acceptance-stage0-v4-readiness-preflight-20261008.json",
+    "T_preview": "acceptance-stage0-T-preview-20261008.json",
+    "query_error": "stage0-checklist-assets-error-diagnostic-20261008.json",
+    "integration_doc": "docs/acceptance/google-ads-stage01-integration-readiness.md",
+    "backlog": "docs/acceptance/google-ads-stage2-4-proposed-backlog.md",
+    "release_quality": "artifacts/release-readiness-20261008/verification-summary.json"
+  },
+  "remaining_blockers": [
+    "O genuine GoogleAdsUI proof and separately approved recovery",
+    "T real commit/reread and W reviewed-runtime activation/approved restoration not run",
+    "26infra-dependent tests skipped/nativeLinux gate missing",
+    "Cross-client manual evidence and original PPC traceability",
+    "6Moderate dependencies remain; production patch/deploy not performed or authorized"
+  ],
+  "next_manual_action": "Open the intended complete T approval URL returned in chat using localhost4401 tunnel, review exact plan, manually approve; report confirmation plus explicit permission for exact controlled commit. Approval alone is not a write. Do not touch GoogleAds O object until working UI and fresh O preview are ready."
+}

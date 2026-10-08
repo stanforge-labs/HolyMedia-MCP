@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "timestamp": "2026-10-08T18:36:15.584Z",
+  "result": "STAGE1_LIVE_ACCEPTANCE_PASS",
+  "branch": "codex/google-ads-write-live-acceptance",
+  "HEAD": "7ee9d30047872a25020fed8076494dd9d9504e7a",
+  "test_customer_id": "8590146099",
+  "test_account": true,
+  "login_customer_id": "4378327049",
+  "write_allowlist": [
+    "8590146099"
+  ],
+  "acceptance_matrix": {
+    "A": "PASS",
+    "B": "PASS",
+    "C": "PASS",
+    "D": "PASS",
+    "E": "PASS",
+    "F": "PASS",
+    "M": "PASS",
+    "O": "PASS",
+    "P": "PASS"
+  },
+  "previous_evidence": [
+    {
+      "commit_id": null,
+      "acceptance": "A",
+      "file": "acceptance-a-keyword-pause-preview-20261007.json",
+      "status": null,
+      "result": "PASS",
+      "sha256": "28217be1f0b819ae4bd1c902d8fa4dcce12fe90781d8c7d22fdef6c79672766e"
+    },
+    {
+      "commit_id": null,
+      "acceptance": "B",
+      "file": "acceptance-b-keyword-pause-resume-complete-20261007.json",
+      "status": null,
+      "result": "PASS",
+      "sha256": "8b0883a09e29c1113d6cc6231cd34a3f206e812911e2f659890697976adac8ab"
+    },
+    {
+      "commit_id": "hmc_6IXaeB-ZzExyzJhIGYgUk98iFg5jWccMTM81TpaF-LA",
+      "acceptance": "C",
+      "file": "acceptance-c-resume-commit-c94e113d-20261008.json",
+      "status": null,
+      "result": "C_RESUME_PASS",
+      "sha256": "1dddfb845798bfc2ba4f4ba5741a816b779d9ea12f741f0637989100f16d6f07"
+    },
+    {
+      "commit_id": "hmc_6GyYHQTyYYsjsQv2YWAxtVJDmNPQrokK_4w2Lwdf4zM",
+      "acceptance": "D",
+      "file": "acceptance-d-restored-commit-20261008.json",
+      "status": null,
+      "result": "D_PASS_RESTORED",
+      "sha256": "79484a524fd4a91c78a9d0a330269dfe8211e33edba11d2d55f1e100c12bf7e3"
+    },
+    {
+      "commit_id": "hmc_M84AXnymCWACNN8QKWYt2IWRdw4YdpbqBePFfys37zg",
+      "acceptance": "E",
+      "file": "acceptance-e-shared-detach-commit-20261008.json",
+      "status": null,
+      "result": "E_DETACH_PASS",
+      "sha256": "a5d2567313ef5fc38ad150d4c58d887d35a840582fa5f027afa9767ba438c432"
+    },
+    {
+      "commit_id": "hmc_cKAx_7jocD3sigikmcgB9zhL3KUOrDF-s-Zla9zvHVA",
+      "acceptance": "F",
+      "file": "acceptance-f-pause-phrase-commit-20261008.json",
+      "status": null,
+      "result": "F_RESTORE_NEW_PASS",
+      "sha256": "db4b43b70c24d711b90692d4884c5f5ff64d5c6a4af8a7c0603bf974b4046069"
+    },
+    {
+      "commit_id": null,
+      "acceptance": "M",
+      "file": "acceptance-m-remove-protection-rerun-20261008.json",
+      "status": null,
+      "result": "PASS",
+      "sha256": "6149c94b15815bd043c8f402616188ac8a50cca6b7b569c471680157f0060718"
+    },
+    {
+      "commit_id": null,
+      "acceptance": "P",
+      "file": "acceptance-p-allowlist-reconciled-20261007.json",
+      "status": null,
+      "result": "PASS",
+      "sha256": "53d32d861810e9774071350bc26674d7ce39084632c03d63e13f3e2f0e284adb"
+    }
+  ],
+  "O": {
+    "evidence": "o-live-check-20261008T183050Z/evidence.json",
+    "preview_id": "16224a43-2389-4062-9ffb-766a9abaf1d3",
+    "approval": {
+      "preview_id": "16224a43-2389-4062-9ffb-766a9abaf1d3",
+      "confirmed_at": "2026-10-08T18:26:26.888Z",
+      "expires_at": "2026-10-08T18:45:55.896Z",
+      "session_valid": true,
+      "audit": [
+        {
+          "eventType": "mcp_preview_web_approved",
+          "createdAt": "2026-10-08T18:26:26.907Z",
+          "success": true,
+          "actorUserId": "a5d68fdd-2d2f-47d4-a3b1-5d2af5cd64f3"
+        }
+      ],
+      "immutable": true
+    },
+    "actual_provider_before_rejection": [
+      {
+        "campaign_id": "24324170853",
+        "ad_group_id": "206587491811",
+        "criterion_id": "11479221",
+        "resource_name": "customers/8590146099/adGroupCriteria/206587491811~11479221",
+        "account_id": "8590146099",
+        "campaign_name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+        "campaign_status": "PAUSED",
+        "ad_group_name": "Acceptance Group",
+        "ad_group_status": "PAUSED",
+        "keyword": "test marketing",
+        "match_type": "PHRASE",
+        "status": "PAUSED"
+      }
+    ],
+    "preview_snapshot": [
+      {
+        "status": "ENABLED",
+        "keyword": "test marketing",
+        "account_id": "8590146099",
+        "match_type": "PHRASE",
+        "ad_group_id": "206587491811",
+        "campaign_id": "24324170853",
+        "criterion_id": "11479221",
+        "ad_group_name": "Acceptance Group",
+        "campaign_name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+        "resource_name": "customers/8590146099/adGroupCriteria/206587491811~11479221",
+        "ad_group_status": "PAUSED",
+        "campaign_status": "PAUSED"
+      }
+    ],
+    "stock_refusal": {
+      "http_status": 200,
+      "is_error": true,
+      "code": "google_preview_stale",
+      "message": "Объект изменился после создания preview. Создайте новый preview.",
+      "provider_mutation_sent": false
+    },
+    "audit": {
+      "attempts": [
+        {
+          "event_type": "mcp_google_commit_attempted",
+          "created_at": "2026-10-08T18:36:06.114Z",
+          "success": true
+        }
+      ],
+      "rejections": [
+        {
+          "event_type": "mcp_google_keyword_status",
+          "created_at": "2026-10-08T18:36:07.556Z",
+          "success": false,
+          "metadata": {
+            "after": "PAUSED",
+            "actual": null,
+            "before": "ENABLED",
+            "result": "rejected",
+            "keyword": "test marketing",
+            "commitId": "hmc_CWsDo5s4uDNh5LTeKzlbOG-jQacaebxmbfsEnSG6ev4",
+            "objectId": "11479221",
+            "provider": "GOOGLE_ADS",
+            "accountId": "8590146099",
+            "adGroupId": "206587491811",
+            "previewId": "16224a43-2389-4062-9ffb-766a9abaf1d3",
+            "campaignId": "24324170853",
+            "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11479221",
+            "serviceTokenId": "092caa96-8c79-4763-89e3-2b6e609ed32d",
+            "googleErrorCode": "google_preview_stale",
+            "serviceIdentityId": "7f12f0f3-18b5-4bc6-bd31-2f99d8b950a0"
+          }
+        }
+      ],
+      "journal_entry": null
+    },
+    "provider_state_after": [
+      {
+        "campaign_id": "24324170853",
+        "ad_group_id": "206587491811",
+        "criterion_id": "11479221",
+        "resource_name": "customers/8590146099/adGroupCriteria/206587491811~11479221",
+        "account_id": "8590146099",
+        "campaign_name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+        "campaign_status": "PAUSED",
+        "ad_group_name": "Acceptance Group",
+        "ad_group_status": "PAUSED",
+        "keyword": "test marketing",
+        "match_type": "PHRASE",
+        "status": "PAUSED"
+      }
+    ],
+    "original_keywords_enabled": true,
+    "real_provider_write_calls": 0,
+    "restore_commit": "NOT_NEEDED_UI_CHANGE_LEFT_PAUSED",
+    "mutation_transport_hard_denied": true
+  },
+  "final_fixture": {
+    "campaign_id": "24324170853",
+    "budget_id": "15934365976",
+    "ad_group_id": "206587491811",
+    "rsa_id": "827349040712",
+    "campaign_status": "PAUSED",
+    "ad_group_status": "PAUSED",
+    "rsa_status": "PAUSED",
+    "original_keyword_count": 20,
+    "original_keyword_status": "ENABLED",
+    "residual_phrase_criterion": "11479221",
+    "residual_phrase_status": "PAUSED",
+    "shared_set": "12261567996",
+    "shared_members": 3,
+    "shared_negative_match_type": "EXACT",
+    "active_shared_attachments": 0,
+    "active_test_campaign_negative_conflicts": 0,
+    "removed_campaign_negative": "customers/8590146099/campaignCriteria/24324170853~11743561"
+  },
+  "provider_calls_closeout": {
+    "READ": 28,
+    "VALIDATE_ONLY": 0,
+    "REAL_WRITE": 0
+  },
+  "ledger_snapshot_after_O": {
+    "scope": "existing provider-counts.jsonl typed events; discovery/filter events separately recorded",
+    "read": 1357,
+    "validate_only": 24,
+    "write": 14,
+    "oauth_refresh": 21,
+    "discovery_filter_events": 8,
+    "all_write_calls_customer": "8590146099",
+    "MCC_write_calls": 0,
+    "other_account_write_calls": 0,
+    "production_write_calls": 0
+  },
+  "historical_stage0_commit": "UNVERIFIED_IMMUTABLE",
+  "separate_budget_reconciliation": "VERIFIED_26_OF_26",
+  "historical_evidence_unchanged": true,
+  "quality_this_step": {
+    "guard_regression": "6/6 PASS",
+    "T_preview_guard_regression": "7/7 PASS",
+    "product_code_changed": false
+  },
+  "stage0": {
+    "T": "NEW_JIT_APPROVAL_NEXT_NO_CREATE_YET",
+    "U": "LIVE_INPUT_REJECTION_PASS_PREVIOUS_DO_NOT_REPEAT",
+    "V": "LIVE_READ_ONLY_MISSING_GOAL_WARNING_PASS_PREVIOUS_DO_NOT_REPEAT",
+    "W": "MOCK_READY_LIVE_NOT_RUN_REQUIRES_OWN_RESUME_AND_RESTORE_APPROVAL"
+  },
+  "release_readiness": {
+    "integration_branch": "codex/google-ads-stage01-integration-review",
+    "integration_HEAD": "27f9026836324b2ec293671c5958c03056e5f39e",
+    "targeted_release_fix_branch": "codex/google-ads-release-readiness-fix",
+    "targeted_release_fix_HEAD": "5829e9918c20a27a08fb404bbec23df5973dc1d7",
+    "next_and_LF_remediation": "PREVIOUSLY_TESTED_NOT_MERGED_OR_DEPLOYED",
+    "native_Linux_full_quality": "NOT_RUN",
+    "release_complete": false
+  },
+  "ready_for_stage0_live_approval_checkpoints": true,
+  "production_changed": false,
+  "main_changed": false,
+  "deploy": false
+}

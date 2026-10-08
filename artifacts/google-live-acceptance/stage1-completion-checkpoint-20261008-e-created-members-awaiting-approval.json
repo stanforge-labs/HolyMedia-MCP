@@ -1,0 +1,546 @@
+{
+  "schema_version": 1,
+  "block": "GOOGLE_ADS_LIVE_ACCEPTANCE_C_D_E_F_M_O",
+  "timestamp": "2026-10-08T09:34:42.211Z",
+  "branch": "codex/google-ads-write-live-acceptance",
+  "HEAD": "b181e85983bbe918ee4cbd9befbc49b055f7b77b",
+  "product_fix": {
+    "commit": "b181e85983bbe918ee4cbd9befbc49b055f7b77b",
+    "pushed": true,
+    "compiled_product_module_sha256": "1d9a584579c9d33b2cf9f5d9dbc1e6f2891ce81980a4bb9a62480d450cd19e76",
+    "error_contract": "Invalid snapshot row is HOLYMEDIA/snapshot_read/google_keyword_unavailable with google_code=null, never a fabricated Google API failure",
+    "stage1_partial_failure": true,
+    "stage0_partial_failure": false
+  },
+  "accounts": {
+    "customer_id": "8590146099",
+    "test_account": true,
+    "login_customer_id": "4378327049",
+    "write_allowlist": [
+      "8590146099"
+    ],
+    "other_account_access": 0
+  },
+  "fixture": {
+    "campaign_id": "24324170853",
+    "budget_id": "15934365976",
+    "ad_group_id": "206587491811",
+    "rsa_id": "827349040712",
+    "original_keywords": 20,
+    "keyword_status": "20 ENABLED",
+    "campaign_status": "PAUSED",
+    "ad_group_status": "PAUSED",
+    "rsa_status": "PAUSED",
+    "new_provider_objects": [
+      {
+        "resource_name": "customers/8590146099/sharedSets/12261567996",
+        "shared_set_id": "12261567996",
+        "name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z",
+        "type": "NEGATIVE_KEYWORDS",
+        "status": "ENABLED",
+        "attached": false
+      }
+    ],
+    "remaining_test_objects": "Original fixture plus one empty unlinked SharedSet 12261567996; D negative REMOVED. No live delivery.",
+    "paused_keyword_criterion_ids": [],
+    "original_working_state_restored": true,
+    "current_turn_provider_reread": true,
+    "last_verified_state_source": "acceptance-e-shared-members-preview-20261008.json",
+    "active_test_negative": false,
+    "removed_test_negative": {
+      "resource_name": "customers/8590146099/campaignCriteria/24324170853~11743561",
+      "criterion_id": "11743561",
+      "keyword": "test marketing",
+      "match_type": "EXACT",
+      "campaign_id": "24324170853"
+    },
+    "residual_shared_list": {
+      "resource_name": "customers/8590146099/sharedSets/12261567996",
+      "shared_set_id": "12261567996",
+      "name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z",
+      "type": "NEGATIVE_KEYWORDS",
+      "status": "ENABLED",
+      "attached": false,
+      "member_count": 0,
+      "active_campaign_links": 0
+    }
+  },
+  "acceptance": {
+    "A": {
+      "status": "PASS",
+      "previous": true,
+      "not_repeated": true
+    },
+    "B": {
+      "status": "PASS",
+      "previous": true,
+      "not_repeated": true
+    },
+    "P": {
+      "status": "PASS",
+      "previous": true,
+      "not_repeated": true
+    },
+    "M": {
+      "status": "PASS",
+      "live_rerun_head": "015d76dae9e9057cc22acd4c2d2d951252005f38",
+      "denial_code": "preview_not_confirmed",
+      "provider_unchanged": true,
+      "real_write_calls": 0,
+      "approval": false,
+      "removal": false,
+      "evidence": "acceptance-m-remove-protection-rerun-20261008.json"
+    },
+    "C": {
+      "status": "PASS",
+      "fix_regression": "PASS",
+      "preflight": "PASS",
+      "preview": "PASS",
+      "validate_only": "PASS",
+      "preview_id": "64cdeb67-546c-40f5-b32a-1df9c8a84a96",
+      "expires_at": "2026-10-08T07:17:49.793Z",
+      "requested_rows": 20,
+      "eligible_mutations": 19,
+      "excluded_rows": 1,
+      "invalid_criterion_id": "999999999999",
+      "provider_validation_calls": 1,
+      "provider_unchanged": true,
+      "confirmed": true,
+      "consumed": true,
+      "commit": "PASS",
+      "restore": {
+        "status": "PASS",
+        "preview_id": "c94e113d-e22e-403c-b7dc-d658d7a30147",
+        "expires_at": "2026-10-08T07:34:12.835Z",
+        "operation_count": 19,
+        "before": "PAUSED",
+        "after": "ENABLED",
+        "confirmed": true,
+        "consumed": true,
+        "provider_validation": "PASS",
+        "provider_unchanged_during_preview": true,
+        "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-c-restore-protected-context.json",
+        "evidence": "acceptance-c-resume-preview-20261008.json",
+        "commit": "PASS",
+        "commit_id": "hmc_6IXaeB-ZzExyzJhIGYgUk98iFg5jWccMTM81TpaF-LA",
+        "commit_result": "VERIFIED",
+        "all_20_keywords_enabled": true,
+        "journal": "PASS",
+        "audit": {
+          "successful_keyword_events": 19,
+          "rejected_row_events": 0
+        },
+        "commit_evidence": "acceptance-c-resume-commit-c94e113d-20261008.json"
+      },
+      "evidence": "approval-renewal-20261008T064650Z/acceptance-c-renewal-evidence.json",
+      "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-c-renew-20261008T064650Z-protected-context.json",
+      "previous_preview": {
+        "preview_id": "c28c6285-a579-4ef4-b0fc-2dddda5f42d1",
+        "expires_at": "2026-10-07T20:02:12.621Z",
+        "expired": true,
+        "consumed": false,
+        "confirmed": false,
+        "payload_unchanged": true
+      },
+      "plan_same_as_prior_preview": true,
+      "harness_state_prefix": "acceptance-c-renew-20261008T064650Z",
+      "commit_id": "hmc_qhDuw4InTxCbqi-lltKG6guIRggyaThc73Be0mp5dhU",
+      "commit_result": "PARTIAL_FAILURE_EXPECTED_19_VERIFIED_1_HOLYMEDIA_REJECTION",
+      "commit_evidence": "acceptance-c-pause-commit-64cdeb67-20261008.json",
+      "journal": "PASS",
+      "audit": {
+        "successful_keywords": 19,
+        "rejected_rows": 1
+      }
+    },
+    "D": {
+      "status": "PASS",
+      "preflight": "PASS",
+      "preview": "PASS",
+      "validate_only": "PASS",
+      "preview_id": "38286619-4c25-4d03-8fa8-ad798b5fc694",
+      "expires_at": "2026-10-08T09:05:14.932Z",
+      "operation": "negative_add",
+      "target_level": "campaign",
+      "keyword": "test marketing",
+      "match_type": "EXACT",
+      "operation_count": 1,
+      "before": null,
+      "after": "Campaign negative EXACT test marketing",
+      "conflict_warning": "PASS",
+      "affected_keyword_criterion": "11743561",
+      "reason_code": "EXACT_NORMALIZED_TEXT",
+      "confirmed": true,
+      "consumed": true,
+      "commit": "PASS",
+      "provider_unchanged": true,
+      "negative_exists": false,
+      "evidence": "acceptance-d-negative-preview-20261008.json",
+      "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-d-jit-20261008-protected-context.json",
+      "required_restoration": "After approved D add verified, separate preview/manual approval/remove commit/reread; never raw cleanup",
+      "approval_persisted": true,
+      "approved_at": null,
+      "session_valid": null,
+      "immutable": true,
+      "expired": false,
+      "latest_evidence": "acceptance-d-jit-preview-20261008.json",
+      "old_preview": {
+        "id": "283c57cf-6024-4395-924d-321dd6637837",
+        "expired": true,
+        "confirmed": true,
+        "consumed": false,
+        "commit_attempted": false
+      },
+      "commit_id": "hmc_oYTTyimuwz3PEVJ_a7RNO6XsZHReVa651aASL0qliLQ",
+      "audit": "PASS",
+      "journal": "PASS",
+      "created_negative": {
+        "resource_name": "customers/8590146099/campaignCriteria/24324170853~11743561",
+        "criterion_id": "11743561",
+        "keyword": "test marketing",
+        "match_type": "EXACT",
+        "campaign_id": "24324170853"
+      },
+      "commit_evidence": "acceptance-d-add-commit-20261008.json",
+      "restore": {
+        "status": "PASS",
+        "preview_id": "6e76c9f0-2228-4b19-b32e-edf7cd80e7e8",
+        "expires_at": "2026-10-08T09:23:12.391Z",
+        "operation": "negative_remove",
+        "resource_name": "customers/8590146099/campaignCriteria/24324170853~11743561",
+        "criterion_id": "11743561",
+        "before": "Campaign negative EXACT test marketing, ENABLED",
+        "after": "REMOVED campaign negative only",
+        "positive_keyword_11743561_untouched": true,
+        "validate_only": "PASS",
+        "operation_count": 1,
+        "confirmed": true,
+        "consumed": true,
+        "commit": "PASS",
+        "provider_unchanged_during_preview": true,
+        "evidence": "acceptance-d-removal-preview-20261008.json",
+        "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-d-remove-20261008-protected-context.json",
+        "commit_id": "hmc_6GyYHQTyYYsjsQv2YWAxtVJDmNPQrokK_4w2Lwdf4zM",
+        "commit_result": "VERIFIED",
+        "audit": "PASS",
+        "journal": "PASS",
+        "commit_evidence": "acceptance-d-restored-commit-20261008.json",
+        "positive_keyword_untouched": true
+      }
+    },
+    "E": {
+      "status": "CREATE_PASS_WAITING_FOR_MEMBERS_APPROVAL",
+      "create": {
+        "status": "PASS",
+        "phase": "SHARED_LIST_CREATE",
+        "preview": "PASS",
+        "validate_only": "PASS",
+        "preview_id": "b881656b-f1f9-4a92-ab6f-34ab91f22b63",
+        "expires_at": "2026-10-08T09:48:59.532Z",
+        "shared_list_name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z",
+        "before": null,
+        "after": {
+          "shared_list_name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z"
+        },
+        "operation_count": 1,
+        "partial_failure": true,
+        "confirmed": true,
+        "consumed": true,
+        "commit": "PASS",
+        "provider_unchanged": true,
+        "shared_list_exists": false,
+        "evidence": "acceptance-e-shared-create-commit-20261008.json",
+        "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-e-create-20261008-protected-context.json",
+        "commit_id": "hmc_sER6jdcOBUpe72bKYJxU3yGjvSEzGTLphpCQYpgRQeM",
+        "provider_result": "VERIFIED",
+        "audit": "PASS",
+        "journal": "PASS",
+        "empty_list_proven": true,
+        "campaign_links": 0
+      },
+      "shared_list": {
+        "resource_name": "customers/8590146099/sharedSets/12261567996",
+        "shared_set_id": "12261567996",
+        "name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z",
+        "type": "NEGATIVE_KEYWORDS",
+        "status": "ENABLED",
+        "attached": false
+      },
+      "members": {
+        "status": "WAITING_FOR_MANUAL_APPROVAL",
+        "batch_count": 3,
+        "words": [
+          "hm acceptance olive",
+          "hm acceptance cedar",
+          "hm acceptance maple"
+        ],
+        "match_type": "EXACT",
+        "current_provider_member_count": 0,
+        "commit": "NOT_RUN",
+        "preview": "PASS",
+        "validate_only": "PASS",
+        "preview_id": "5fe53180-3bd5-40e7-ab3b-c0b9dfaabe58",
+        "expires_at": "2026-10-08T10:04:00.141Z",
+        "operation_count": 3,
+        "partial_failure": true,
+        "confirmed": false,
+        "consumed": false,
+        "provider_unchanged": true,
+        "approval_performed": false,
+        "evidence": "acceptance-e-shared-members-preview-20261008.json",
+        "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-e-members-20261008-protected-context.json"
+      },
+      "attach": {
+        "status": "NOT_RUN"
+      },
+      "detach": {
+        "status": "NOT_RUN"
+      }
+    },
+    "F": {
+      "status": "NOT_RUN",
+      "read_only_preflight": "PASS",
+      "candidate": {
+        "preflight": "PASS",
+        "keyword_resource": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+        "text": "test marketing",
+        "before_match": "EXACT",
+        "candidate_match": "PHRASE",
+        "existing_equivalent_phrase": false,
+        "live_preview_created": false
+      },
+      "dependency": "D restored; new explicit match replacement approval; old ENABLED restore and new PAUSED controlled flows"
+    },
+    "O": {
+      "status": "NOT_RUN",
+      "read_only_preflight": "PASS",
+      "candidate": {
+        "preflight": "PASS",
+        "keyword_resource": "customers/8590146099/adGroupCriteria/206587491811~334435613703",
+        "text": "test search",
+        "status": "ENABLED",
+        "manual_google_ui_action_required": true,
+        "live_preview_created": false
+      },
+      "dependency": "HolyMedia approval first, then user external Google Ads UI status change; stale exact commit before mutation; no raw simulation"
+    }
+  },
+  "approval_runtime": {
+    "kind": "Temporary one-off approval-only process",
+    "container_name": "holymedia-google-c-human-approval",
+    "vps_binding": "127.0.0.1:4401",
+    "local_tunnel_port": 4401,
+    "local_tunnel_pid": 14320,
+    "api_health": "PASS",
+    "approval_html": "200",
+    "actual_approval_view": "PASS 200 negative_remove before campaignCriteria/negative=true and after REMOVED; approved=false",
+    "review_rows": 1,
+    "eligible_rows": 1,
+    "excluded_rows": 0,
+    "approving_automatically": false,
+    "external_transport": "BLOCKED",
+    "existing_acceptance_services_recreated": false,
+    "production_services_recreated": false
+  },
+  "counters": {
+    "scope": "This working cycle only; previous A/B/P and Stage0 counts excluded",
+    "by_test": {
+      "M": {
+        "read": 18,
+        "validate_only": 1,
+        "real_write": 0
+      },
+      "C": {
+        "read": 127,
+        "validate_only": 3,
+        "real_write": 2
+      },
+      "D": {
+        "read": 118,
+        "validate_only": 3,
+        "real_write": 2
+      },
+      "E_F_O_READONLY": {
+        "read": 3,
+        "validate_only": 0,
+        "real_write": 0
+      },
+      "E": {
+        "read": 97,
+        "validate_only": 2,
+        "real_write": 1
+      }
+    },
+    "read": 363,
+    "validate_only": 9,
+    "real_write": 5,
+    "oauth_refresh": 4
+  },
+  "quality": {
+    "targeted_product_tests": {
+      "passed": 84
+    },
+    "api_suite": {
+      "passed": 496,
+      "skipped": 21,
+      "failed": 0
+    },
+    "harness_tests": {
+      "passed": 14,
+      "failed": 0
+    },
+    "targeted_format": "PASS",
+    "api_typecheck": "PASS",
+    "api_lint": "PASS",
+    "api_build": "PASS",
+    "prisma_schema_validate": "PASS",
+    "secret_scan": "PASS",
+    "dependency_audit": {
+      "critical": 0,
+      "high": 1,
+      "moderate": 10,
+      "low": 1,
+      "status": "FAIL_HIGH_DEPENDENCY_FINDING",
+      "advisory": "https://github.com/advisories/GHSA-cjq9-62q9-8jv4",
+      "scope": "Next.js Web image optimization, not running in API-only acceptance or static approval gateway; current branch Next config has no images.remotePatterns. No production exposure claim or dependency deployment performed."
+    },
+    "migration": "NONE",
+    "renewal_guard_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "current_commit_guard_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "restore_preview_guard_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "current_resume_commit_guard_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "current_d_preview_guard_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "current_targeted_product_tests": {
+      "passed": 20,
+      "failed": 0
+    },
+    "compileall": "PASS",
+    "current_d_approval_check_syntax": "PASS",
+    "current_product_tests": {
+      "passed": 20,
+      "failed": 0
+    },
+    "current_harness_tests": {
+      "passed": 12,
+      "failed": 0
+    },
+    "current_removal_guard_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "current_e_guard_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "current_secret_scan": "PASS",
+    "current_compileall": "PASS",
+    "current_syntax": "PASS",
+    "current_e_members_guard_tests": {
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "historical_evidence_unchanged": true,
+  "production_changed": false,
+  "production_healthy": true,
+  "main_changed": false,
+  "remote_main": "a00817b746211a295bcb966f7fd7ef12cd6178fb",
+  "local_main_unchanged": "d88ac55d767f713f53932ea62673b09505b51f17",
+  "working_tree": "Previously dirty guard.mjs, guard.test.mjs and provision.py preserved, not swept into the fix commit; historical untracked harness/evidence preserved",
+  "next_action": "User manually approves E three-member batch. FIRST verify persisted confirmedAt/session/creator/audit/TTL/token/fingerprint and fresh TEST proof/stale checks; run prepared immutable members commit exactly once, no retry. Reread exact three EXACT words, unchanged fixture and no attachments; verify three audit successes plus journal. Then JIT attach preview/manual approval/immutable commit/reread/audit; then separate detach flow. Do not approve automatically or create several pending previews. After E detach verified, F replacement plus safe batch restoration old ENABLED/new PAUSED; O approved snapshot followed by external user Google UI action and stale rejection. No Stage0 until Stage1 complete.",
+  "ready_for_stage0": false,
+  "previous_checkpoint": "stage1-completion-checkpoint-20261008-e-created-preparing-members.json",
+  "renewal_counters": {
+    "read": 37,
+    "validate_only": 1,
+    "real_write": 0,
+    "oauth_refresh": 2
+  },
+  "pending_operation": {
+    "test": "E",
+    "phase": "SHARED_LIST_ADD_THREE_MEMBERS",
+    "preview_id": "5fe53180-3bd5-40e7-ab3b-c0b9dfaabe58",
+    "expires_at": "2026-10-08T10:04:00.141Z",
+    "customer_id": "8590146099",
+    "shared_set_id": "12261567996",
+    "protected_context_path": "/opt/holymedia-google-acceptance/state/acceptance-e-members-20261008-protected-context.json"
+  },
+  "current_turn_counters": {
+    "READ": 65,
+    "VALIDATE_ONLY": 1,
+    "REAL_WRITE": 1,
+    "by_phase": {
+      "e_create_commit": {
+        "read": 23,
+        "validate_only": 0,
+        "real_write": 1
+      },
+      "e_members_preparation": {
+        "read": 14,
+        "validate_only": 0,
+        "real_write": 0
+      },
+      "e_members_preview": {
+        "read": 28,
+        "validate_only": 1,
+        "real_write": 0
+      }
+    }
+  },
+  "prepared_harness": {
+    "path": "/opt/holymedia-google-acceptance/harness",
+    "preflight": "PREPARED_NO_PREVIEW_CREATED",
+    "commit_entrypoint": "acceptance-d-jit-commit.mjs",
+    "commit_guard": "acceptance-d-jit-commit-guard.mjs",
+    "commit_runner": "/home/ubuntu/holymedia-google-acceptance-harness/run-acceptance-d-jit-commit.py",
+    "product_module_sha256": "1d9a584579c9d33b2cf9f5d9dbc1e6f2891ce81980a4bb9a62480d450cd19e76",
+    "commit_source_and_syntax_verified": true,
+    "exact_d_commit_transport_guard_tests": 4,
+    "d_restore_template": "continuation-steps.mjs:restoredNegativeInput",
+    "e_f_o_templates": "continuation-steps.mjs:remainingStage1Templates",
+    "later_live_phase_identity_binding": "Real created IDs must be bound from verified server commit/reread before executing later phases; templates are not live writes or approvals",
+    "no_tests_or_build_after_preview": true,
+    "removal_commit_entrypoint": "acceptance-d-remove-commit.mjs",
+    "removal_commit_guard": "acceptance-d-remove-commit-guard.mjs",
+    "removal_commit_runner": "/home/ubuntu/holymedia-google-acceptance-harness/run-acceptance-d-remove-commit.py",
+    "removal_module_sha256": "1d9a584579c9d33b2cf9f5d9dbc1e6f2891ce81980a4bb9a62480d450cd19e76",
+    "e_create_commit_entrypoint": "acceptance-e-create-commit.mjs",
+    "e_create_commit_guard": "acceptance-e-create-commit-guard.mjs",
+    "e_create_commit_runner": "/home/ubuntu/holymedia-google-acceptance-harness/run-acceptance-e-create-commit.py",
+    "e_members_commit_entrypoint": "acceptance-e-members-commit.mjs",
+    "e_members_commit_guard": "acceptance-e-members-commit-guard.mjs",
+    "e_members_commit_runner": "/home/ubuntu/holymedia-google-acceptance-harness/run-acceptance-e-members-commit.py",
+    "e_members_guard_tests": 6,
+    "e_members_bound_provider_resource": "customers/8590146099/sharedSets/12261567996"
+  },
+  "security_backlog": {
+    "status": "OPEN_BEFORE_FUTURE_WEB_DEPLOY_REVIEW",
+    "file": "artifacts/security-backlog/nextjs-image-optimization-GHSA-cjq9-62q9-8jv4-20261008.json",
+    "upgrade_performed": false,
+    "active_probes": false,
+    "advisory": "https://github.com/advisories/GHSA-cjq9-62q9-8jv4"
+  },
+  "e_approval_gateway": {
+    "url_origin": "http://localhost:4401",
+    "view_status": 200,
+    "operation": "negative_add",
+    "rows": 3,
+    "approved": false,
+    "approval_performed": false
+  }
+}
