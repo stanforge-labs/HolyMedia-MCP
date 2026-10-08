@@ -106,6 +106,7 @@ test("Claude consent is accessible, theme-aware and binds the selected company",
     transaction_id: transaction,
     workspace_id: secondWorkspace,
     decision: "allow",
+    approved_scope: "adforge:mcp:read",
   });
 });
 
