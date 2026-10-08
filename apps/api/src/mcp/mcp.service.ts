@@ -1,4 +1,9 @@
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import {
+  GOOGLE_STAGE2_TOOLS,
+  stage2ToolIntent,
+  stage2ToolSchema,
+} from "./mcp-google-stage2-schema.js";
 import type { ProviderId } from "@holymedia/contracts";
 import type {
   ProviderCampaign,
@@ -48,6 +53,7 @@ const providerAliases: Record<string, ProviderId> = {
 };
 
 export const V1_COMPATIBLE_MCP_TOOLS = [
+  ...GOOGLE_STAGE2_TOOLS,
   ...GOOGLE_STAGE1_TOOLS,
   "analyze_audiences",
   "analyze_site_improvements",
@@ -471,12 +477,15 @@ export class McpService {
                 ? "Prepare a campaign activation preview. Google Ads checks launch prerequisites and exposes warnings; changes only campaign status, without hidden ad-group/ad activation. Requires browser approval and commit_preview."
                 : name === "preview_pause_campaign"
                   ? "Prepare a campaign pause preview. Google Ads supports ENABLED Search campaigns: validates only, requires browser approval and separate commit_preview, then rereads PAUSED. Does not change groups/ads; stopping delivery does not require launch readiness. Existing Meta semantics unchanged."
-                  : (stage1Description(name) ?? toolDescription(name)),
+                  : name === "google_ads_bid_budget_preview"
+                    ? "Stage 2 gated typed bid/budget preview: absolute/percent changes, account currency micros, shared budget impact, >50% and automated bidding warnings. Validate only; requires existing browser approval and immutable commit_preview. No strategy/status changes."
+                    : (stage1Description(name) ?? toolDescription(name)),
       ...([
         "pause_entities_preview",
         "update_entity_status_preview",
         "commit_preview",
         ...GOOGLE_STAGE1_TOOLS,
+        ...GOOGLE_STAGE2_TOOLS,
         "create_keyword_from_brief",
         "preview_update_object",
         "preview_delete_or_archive_object",
@@ -498,7 +507,23 @@ export class McpService {
             },
           }
         : {}),
-      inputSchema: stage0ToolSchema(name) ??
+      inputSchema: (name === "preview_change_campaign_budget"
+        ? {
+            oneOf: [
+              stage2ToolSchema(name),
+              {
+                type: "object",
+                not: {
+                  required: ["provider"],
+                  properties: { provider: { const: "GOOGLE_ADS" } },
+                },
+                description:
+                  "Unchanged legacy Meta budget contract; Google must use the closed typed items branch.",
+              },
+            ],
+          }
+        : stage2ToolSchema(name)) ??
+        stage0ToolSchema(name) ??
         stage1ToolSchema(name) ??
         keywordStatusToolSchema(name) ??
         metaReadSchema(name) ??
@@ -525,6 +550,18 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (
+      GOOGLE_STAGE2_TOOLS.includes(name) ||
+      (args.provider === "GOOGLE_ADS" &&
+        name === "preview_change_campaign_budget")
+    ) {
+      const intent = stage2ToolIntent(name, args);
+      return this.previews.createGoogleStage2(
+        this.servicePrincipal(principal),
+        text(args.account_id),
+        intent,
+      );
+    }
     if (
       args.provider === "GOOGLE_ADS" &&
       [

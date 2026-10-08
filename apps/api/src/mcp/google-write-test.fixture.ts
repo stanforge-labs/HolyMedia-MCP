@@ -37,11 +37,13 @@ export function object(value: unknown): MockRow {
 }
 export function fixture(
   stage0 = false,
-  options: { strictCampaignAssetGaql?: boolean } = {},
+  options: { strictCampaignAssetGaql?: boolean; stage2?: boolean } = {},
 ) {
   for (const [key, value] of Object.entries({
     NODE_ENV: "test",
     PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+    PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: options.stage2 ? "true" : "false",
+    ...(options.stage2 ? { PROVIDER_GOOGLE_API_VERSION: "v24" } : {}),
     GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: customer,
     V2_PREVIEW_ONLY: "false",
     V2_CONFIRMED_WRITE_ENABLED: "true",
@@ -53,6 +55,7 @@ export function fixture(
     PROVIDER_GOOGLE_CLIENT_ID: "fixture-client",
     PROVIDER_GOOGLE_CLIENT_SECRET: "fixture-secret",
     PROVIDER_GOOGLE_REDIRECT_URI: "https://example.test/oauth",
+    PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: options.stage2 ? "true" : "false",
   });
   const adapter = new GoogleAdsAdapter(config),
     context = {
@@ -104,6 +107,8 @@ export function fixture(
     outage = false;
   const requests: { url: string; body: MockRow; headers: MockRow }[] = [];
   const entityKeys: Record<string, string> = {
+    adGroups: "adGroup",
+    campaignBudgets: "campaignBudget",
     adGroupCriteria: "adGroupCriterion",
     campaignCriteria: "campaignCriterion",
     sharedSets: "sharedSet",
@@ -414,6 +419,25 @@ export function fixture(
         const exactResources = [
           ...query.matchAll(/(?:resource_name) = '([^']+)'/g),
         ].map((x) => x[1]);
+        if (options.stage2) {
+          const criterion = query.match(
+            /ad_group_criterion\.criterion_id = (\d+)/,
+          )?.[1];
+          if (criterion)
+            rows = rows.filter(
+              (r) =>
+                String(object(r.adGroupCriterion).criterionId) === criterion,
+            );
+          const budget = query.match(
+            /campaign\.campaign_budget = '([^']+)'/,
+          )?.[1];
+          if (budget)
+            rows = rows.filter(
+              (r) =>
+                object(r.campaign).campaignBudget === budget &&
+                object(r.campaign).status !== "REMOVED",
+            );
+        }
         const inResources = query.includes("resource_name IN")
           ? [...query.matchAll(/'([^']+)'/g)].map((x) => x[1])
           : [];
@@ -696,6 +720,16 @@ export function fixture(
     },
   };
   const providers = {
+    googleStage2: vi.fn(
+      async (
+        _w: string,
+        _c: string,
+        _a: string,
+        action: Parameters<GoogleAdsAdapter["stage2"]>[1],
+        input: unknown,
+        results?: Stage1MutationResult[],
+      ) => adapter.stage2(context, action, input, results),
+    ),
     googleStage0: vi.fn(
       async (
         _w: string,

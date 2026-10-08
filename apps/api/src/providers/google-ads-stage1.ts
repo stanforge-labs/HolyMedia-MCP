@@ -1004,7 +1004,10 @@ export function providerOperation(operation: Stage1Operation) {
 }
 export function decodeStage1Mutation(
   payload: unknown,
-  plan: Stage1Plan,
+  plan: {
+    account_id: string;
+    operations: { kind: string; resource_name: string | null }[];
+  },
   validateOnly: boolean,
 ): Stage1MutationResult[] {
   const root = record(payload),

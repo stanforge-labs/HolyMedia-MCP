@@ -1,4 +1,5 @@
 import { safeGet } from "@holymedia/site-audit";
+import type { Stage2Plan } from "./google-ads-stage2.js";
 import {
   campaignBriefSchema,
   campaignIdSchema,
@@ -47,7 +48,7 @@ export type Stage0Plan = {
   items: Stage1Plan["items"];
   summary: JsonRow;
 };
-export type GoogleWritePlan = Stage0Plan | Stage1Plan;
+export type GoogleWritePlan = Stage0Plan | Stage1Plan | Stage2Plan;
 export const row = (v: unknown): JsonRow =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as JsonRow) : {};
 const list = (v: unknown): JsonRow[] => (Array.isArray(v) ? v.map(row) : []);
