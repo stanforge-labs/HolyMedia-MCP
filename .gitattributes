@@ -1,4 +1,11 @@
-*.sh text eol=lf
-*.service.example text eol=lf
-*.conf text eol=lf
-*.env.example text eol=lf
+# Immutable reviewed evidence: preserve the exact historical bytes across OS.
+artifacts/google-live-acceptance/acceptance-stage0-v4-readiness-preflight-20261008.json -text
+artifacts/google-live-acceptance/build-stage0-T-renew-20261008T171901Z.mjs -text
+artifacts/google-live-acceptance/build-stage0-readiness-20261008.mjs -text
+artifacts/google-live-acceptance/stage0-readiness-20261008/harness/stage0-readiness.mjs -text
+artifacts/google-live-acceptance/stage0-readiness-v2-20261008/harness/stage0-v2-readiness.mjs -text
+artifacts/google-live-acceptance/stage0-readiness-v3-20261008/harness/stage0-v3-readiness.mjs -text
+artifacts/google-live-acceptance/stage0-readiness-v4-20261008/harness/stage0-v4-readiness.mjs -text
+artifacts/google-live-acceptance/stage01-parallel-recovery-stage0-checkpoint-20261008.json -text
+artifacts/google-live-acceptance/stage1-final-live-acceptance-20261008T183050Z.json -text
+artifacts/google-live-acceptance/stage1-completion-checkpoint-20261008-e-created-members-awaiting-approval.json -text

@@ -1,0 +1,3017 @@
+{
+  "acceptance_test": "STAGE0_T_U_V_W",
+  "phase": "prepare",
+  "mode": "prepare",
+  "branch": "codex/google-ads-write-live-acceptance",
+  "HEAD": "7ee9d30047872a25020fed8076494dd9d9504e7a",
+  "test_customer_id": "8590146099",
+  "campaign_id": "24324170853",
+  "ad_group_id": "206587491811",
+  "criterion_id": "11479221",
+  "sanitized_input": null,
+  "result": "STAGE0_INDEPENDENT_U_V_PASS_T_W_PREPARED",
+  "production_changed": false,
+  "main_changed": false,
+  "runtime_product_module_sha256": "1d9a584579c9d33b2cf9f5d9dbc1e6f2891ce81980a4bb9a62480d450cd19e76",
+  "test_account": true,
+  "provider_state_before": {
+    "fixture": {
+      "campaign_budget": [
+        {
+          "resourceName": "customers/8590146099/campaignBudgets/15934365976",
+          "deliveryMethod": "STANDARD",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "amountMicros": "2000000",
+          "explicitlyShared": false
+        }
+      ],
+      "campaign": [
+        {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "status": "PAUSED",
+          "advertisingChannelType": "SEARCH",
+          "networkSettings": {
+            "targetGoogleSearch": true,
+            "targetSearchNetwork": false,
+            "targetContentNetwork": false,
+            "targetPartnerSearchNetwork": false
+          },
+          "biddingStrategyType": "MANUAL_CPC",
+          "geoTargetTypeSetting": {
+            "positiveGeoTargetType": "PRESENCE",
+            "negativeGeoTargetType": "PRESENCE"
+          },
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853",
+          "campaignBudget": "customers/8590146099/campaignBudgets/15934365976",
+          "finalUrlSuffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
+          "startDateTime": "2026-10-07 22:05:17"
+        }
+      ],
+      "campaign_criterion": [
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~1031",
+          "language": {
+            "languageConstant": "languageConstants/1031"
+          },
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~9235214",
+          "location": {
+            "geoTargetConstant": "geoTargetConstants/9235214"
+          },
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "negative": false
+        }
+      ],
+      "ad_group": [
+        {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "status": "PAUSED",
+          "type": "SEARCH_STANDARD",
+          "id": "206587491811",
+          "name": "Acceptance Group",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "cpcBidMicros": "100000"
+        }
+      ],
+      "ad_group_criterion": [
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437132",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test ads"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437892",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436852",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test ads"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437612",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437812",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436932",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising tools"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437332",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437412",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~334435613703",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437572",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436692",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437172",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test marketing"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260438052",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437372",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~448674100268",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437652",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436892",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing tools"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437852",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437092",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search tools"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        }
+      ],
+      "ad_group_ad": [
+        {
+          "resourceName": "customers/8590146099/adGroupAds/206587491811~827349040712",
+          "status": "PAUSED",
+          "ad": {
+            "responsiveSearchAd": {
+              "headlines": [
+                {
+                  "text": "Test Search Campaign",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                },
+                {
+                  "text": "HolyMedia MCP Test",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                },
+                {
+                  "text": "Sample Advertising Tools",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval.",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment.",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                }
+              ]
+            },
+            "resourceName": "customers/8590146099/ads/827349040712",
+            "finalUrls": [
+              "https://mcp.holymedia.kz/"
+            ]
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811"
+        }
+      ]
+    },
+    "campaign_negatives": [],
+    "shared_sets": [
+      {
+        "sharedSet": {
+          "resourceName": "customers/8590146099/sharedSets/12261567996",
+          "type": "NEGATIVE_KEYWORDS",
+          "status": "ENABLED",
+          "id": "12261567996",
+          "name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z"
+        }
+      }
+    ],
+    "campaign_shared_sets": [
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "campaignSharedSet": {
+          "resourceName": "customers/8590146099/campaignSharedSets/24324170853~12261567996",
+          "status": "REMOVED",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996"
+        }
+      }
+    ],
+    "keyword_inventory": [
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11479221",
+          "status": "PAUSED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing"
+          },
+          "criterionId": "11479221",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing"
+          },
+          "criterionId": "11743561",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~334435613703",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search"
+          },
+          "criterionId": "334435613703",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~448674100268",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising"
+          },
+          "criterionId": "448674100268",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436692",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test"
+          },
+          "criterionId": "2508260436692",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436852",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test ads"
+          },
+          "criterionId": "2508260436852",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436892",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing tools"
+          },
+          "criterionId": "2508260436892",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436932",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising tools"
+          },
+          "criterionId": "2508260436932",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437092",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search tools"
+          },
+          "criterionId": "2508260437092",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437132",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test ads"
+          },
+          "criterionId": "2508260437132",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437172",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test marketing"
+          },
+          "criterionId": "2508260437172",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437332",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing demo"
+          },
+          "criterionId": "2508260437332",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437372",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising demo"
+          },
+          "criterionId": "2508260437372",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437412",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search demo"
+          },
+          "criterionId": "2508260437412",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437572",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test demo"
+          },
+          "criterionId": "2508260437572",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437612",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test demo"
+          },
+          "criterionId": "2508260437612",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437652",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing sample"
+          },
+          "criterionId": "2508260437652",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437812",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising sample"
+          },
+          "criterionId": "2508260437812",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437852",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search sample"
+          },
+          "criterionId": "2508260437852",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437892",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test sample"
+          },
+          "criterionId": "2508260437892",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260438052",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test sample"
+          },
+          "criterionId": "2508260438052",
+          "negative": false
+        }
+      }
+    ],
+    "shared_members": [
+      {
+        "sharedCriterion": {
+          "resourceName": "customers/8590146099/sharedCriteria/12261567996~2507879858781",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "hm acceptance cedar"
+          },
+          "type": "KEYWORD",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996",
+          "criterionId": "2507879858781"
+        }
+      },
+      {
+        "sharedCriterion": {
+          "resourceName": "customers/8590146099/sharedCriteria/12261567996~2507879858821",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "hm acceptance maple"
+          },
+          "type": "KEYWORD",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996",
+          "criterionId": "2507879858821"
+        }
+      },
+      {
+        "sharedCriterion": {
+          "resourceName": "customers/8590146099/sharedCriteria/12261567996~2507879866981",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "hm acceptance olive"
+          },
+          "type": "KEYWORD",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996",
+          "criterionId": "2507879866981"
+        }
+      }
+    ],
+    "shared_list_links": []
+  },
+  "last_mcp_error": {
+    "tool": "create_campaign_from_brief",
+    "http_status": 200,
+    "code": "google_brief_invalid",
+    "message": "Неверное поле brief.ad_groups[0].rsa[0].headlines[0].text: Headline: 1–30 characters (wide characters count double).",
+    "google_errors": []
+  },
+  "U": {
+    "status": "LIVE_INPUT_REJECTION_PASS",
+    "result": {
+      "failed": true,
+      "code": "google_brief_invalid",
+      "message": "Неверное поле brief.ad_groups[0].rsa[0].headlines[0].text: Headline: 1–30 characters (wide characters count double)."
+    },
+    "field_intent": "ad_groups[0].rsa[0].headlines[0].text",
+    "headline_length": 31,
+    "provider_calls": 0,
+    "provider_writes": 0,
+    "preview_created": false
+  },
+  "V": {
+    "status": "LIVE_READ_ONLY_PASS",
+    "campaign_id": "24324170853",
+    "goal_status": "WARNING",
+    "ready": false,
+    "can_resume": true,
+    "checklist": [
+      {
+        "code": "campaign_status",
+        "status": "PASS",
+        "message": "Campaign PAUSED; активация не включает группы и ads."
+      },
+      {
+        "code": "budget",
+        "status": "PASS",
+        "message": "Проверка ежедневного бюджета.",
+        "details": [
+          {
+            "resourceName": "customers/8590146099/campaignBudgets/15934365976",
+            "deliveryMethod": "STANDARD",
+            "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+            "amountMicros": "2000000",
+            "explicitlyShared": false
+          }
+        ]
+      },
+      {
+        "code": "strategy",
+        "status": "PASS",
+        "message": "Поддерживаемая Search bidding strategy."
+      },
+      {
+        "code": "geo",
+        "status": "PASS",
+        "message": "Включённые geo targets."
+      },
+      {
+        "code": "presence",
+        "status": "PASS",
+        "message": "Geo mode PRESENCE."
+      },
+      {
+        "code": "languages",
+        "status": "PASS",
+        "message": "Языковой таргетинг."
+      },
+      {
+        "code": "ad_groups",
+        "status": "PASS",
+        "message": "Группы объявлений."
+      },
+      {
+        "code": "keywords",
+        "status": "PASS",
+        "message": "Положительные ключевые слова."
+      },
+      {
+        "code": "rsa",
+        "status": "PASS",
+        "message": "RSA присутствуют."
+      },
+      {
+        "code": "delivery_entities",
+        "status": "WARNING",
+        "message": "PAUSED группы/ads не показываются после включения только кампании."
+      },
+      {
+        "code": "policy",
+        "status": "WARNING",
+        "message": "Google policy/moderation status; pending/unknown не считается approved.",
+        "details": [
+          {
+            "reviewStatus": "REVIEW_IN_PROGRESS",
+            "approvalStatus": "UNKNOWN"
+          }
+        ]
+      },
+      {
+        "code": "conversion_goal",
+        "status": "WARNING",
+        "message": "Conversion goal отсутствует или нет usable primary action.",
+        "details": []
+      },
+      {
+        "code": "conversion_data",
+        "status": "WARNING",
+        "message": "Нет/неизвестны conversions за последние 30 дней.",
+        "details": []
+      },
+      {
+        "code": "final_urls",
+        "status": "PASS",
+        "message": "Ограниченные безопасные HTTP-проверки landing URLs.",
+        "details": [
+          {
+            "url": "https://mcp.holymedia.kz/",
+            "ok": true,
+            "http_status": 200,
+            "final_url": "https://mcp.holymedia.kz/"
+          }
+        ]
+      },
+      {
+        "code": "tracking",
+        "status": "PASS",
+        "message": "Campaign UTM/tracking.",
+        "details": {
+          "suffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
+          "template": null
+        }
+      },
+      {
+        "code": "assets",
+        "status": "WARNING",
+        "message": "Campaign assets.",
+        "details": []
+      }
+    ]
+  },
+  "T": {
+    "status": "READ_ONLY_PLAN_PREPARED_NOT_GOOGLE_VALIDATED",
+    "brief": {
+      "provider": "GOOGLE_ADS",
+      "account_id": "8590146099",
+      "campaign_name": "HM_MCP_STAGE0_T_20261008T121731Z",
+      "daily_budget": {
+        "amount": "2",
+        "currency": "USD"
+      },
+      "bidding_strategy": "MANUAL_CPC",
+      "locations": [
+        {
+          "name": "Алматы",
+          "country_code": "KZ",
+          "geo_target_id": "9235214"
+        }
+      ],
+      "languages": [
+        "Russian"
+      ],
+      "utm": {
+        "final_url_suffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}"
+      },
+      "ad_groups": [
+        {
+          "name": "Stage0 Acceptance Group 1",
+          "default_bid": {
+            "amount": "0.10",
+            "currency": "USD"
+          },
+          "keywords": [
+            {
+              "text": "test marketing tools group 1",
+              "match_type": "EXACT"
+            },
+            {
+              "text": "test advertising demo group 1",
+              "match_type": "PHRASE"
+            },
+            {
+              "text": "test search sample group 1",
+              "match_type": "EXACT"
+            },
+            {
+              "text": "holy media testing group 1",
+              "match_type": "PHRASE"
+            },
+            {
+              "text": "mcp sample ads group 1",
+              "match_type": "EXACT"
+            }
+          ],
+          "rsa": [
+            {
+              "final_url": "https://mcp.holymedia.kz/",
+              "headlines": [
+                {
+                  "text": "Test Search Campaign"
+                },
+                {
+                  "text": "HolyMedia MCP Test"
+                },
+                {
+                  "text": "Sample Advertising Tools"
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval."
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Stage0 Acceptance Group 2",
+          "default_bid": {
+            "amount": "0.10",
+            "currency": "USD"
+          },
+          "keywords": [
+            {
+              "text": "test marketing tools group 2",
+              "match_type": "EXACT"
+            },
+            {
+              "text": "test advertising demo group 2",
+              "match_type": "PHRASE"
+            },
+            {
+              "text": "test search sample group 2",
+              "match_type": "EXACT"
+            },
+            {
+              "text": "holy media testing group 2",
+              "match_type": "PHRASE"
+            },
+            {
+              "text": "mcp sample ads group 2",
+              "match_type": "EXACT"
+            }
+          ],
+          "rsa": [
+            {
+              "final_url": "https://mcp.holymedia.kz/",
+              "headlines": [
+                {
+                  "text": "Test Search Campaign"
+                },
+                {
+                  "text": "HolyMedia MCP Test"
+                },
+                {
+                  "text": "Sample Advertising Tools"
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval."
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "assets": {
+        "sitelinks": [
+          {
+            "text": "Test Overview",
+            "final_url": "https://mcp.holymedia.kz/?acceptance_stage0_link=0"
+          },
+          {
+            "text": "Test Tools",
+            "final_url": "https://mcp.holymedia.kz/?acceptance_stage0_link=1"
+          },
+          {
+            "text": "Test Information",
+            "final_url": "https://mcp.holymedia.kz/?acceptance_stage0_link=2"
+          },
+          {
+            "text": "Test Support",
+            "final_url": "https://mcp.holymedia.kz/?acceptance_stage0_link=3"
+          }
+        ]
+      }
+    },
+    "operation_count": 26,
+    "summary": {
+      "campaign_name": "HM_MCP_STAGE0_T_20261008T121731Z",
+      "currency": "USD",
+      "timezone": "Asia/Almaty",
+      "budget": {
+        "amount": "2",
+        "currency": "USD",
+        "micros": "2000000",
+        "shared": false
+      },
+      "strategy": "MANUAL_CPC",
+      "networks": {
+        "targetGoogleSearch": true,
+        "targetSearchNetwork": false,
+        "targetContentNetwork": false,
+        "targetPartnerSearchNetwork": false
+      },
+      "dates": {
+        "start": null,
+        "end": null
+      },
+      "locations": [
+        {
+          "input": "Алматы",
+          "resourceName": "geoTargetConstants/9235214",
+          "status": "ENABLED",
+          "id": "9235214",
+          "name": "Алматы",
+          "countryCode": "KZ",
+          "targetType": "City",
+          "canonicalName": "Almaty,Kazakhstan",
+          "exclude": false,
+          "presence": "PRESENCE"
+        }
+      ],
+      "languages": [
+        {
+          "input": "Russian",
+          "resourceName": "languageConstants/1031",
+          "id": "1031",
+          "code": "ru",
+          "name": "Russian",
+          "targetable": true
+        }
+      ],
+      "conversion_goals": [],
+      "ad_groups_count": 2,
+      "keywords_count": 10,
+      "negatives_count": 0,
+      "rsa_count": 2,
+      "assets_count": 4,
+      "utm": {
+        "finalUrlSuffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}"
+      },
+      "operation_count": 26,
+      "warnings": [
+        "Conversion goals явно не выбраны: проверьте inherited customer goals перед запуском."
+      ],
+      "initial_status": "PAUSED"
+    },
+    "object_plan": [
+      {
+        "kind": "campaignBudget",
+        "fields": {
+          "resourceName": "customers/8590146099/campaignBudgets/-1",
+          "amountMicros": "2000000",
+          "explicitlyShared": false,
+          "deliveryMethod": "STANDARD"
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/campaignBudgets/-1",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/campaignBudgets/-1",
+          "amountMicros": "2000000",
+          "explicitlyShared": false,
+          "deliveryMethod": "STANDARD",
+          "name": "HM_MCP_STAGE0_T_20261008T121731Z"
+        },
+        "before": null,
+        "row": 0
+      },
+      {
+        "kind": "campaign",
+        "fields": {
+          "resourceName": "customers/8590146099/campaigns/-2",
+          "name": "HM_MCP_STAGE0_T_20261008T121731Z",
+          "status": "PAUSED",
+          "advertisingChannelType": "SEARCH",
+          "campaignBudget": "customers/8590146099/campaignBudgets/-1",
+          "manualCpc": {},
+          "networkSettings": {
+            "targetGoogleSearch": true,
+            "targetSearchNetwork": false,
+            "targetContentNetwork": false,
+            "targetPartnerSearchNetwork": false
+          },
+          "geoTargetTypeSetting": {
+            "positiveGeoTargetType": "PRESENCE",
+            "negativeGeoTargetType": "PRESENCE"
+          },
+          "containsEuPoliticalAdvertising": "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING",
+          "finalUrlSuffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}"
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/campaigns/-2",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/campaigns/-2",
+          "name": "HM_MCP_STAGE0_T_20261008T121731Z",
+          "status": "PAUSED",
+          "advertisingChannelType": "SEARCH",
+          "campaignBudget": "customers/8590146099/campaignBudgets/-1",
+          "manualCpc": {},
+          "networkSettings": {
+            "targetGoogleSearch": true,
+            "targetSearchNetwork": false,
+            "targetContentNetwork": false,
+            "targetPartnerSearchNetwork": false
+          },
+          "geoTargetTypeSetting": {
+            "positiveGeoTargetType": "PRESENCE",
+            "negativeGeoTargetType": "PRESENCE"
+          },
+          "containsEuPoliticalAdvertising": "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING",
+          "finalUrlSuffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}"
+        },
+        "before": null,
+        "row": 1
+      },
+      {
+        "kind": "campaignCriterion",
+        "fields": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "negative": false,
+          "location": {
+            "geoTargetConstant": "geoTargetConstants/9235214"
+          }
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "negative": false,
+          "location": {
+            "geoTargetConstant": "geoTargetConstants/9235214"
+          }
+        },
+        "before": null,
+        "row": 2
+      },
+      {
+        "kind": "campaignCriterion",
+        "fields": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "language": {
+            "languageConstant": "languageConstants/1031"
+          }
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "language": {
+            "languageConstant": "languageConstants/1031"
+          }
+        },
+        "before": null,
+        "row": 3
+      },
+      {
+        "kind": "adGroup",
+        "fields": {
+          "resourceName": "customers/8590146099/adGroups/-3",
+          "name": "Stage0 Acceptance Group 1",
+          "campaign": "customers/8590146099/campaigns/-2",
+          "status": "PAUSED",
+          "type": "SEARCH_STANDARD",
+          "cpcBidMicros": "100000"
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/adGroups/-3",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/adGroups/-3",
+          "name": "Stage0 Acceptance Group 1",
+          "campaign": "customers/8590146099/campaigns/-2",
+          "status": "PAUSED",
+          "type": "SEARCH_STANDARD",
+          "cpcBidMicros": "100000"
+        },
+        "before": null,
+        "row": 4
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "test marketing tools group 1",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "test marketing tools group 1",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 5
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "test advertising demo group 1",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "test advertising demo group 1",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 6
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "test search sample group 1",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "test search sample group 1",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 7
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "holy media testing group 1",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "holy media testing group 1",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 8
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "mcp sample ads group 1",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "keyword": {
+            "text": "mcp sample ads group 1",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 9
+      },
+      {
+        "kind": "adGroupAd",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "status": "PAUSED",
+          "ad": {
+            "finalUrls": [
+              "https://mcp.holymedia.kz/"
+            ],
+            "responsiveSearchAd": {
+              "headlines": [
+                {
+                  "text": "Test Search Campaign"
+                },
+                {
+                  "text": "HolyMedia MCP Test"
+                },
+                {
+                  "text": "Sample Advertising Tools"
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval."
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment."
+                }
+              ]
+            }
+          }
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-3",
+          "status": "PAUSED",
+          "ad": {
+            "finalUrls": [
+              "https://mcp.holymedia.kz/"
+            ],
+            "responsiveSearchAd": {
+              "headlines": [
+                {
+                  "text": "Test Search Campaign"
+                },
+                {
+                  "text": "HolyMedia MCP Test"
+                },
+                {
+                  "text": "Sample Advertising Tools"
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval."
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment."
+                }
+              ]
+            }
+          }
+        },
+        "before": null,
+        "row": 10
+      },
+      {
+        "kind": "adGroup",
+        "fields": {
+          "resourceName": "customers/8590146099/adGroups/-4",
+          "name": "Stage0 Acceptance Group 2",
+          "campaign": "customers/8590146099/campaigns/-2",
+          "status": "PAUSED",
+          "type": "SEARCH_STANDARD",
+          "cpcBidMicros": "100000"
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/adGroups/-4",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/adGroups/-4",
+          "name": "Stage0 Acceptance Group 2",
+          "campaign": "customers/8590146099/campaigns/-2",
+          "status": "PAUSED",
+          "type": "SEARCH_STANDARD",
+          "cpcBidMicros": "100000"
+        },
+        "before": null,
+        "row": 11
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "test marketing tools group 2",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "test marketing tools group 2",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 12
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "test advertising demo group 2",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "test advertising demo group 2",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 13
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "test search sample group 2",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "test search sample group 2",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 14
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "holy media testing group 2",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "holy media testing group 2",
+            "matchType": "PHRASE"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 15
+      },
+      {
+        "kind": "adGroupCriterion",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "mcp sample ads group 2",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "keyword": {
+            "text": "mcp sample ads group 2",
+            "matchType": "EXACT"
+          },
+          "negative": false,
+          "status": "ENABLED"
+        },
+        "before": null,
+        "row": 16
+      },
+      {
+        "kind": "adGroupAd",
+        "fields": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "status": "PAUSED",
+          "ad": {
+            "finalUrls": [
+              "https://mcp.holymedia.kz/"
+            ],
+            "responsiveSearchAd": {
+              "headlines": [
+                {
+                  "text": "Test Search Campaign"
+                },
+                {
+                  "text": "HolyMedia MCP Test"
+                },
+                {
+                  "text": "Sample Advertising Tools"
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval."
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment."
+                }
+              ]
+            }
+          }
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "adGroup": "customers/8590146099/adGroups/-4",
+          "status": "PAUSED",
+          "ad": {
+            "finalUrls": [
+              "https://mcp.holymedia.kz/"
+            ],
+            "responsiveSearchAd": {
+              "headlines": [
+                {
+                  "text": "Test Search Campaign"
+                },
+                {
+                  "text": "HolyMedia MCP Test"
+                },
+                {
+                  "text": "Sample Advertising Tools"
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval."
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment."
+                }
+              ]
+            }
+          }
+        },
+        "before": null,
+        "row": 17
+      },
+      {
+        "kind": "asset",
+        "fields": {
+          "resourceName": "customers/8590146099/assets/-5",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=0"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Overview"
+          }
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/assets/-5",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/assets/-5",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=0"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Overview"
+          }
+        },
+        "before": null,
+        "row": 18
+      },
+      {
+        "kind": "campaignAsset",
+        "fields": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-5",
+          "fieldType": "SITELINK"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-5",
+          "fieldType": "SITELINK"
+        },
+        "before": null,
+        "row": 19
+      },
+      {
+        "kind": "asset",
+        "fields": {
+          "resourceName": "customers/8590146099/assets/-6",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=1"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Tools"
+          }
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/assets/-6",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/assets/-6",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=1"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Tools"
+          }
+        },
+        "before": null,
+        "row": 20
+      },
+      {
+        "kind": "campaignAsset",
+        "fields": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-6",
+          "fieldType": "SITELINK"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-6",
+          "fieldType": "SITELINK"
+        },
+        "before": null,
+        "row": 21
+      },
+      {
+        "kind": "asset",
+        "fields": {
+          "resourceName": "customers/8590146099/assets/-7",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=2"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Information"
+          }
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/assets/-7",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/assets/-7",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=2"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Information"
+          }
+        },
+        "before": null,
+        "row": 22
+      },
+      {
+        "kind": "campaignAsset",
+        "fields": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-7",
+          "fieldType": "SITELINK"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-7",
+          "fieldType": "SITELINK"
+        },
+        "before": null,
+        "row": 23
+      },
+      {
+        "kind": "asset",
+        "fields": {
+          "resourceName": "customers/8590146099/assets/-8",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=3"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Support"
+          }
+        },
+        "method": "create",
+        "resource_name": "customers/8590146099/assets/-8",
+        "update_mask": null,
+        "expected": {
+          "resourceName": "customers/8590146099/assets/-8",
+          "finalUrls": [
+            "https://mcp.holymedia.kz/?acceptance_stage0_link=3"
+          ],
+          "sitelinkAsset": {
+            "linkText": "Test Support"
+          }
+        },
+        "before": null,
+        "row": 24
+      },
+      {
+        "kind": "campaignAsset",
+        "fields": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-8",
+          "fieldType": "SITELINK"
+        },
+        "method": "create",
+        "resource_name": null,
+        "update_mask": null,
+        "expected": {
+          "campaign": "customers/8590146099/campaigns/-2",
+          "asset": "customers/8590146099/assets/-8",
+          "fieldType": "SITELINK"
+        },
+        "before": null,
+        "row": 25
+      }
+    ],
+    "partial_failure": false,
+    "provider_validation": "NOT_RUN",
+    "commit": "NOT_RUN",
+    "campaign_initial": "PAUSED",
+    "groups_initial": "PAUSED",
+    "rsa_initial": "PAUSED",
+    "keywords_initial": "ENABLED_INSIDE_PAUSED_PARENTS"
+  },
+  "W": {
+    "resume_plan_prepared": true,
+    "provider_validation": "NOT_RUN",
+    "commit": "NOT_RUN",
+    "operations": [
+      {
+        "kind": "campaign",
+        "method": "update",
+        "resource_name": "customers/8590146099/campaigns/24324170853",
+        "fields": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "status": "ENABLED"
+        },
+        "update_mask": "status",
+        "expected": {
+          "status": "ENABLED"
+        },
+        "before": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "status": "PAUSED",
+          "advertisingChannelType": "SEARCH",
+          "networkSettings": {
+            "targetGoogleSearch": true,
+            "targetSearchNetwork": false,
+            "targetContentNetwork": false,
+            "targetPartnerSearchNetwork": false
+          },
+          "biddingStrategyType": "MANUAL_CPC",
+          "geoTargetTypeSetting": {
+            "positiveGeoTargetType": "PRESENCE",
+            "negativeGeoTargetType": "PRESENCE"
+          },
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853",
+          "campaignBudget": "customers/8590146099/campaignBudgets/15934365976",
+          "finalUrlSuffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
+          "startDateTime": "2026-10-07 22:05:17"
+        },
+        "row": 0
+      }
+    ],
+    "checklist": [
+      {
+        "code": "campaign_status",
+        "status": "PASS",
+        "message": "Campaign PAUSED; активация не включает группы и ads."
+      },
+      {
+        "code": "budget",
+        "status": "PASS",
+        "message": "Проверка ежедневного бюджета.",
+        "details": [
+          {
+            "resourceName": "customers/8590146099/campaignBudgets/15934365976",
+            "deliveryMethod": "STANDARD",
+            "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+            "amountMicros": "2000000",
+            "explicitlyShared": false
+          }
+        ]
+      },
+      {
+        "code": "strategy",
+        "status": "PASS",
+        "message": "Поддерживаемая Search bidding strategy."
+      },
+      {
+        "code": "geo",
+        "status": "PASS",
+        "message": "Включённые geo targets."
+      },
+      {
+        "code": "presence",
+        "status": "PASS",
+        "message": "Geo mode PRESENCE."
+      },
+      {
+        "code": "languages",
+        "status": "PASS",
+        "message": "Языковой таргетинг."
+      },
+      {
+        "code": "ad_groups",
+        "status": "PASS",
+        "message": "Группы объявлений."
+      },
+      {
+        "code": "keywords",
+        "status": "PASS",
+        "message": "Положительные ключевые слова."
+      },
+      {
+        "code": "rsa",
+        "status": "PASS",
+        "message": "RSA присутствуют."
+      },
+      {
+        "code": "delivery_entities",
+        "status": "WARNING",
+        "message": "PAUSED группы/ads не показываются после включения только кампании."
+      },
+      {
+        "code": "policy",
+        "status": "WARNING",
+        "message": "Google policy/moderation status; pending/unknown не считается approved.",
+        "details": [
+          {
+            "reviewStatus": "REVIEW_IN_PROGRESS",
+            "approvalStatus": "UNKNOWN"
+          }
+        ]
+      },
+      {
+        "code": "conversion_goal",
+        "status": "WARNING",
+        "message": "Conversion goal отсутствует или нет usable primary action.",
+        "details": []
+      },
+      {
+        "code": "conversion_data",
+        "status": "WARNING",
+        "message": "Нет/неизвестны conversions за последние 30 дней.",
+        "details": []
+      },
+      {
+        "code": "final_urls",
+        "status": "PASS",
+        "message": "Ограниченные безопасные HTTP-проверки landing URLs.",
+        "details": [
+          {
+            "url": "https://mcp.holymedia.kz/",
+            "ok": true,
+            "http_status": 200,
+            "final_url": "https://mcp.holymedia.kz/"
+          }
+        ]
+      },
+      {
+        "code": "tracking",
+        "status": "PASS",
+        "message": "Campaign UTM/tracking.",
+        "details": {
+          "suffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
+          "template": null
+        }
+      },
+      {
+        "code": "assets",
+        "status": "WARNING",
+        "message": "Campaign assets.",
+        "details": []
+      }
+    ],
+    "restoration_path": "BLOCKED_AT_BASE_HEAD_CAMPAIGN_PAUSE_NOT_IMPLEMENTED; scoped_mock_fix_separate_branch_pending"
+  },
+  "provider_state_after": {
+    "fixture": {
+      "campaign_budget": [
+        {
+          "resourceName": "customers/8590146099/campaignBudgets/15934365976",
+          "deliveryMethod": "STANDARD",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "amountMicros": "2000000",
+          "explicitlyShared": false
+        }
+      ],
+      "campaign": [
+        {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "status": "PAUSED",
+          "advertisingChannelType": "SEARCH",
+          "networkSettings": {
+            "targetGoogleSearch": true,
+            "targetSearchNetwork": false,
+            "targetContentNetwork": false,
+            "targetPartnerSearchNetwork": false
+          },
+          "biddingStrategyType": "MANUAL_CPC",
+          "geoTargetTypeSetting": {
+            "positiveGeoTargetType": "PRESENCE",
+            "negativeGeoTargetType": "PRESENCE"
+          },
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853",
+          "campaignBudget": "customers/8590146099/campaignBudgets/15934365976",
+          "finalUrlSuffix": "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
+          "startDateTime": "2026-10-07 22:05:17"
+        }
+      ],
+      "campaign_criterion": [
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~1031",
+          "language": {
+            "languageConstant": "languageConstants/1031"
+          },
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~9235214",
+          "location": {
+            "geoTargetConstant": "geoTargetConstants/9235214"
+          },
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "negative": false
+        }
+      ],
+      "ad_group": [
+        {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "status": "PAUSED",
+          "type": "SEARCH_STANDARD",
+          "id": "206587491811",
+          "name": "Acceptance Group",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "cpcBidMicros": "100000"
+        }
+      ],
+      "ad_group_criterion": [
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437132",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test ads"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437892",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436852",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test ads"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437612",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437812",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436932",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising tools"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437332",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437412",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~334435613703",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437572",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436692",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437172",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test marketing"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260438052",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437372",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising demo"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~448674100268",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437652",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436892",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing tools"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437852",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search sample"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        },
+        {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437092",
+          "status": "ENABLED",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search tools"
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811",
+          "negative": false
+        }
+      ],
+      "ad_group_ad": [
+        {
+          "resourceName": "customers/8590146099/adGroupAds/206587491811~827349040712",
+          "status": "PAUSED",
+          "ad": {
+            "responsiveSearchAd": {
+              "headlines": [
+                {
+                  "text": "Test Search Campaign",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                },
+                {
+                  "text": "HolyMedia MCP Test",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                },
+                {
+                  "text": "Sample Advertising Tools",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                }
+              ],
+              "descriptions": [
+                {
+                  "text": "A paused campaign for testing advertising tools and approval.",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                },
+                {
+                  "text": "Generic sample content for a controlled test environment.",
+                  "assetPerformanceLabel": "PENDING",
+                  "policySummaryInfo": {
+                    "reviewStatus": "REVIEW_IN_PROGRESS"
+                  }
+                }
+              ]
+            },
+            "resourceName": "customers/8590146099/ads/827349040712",
+            "finalUrls": [
+              "https://mcp.holymedia.kz/"
+            ]
+          },
+          "adGroup": "customers/8590146099/adGroups/206587491811"
+        }
+      ]
+    },
+    "campaign_negatives": [],
+    "shared_sets": [
+      {
+        "sharedSet": {
+          "resourceName": "customers/8590146099/sharedSets/12261567996",
+          "type": "NEGATIVE_KEYWORDS",
+          "status": "ENABLED",
+          "id": "12261567996",
+          "name": "HM_MCP_ACCEPTANCE_SHARED_20261008T092000Z"
+        }
+      }
+    ],
+    "campaign_shared_sets": [
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "campaignSharedSet": {
+          "resourceName": "customers/8590146099/campaignSharedSets/24324170853~12261567996",
+          "status": "REMOVED",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996"
+        }
+      }
+    ],
+    "keyword_inventory": [
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11479221",
+          "status": "PAUSED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing"
+          },
+          "criterionId": "11479221",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing"
+          },
+          "criterionId": "11743561",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~334435613703",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search"
+          },
+          "criterionId": "334435613703",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~448674100268",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising"
+          },
+          "criterionId": "448674100268",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436692",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test"
+          },
+          "criterionId": "2508260436692",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436852",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test ads"
+          },
+          "criterionId": "2508260436852",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436892",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing tools"
+          },
+          "criterionId": "2508260436892",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260436932",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising tools"
+          },
+          "criterionId": "2508260436932",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437092",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search tools"
+          },
+          "criterionId": "2508260437092",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437132",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test ads"
+          },
+          "criterionId": "2508260437132",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437172",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test marketing"
+          },
+          "criterionId": "2508260437172",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437332",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test marketing demo"
+          },
+          "criterionId": "2508260437332",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437372",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test advertising demo"
+          },
+          "criterionId": "2508260437372",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437412",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test search demo"
+          },
+          "criterionId": "2508260437412",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437572",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "holy media test demo"
+          },
+          "criterionId": "2508260437572",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437612",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "mcp test demo"
+          },
+          "criterionId": "2508260437612",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437652",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test marketing sample"
+          },
+          "criterionId": "2508260437652",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437812",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "test advertising sample"
+          },
+          "criterionId": "2508260437812",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437852",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "test search sample"
+          },
+          "criterionId": "2508260437852",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260437892",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "holy media test sample"
+          },
+          "criterionId": "2508260437892",
+          "negative": false
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "id": "24324170853"
+        },
+        "adGroup": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "id": "206587491811",
+          "name": "Acceptance Group"
+        },
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~2508260438052",
+          "status": "ENABLED",
+          "type": "KEYWORD",
+          "keyword": {
+            "matchType": "PHRASE",
+            "text": "mcp test sample"
+          },
+          "criterionId": "2508260438052",
+          "negative": false
+        }
+      }
+    ],
+    "shared_members": [
+      {
+        "sharedCriterion": {
+          "resourceName": "customers/8590146099/sharedCriteria/12261567996~2507879858781",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "hm acceptance cedar"
+          },
+          "type": "KEYWORD",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996",
+          "criterionId": "2507879858781"
+        }
+      },
+      {
+        "sharedCriterion": {
+          "resourceName": "customers/8590146099/sharedCriteria/12261567996~2507879858821",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "hm acceptance maple"
+          },
+          "type": "KEYWORD",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996",
+          "criterionId": "2507879858821"
+        }
+      },
+      {
+        "sharedCriterion": {
+          "resourceName": "customers/8590146099/sharedCriteria/12261567996~2507879866981",
+          "keyword": {
+            "matchType": "EXACT",
+            "text": "hm acceptance olive"
+          },
+          "type": "KEYWORD",
+          "sharedSet": "customers/8590146099/sharedSets/12261567996",
+          "criterionId": "2507879866981"
+        }
+      }
+    ],
+    "shared_list_links": []
+  },
+  "before_after_unchanged": true,
+  "historical_evidence_unchanged": true,
+  "provider_read_call_count": 62,
+  "validate_only_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "oauth_refresh_call_count": 0,
+  "timestamp": "2026-10-08T12:18:04.993Z"
+}

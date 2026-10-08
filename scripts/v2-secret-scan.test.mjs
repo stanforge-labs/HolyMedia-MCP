@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   hasForbiddenValue,
+  matchesReviewedArtifactEnum,
   matchesReviewedFinding,
 } from "./v2-secret-scan-policy.mjs";
 
@@ -95,4 +96,69 @@ test("existing forbidden paths and credential families were not narrowed", () =>
   assert.ok(
     source.includes("hasForbiddenValue(file, content, forbiddenValue)"),
   );
+});
+
+test("artifact enum pins require exact path, complete bytes and match digest", () => {
+  const value = "public-review-label";
+  const content = JSON.stringify({ result: value });
+  const pin = {
+    file: "reviewed.json",
+    sha256: createHash("sha256").update(content).digest("hex"),
+    matchSha256: [createHash("sha256").update(value).digest("hex")],
+  };
+  assert.equal(
+    matchesReviewedArtifactEnum(pin.file, content, value, pin),
+    true,
+  );
+  assert.equal(
+    matchesReviewedArtifactEnum("other.json", content, value, pin),
+    false,
+  );
+  assert.equal(
+    matchesReviewedArtifactEnum(pin.file, content + "\n", value, pin),
+    false,
+  );
+  assert.equal(
+    matchesReviewedArtifactEnum(pin.file, content, "other", pin),
+    false,
+  );
+  assert.equal(
+    hasForbiddenValue(pin.file, "EA" + "x".repeat(40), pattern),
+    true,
+  );
+});
+
+test("all nine reviewed immutable artifacts pass; changed content and added credentials fail", () => {
+  const files = [
+    "artifacts/google-live-acceptance/acceptance-stage0-v4-readiness-preflight-20261008.json",
+    "artifacts/google-live-acceptance/build-stage0-T-renew-20261008T171901Z.mjs",
+    "artifacts/google-live-acceptance/build-stage0-readiness-20261008.mjs",
+    "artifacts/google-live-acceptance/stage0-readiness-20261008/harness/stage0-readiness.mjs",
+    "artifacts/google-live-acceptance/stage0-readiness-v2-20261008/harness/stage0-v2-readiness.mjs",
+    "artifacts/google-live-acceptance/stage0-readiness-v3-20261008/harness/stage0-v3-readiness.mjs",
+    "artifacts/google-live-acceptance/stage0-readiness-v4-20261008/harness/stage0-v4-readiness.mjs",
+    "artifacts/google-live-acceptance/stage01-parallel-recovery-stage0-checkpoint-20261008.json",
+    "artifacts/google-live-acceptance/stage1-final-live-acceptance-20261008T183050Z.json",
+  ];
+  for (const file of files) {
+    assert.ok(
+      existsSync(file),
+      "reviewed evidence fixture must not be skipped",
+    );
+    const content = readFileSync(file, "utf8");
+    assert.equal(hasForbiddenValue(file, content, pattern), false, file);
+    assert.equal(hasForbiddenValue("other.json", content, pattern), true, file);
+    assert.equal(hasForbiddenValue(file, content + "\n", pattern), true, file);
+    for (const secret of [
+      "EA" + "x".repeat(40),
+      "GOCSPX-" + "x".repeat(25),
+      "sk-proj-" + "x".repeat(25),
+    ]) {
+      assert.equal(
+        hasForbiddenValue(file, content + secret, pattern),
+        true,
+        file,
+      );
+    }
+  }
 });
