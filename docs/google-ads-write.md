@@ -302,6 +302,7 @@ Generic tools расширены provider-aware:
 - `create_campaign_from_brief`: только preview, Google validation, summary + object plan + approval URL.
 - `get_launch_checklist`: READ current campaign + bounded landing URL probes; PASS/WARNING/FAIL.
 - `preview_resume_campaign`: отдельный campaign-only status preview, без скрытого включения groups/ads.
+- `preview_pause_campaign`: отдельный campaign-only Search PAUSE preview для ENABLED campaign; те же validate-only/approval/commit/reread/audit, без launch-readiness requirements для остановки доставки и без изменения groups/ads.
 - `clone_campaign_preview`: ограниченный fail-closed Search clone через тот же builder, target PAUSED.
 
 Google-ветви schemas concrete: unknown properties запрещены рекурсивно, размеры arrays/strings ограничены,
@@ -430,6 +431,17 @@ policy/moderation, usable goals + recent data, landing URLs, tracking, assets.
 FAIL для MAXIMIZE_CONVERSIONS. PAUSED groups/ads и unknown/pending moderation — WARNING.
 Resume запрещён при любом FAIL; остальные warnings явно входят в approval view.
 Resume меняет **только campaign.status**, groups/ads остаются прежними.
+
+Campaign PAUSE restoration — **новая отдельная операция**, не automatic rollback resume.
+Строгий input: только `provider=GOOGLE_ADS`, `account_id`, `campaign_id`; Search campaign
+должна быть ENABLED. Preview читает и сохраняет точную campaign identity/полный campaign
+snapshot, вызывает Google validate-only с одним status-only update и `partialFailure=false`.
+Не читает launch checklist/goals/landing URLs: отсутствие tracking или disapproved ads не
+должны блокировать stopping delivery. Commit требует нового persisted browser approval,
+перепроверяет тот же snapshot и все existing gates/scopes/allowlist, claims preview один раз,
+пишет attempt audit, mutates один раз и rereads PAUSED. Existing Stage1partialFailure=true
+и Public Google write OFF сохраняются. Уже PAUSED/REMOVED, non-Search, missing/foreign identity
+отклоняются без committable preview. Groups/ads не переключаются. Mock evidence не live W PASS.
 
 Landing probes используют общий SSRF-safe pinned-DNS `safeGet`, **HEAD** first;
 405/501 → bounded GET fallback. Каждое перенаправление заново проверяется, max 3,

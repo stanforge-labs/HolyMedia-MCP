@@ -1198,6 +1198,7 @@ export class ProviderService {
       | "build"
       | "clone"
       | "resume"
+      | "pause"
       | "read"
       | "validate"
       | "commit"

@@ -38,7 +38,10 @@ export type Stage0Operation = {
 export type Stage0Plan = {
   version: 0;
   account_id: string;
-  intent: { action: "campaign_create" | "campaign_resume"; brief: JsonRow };
+  intent: {
+    action: "campaign_create" | "campaign_resume" | "campaign_pause";
+    brief: JsonRow;
+  };
   checks: { query: string; rows: JsonRow[] }[];
   operations: Stage0Operation[];
   items: Stage1Plan["items"];
@@ -1431,6 +1434,79 @@ export async function launchChecklist(
       goals,
       configs,
       custom,
+    },
+  };
+}
+/** Delivery stop must not depend on launch readiness, URLs or conversion health. */
+export async function buildPausePlan(
+  account: string,
+  input: unknown,
+  read: Stage1Reader,
+): Promise<Stage0Plan> {
+  validateBriefSchema(input, campaignIdSchema);
+  const brief = row(input),
+    campaignId = String(brief.campaign_id),
+    account_id = customerId(account),
+    resourceName = `customers/${account_id}/campaigns/${campaignId}`,
+    query = stage0Query("campaign", `campaign.id = ${campaignId}`),
+    rows = await checkedRead(read, query),
+    campaign = row(rows[0]?.campaign);
+  if (
+    rows.length !== 1 ||
+    campaign.resourceName !== resourceName ||
+    String(campaign.id) !== campaignId
+  )
+    error(
+      "google_campaign_unavailable",
+      "Google не вернул однозначную кампанию выбранного аккаунта.",
+    );
+  if (campaign.advertisingChannelType !== "SEARCH")
+    error(
+      "google_campaign_type_unsupported",
+      "Campaign PAUSE preview поддерживает только Search campaign.",
+    );
+  if (campaign.status !== "ENABLED")
+    error(
+      "google_campaign_status_invalid",
+      "Pause требует ENABLED campaign; no-op и REMOVED не записываются.",
+    );
+  const operation: Stage0Operation = {
+    kind: "campaign",
+    method: "update",
+    resource_name: resourceName,
+    fields: { resourceName, status: "PAUSED" },
+    update_mask: "status",
+    expected: { status: "PAUSED" },
+    before: campaign,
+    row: 0,
+  };
+  return {
+    version: 0,
+    account_id,
+    intent: { action: "campaign_pause", brief },
+    checks: [{ query, rows }],
+    operations: [operation],
+    items: [
+      {
+        item: 0,
+        keyword: String(campaign.name),
+        campaign_id: campaignId,
+        campaign_name: String(campaign.name),
+        ad_group_id: "",
+        ad_group_name: "",
+        before: campaign,
+        after: operation.fields,
+        warnings: [
+          "Приостанавливается только campaign. Группы/ads не изменяются; повторный запуск требует отдельного resume preview.",
+        ],
+        conflicts: [],
+        duplicate_status: "none",
+        provider_operations: [0],
+      },
+    ],
+    summary: {
+      strategy: campaign.biddingStrategyType,
+      campaign_name: campaign.name,
     },
   };
 }

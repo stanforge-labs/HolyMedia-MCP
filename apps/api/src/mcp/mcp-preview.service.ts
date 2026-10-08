@@ -1214,7 +1214,7 @@ export class McpPreviewService {
   public async createGoogleCampaign(
     principal: ServiceTokenPrincipal,
     input: Record<string, unknown>,
-    mode: "build" | "resume" | "clone" = "build",
+    mode: "build" | "resume" | "pause" | "clone" = "build",
   ) {
     this.ensureRead(principal);
     if (mode !== "build")
