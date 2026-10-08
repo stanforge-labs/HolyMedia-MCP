@@ -35,7 +35,10 @@ export type MockRow = Record<string, unknown>;
 export function object(value: unknown): MockRow {
   return value && typeof value === "object" ? (value as MockRow) : {};
 }
-export function fixture(stage0 = false) {
+export function fixture(
+  stage0 = false,
+  options: { strictCampaignAssetGaql?: boolean } = {},
+) {
   for (const [key, value] of Object.entries({
     NODE_ENV: "test",
     PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
@@ -347,6 +350,36 @@ export function fixture(stage0 = false) {
         const query = String(body.query),
           table = query.match(/ FROM (\w+)/)?.[1] ?? "unknown",
           key = tables[table]!;
+        if (
+          options.strictCampaignAssetGaql &&
+          table === "campaign_asset" &&
+          /campaign\.id\s*=/.test(query) &&
+          !query.split(" FROM ")[0]!.includes("campaign.id")
+        )
+          return Response.json(
+            {
+              error: {
+                code: 400,
+                status: "INVALID_ARGUMENT",
+                details: [
+                  {
+                    "@type": "google.ads.GoogleAdsFailure",
+                    errors: [
+                      {
+                        errorCode: {
+                          queryError:
+                            "EXPECTED_REFERENCED_FIELD_IN_SELECT_CLAUSE",
+                        },
+                        message:
+                          "Mock of live Google referenced segment field missing from SELECT",
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            { status: 400 },
+          );
         if (stage0 && query.includes("metrics.all_conversions"))
           return Response.json([
             { results: [{ metrics: { allConversions: 3 } }] },
@@ -392,6 +425,15 @@ export function fixture(stage0 = false) {
           rows = rows.filter((row) =>
             inResources.includes(String(object(row[key]).resourceName)),
           );
+        if (table === "campaign_asset") {
+          const campaignRef = query.match(
+            /campaign_asset\.campaign = '([^']+)'/,
+          )?.[1];
+          if (campaignRef)
+            rows = rows.filter(
+              (r) => object(r.campaignAsset).campaign === campaignRef,
+            );
+        }
         for (const [field, objKey] of [
           ["campaign", "campaign"],
           ["ad_group", "adGroup"],

@@ -1224,7 +1224,10 @@ export async function launchChecklist(
       "adGroupAd",
       `${filter} AND ad_group_ad.status != REMOVED`,
     ),
-    assets = await fetchKind("campaignAsset", filter),
+    assets = await fetchKind(
+      "campaignAsset",
+      `campaign_asset.campaign = ${quote(`${prefix}/campaigns/${campaignId}`)}`,
+    ),
     goals = await fetchKind("campaignConversionGoal", filter);
   const actions = list(await read(actionsQuery)).map((r) =>
     row(r.conversionAction),
