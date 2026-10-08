@@ -1,0 +1,215 @@
+{
+  "checkpoint_at": "2026-10-08T20:47:00Z",
+  "checkpoint_name": "STAGE01_COMPLETE_STAGE2_FOUNDATION",
+  "test_customer_id": "8590146099",
+  "test_customer_test_account": true,
+  "test_login_customer_id": "4378327049",
+  "branches": {
+    "live_acceptance": {
+      "branch": "codex/google-ads-write-live-acceptance",
+      "head": "8f48a5de24863021df7fac9d912116c67aa6acd2"
+    },
+    "integration": {
+      "branch": "codex/google-ads-stage01-integration-final",
+      "verified_code_head": "371f67768d0b9d3f8318fbcc44595ee711979f89",
+      "checkpoint_commit_identity": "the documentation commit containing this checkpoint"
+    },
+    "stage2": {
+      "branch": "codex/google-ads-write-stage2-foundation",
+      "head": "d2857c0ce19d22ec3aae0e0eb61b67ad5f6af6e9",
+      "included_in_stage01_release": false
+    }
+  },
+  "stage1": {
+    "A": "PASS",
+    "B": "PASS",
+    "C": "PASS",
+    "D": "PASS",
+    "E": "PASS",
+    "F": "PASS",
+    "M": "PASS",
+    "O": "PASS",
+    "P": "PASS",
+    "result": "LIVE_ACCEPTANCE_COMPLETE",
+    "completed_tests_repeated": false
+  },
+  "stage0": {
+    "T": "PASS",
+    "U": "PASS",
+    "V": "PASS",
+    "W": "PASS",
+    "result": "LIVE_ACCEPTANCE_COMPLETE"
+  },
+  "W": {
+    "campaign_id": "24339483523",
+    "resume_commit_id": "hmc_0KKdLKCQVyuAib5xkkNDUwfH8XomofZspF-TQ-7xGGA",
+    "restore_preview_id": "7624ef9e-295f-4148-9824-b42e8ac218a6",
+    "restore_approval_confirmed_at": "2026-10-08T20:04:53.527Z",
+    "restore_approval_audit_at": "2026-10-08T20:04:53.544Z",
+    "restore_commit_id": "hmc_n81Z_1zIgtR8ZWhBrcgHYtmRav7wJckZAxC4z8QE6Cs",
+    "restore_result": "VERIFIED",
+    "persisted_human_approval_session_audit_ttl_and_digest_valid": true,
+    "commit_attempts_this_continuation": 1,
+    "automatic_retries": 0,
+    "partial_failure": false,
+    "independent_T_structure_verified": "26/26",
+    "separate_resume_and_restore_journal_entries": true,
+    "restore_evidence": "W-continuation-20261009/acceptance-stage0-W-restore-commit-20261009-commit-evidence.json"
+  },
+  "provider_final_state_checked_at": "2026-10-08T20:07:00Z",
+  "provider_final_state": {
+    "nonremoved_campaigns": [
+      { "id": "24324170853", "status": "PAUSED" },
+      { "id": "24339483523", "status": "PAUSED" }
+    ],
+    "original_ad_group": { "id": "206587491811", "status": "PAUSED" },
+    "original_RSA": { "id": "827349040712", "status": "PAUSED" },
+    "original_keywords_enabled": 20,
+    "original_EXACT_11743561": "ENABLED",
+    "residual_PHRASE_11479221": "PAUSED",
+    "shared_set": {
+      "id": "12261567996",
+      "exact_negative_members": 3,
+      "attachments": 0
+    },
+    "D_test_campaign_negative": "REMOVED; positive adGroupCriterion unchanged",
+    "T_budget": {
+      "id": "15932267169",
+      "currency": "USD",
+      "daily_amount": "2",
+      "amount_micros": "2000000",
+      "explicitly_shared": false
+    },
+    "T_ad_groups": [
+      { "id": "200180930839", "status": "PAUSED" },
+      { "id": "200180931039", "status": "PAUSED" }
+    ],
+    "T_RSA": [
+      { "id": "827487091340", "status": "PAUSED" },
+      { "id": "827362851813", "status": "PAUSED" }
+    ],
+    "T_keywords": 10,
+    "T_sitelinks": 4,
+    "unexpected_side_effects": 0
+  },
+  "provider_call_accounting": {
+    "aggregate_read": 1794,
+    "aggregate_validate_only": 27,
+    "aggregate_real_write": 17,
+    "all_real_write_targets": ["8590146099"],
+    "this_W_restore_continuation": {
+      "read": 47,
+      "validate_only": 0,
+      "real_write": 1
+    },
+    "oauth_refreshes_separate": 23,
+    "external_UI_actions": "Recorded separately in acceptance O history; not counted as controlled API mutations",
+    "stage2_real_read": 0,
+    "stage2_validate_only": 0,
+    "stage2_real_write": 0,
+    "production_provider_write": 0,
+    "other_account_write": 0,
+    "test_MCC_direct_write": 0
+  },
+  "linux_integration_CI": {
+    "code_head": "371f67768d0b9d3f8318fbcc44595ee711979f89",
+    "run_id": 37841328126,
+    "job_id": 113531135642,
+    "url": "https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/37841328126",
+    "result": "SUCCESS",
+    "decoded_job_log_package_tests": {
+      "passed": 596,
+      "skipped": 0,
+      "failed": 0
+    },
+    "checks": [
+      "format",
+      "lint",
+      "typecheck",
+      "Prisma validation",
+      "migrations",
+      "migration/import rehearsal",
+      "backup/restore rehearsal",
+      "tests including dedicated PG18 lifecycle",
+      "build",
+      "API readiness",
+      "worker jobs",
+      "dependency degradation",
+      "standard secret scan",
+      "dependency audit"
+    ],
+    "postgres": "18 disposable",
+    "redis": "7.4 disposable",
+    "Google_and_Public_write_gates": "OFF",
+    "production_deployment": false,
+    "initial_skipped_PG18_case": "Initial successful runs had 1 skip. Dedicated DB and strict Turbo selector forwarding fixed; final run has 0 skips. Historical evidence retained."
+  },
+  "cross_client": {
+    "Q": "BLOCKED: actual ChatGPT HolyMedia MCP tool surface not connected here",
+    "R": "BLOCKED: second MCP client name and connection not verified",
+    "S": "PASS for persisted manual browser consent in W controlled flow; client-specific Q/R consent coverage remains pending",
+    "live_client_tests_substituted_by_mock": false,
+    "next_manual_action": "Connect private controlled TEST MCP in ChatGPT and identify/connect a second MCP client. Configure credentials locally, never send tokens in chat. Then perform authorized client tests with separate manual approval for each actual write. Public MCP stays read-only."
+  },
+  "stage2": {
+    "package_A": "IMPLEMENTED_MOCK_VERIFIED_NOT_LIVE_ACCEPTED",
+    "fields": [
+      "keyword CPC",
+      "ad-group CPC",
+      "ad-group target CPA override",
+      "daily campaign budget"
+    ],
+    "foundation": [
+      "absolute/percent account-currency micros",
+      "shared-budget impact",
+      "greater-than-50-percent warning",
+      "bidding compatibility warnings",
+      "per-row batch outcomes",
+      "stock immutable preview/approval/commit",
+      "stale protection",
+      "provider reread",
+      "audit/journal",
+      "new approved inverse preview where supported"
+    ],
+    "gate_default": "OFF",
+    "package_B": "NOT IMPLEMENTED: bidding strategy editing, portfolio lifecycle, device/geo/schedule modifiers, bulk filters",
+    "mock_tests_passed": 42,
+    "targeted_stage01_stage2_MCP_tests_passed": 126,
+    "full_package_tests": {
+      "passed": 612,
+      "skipped_without_infrastructure": 26,
+      "failed": 0
+    },
+    "disposable_repeat_of_all_26_skipped": {
+      "passed": 26,
+      "skipped": 0,
+      "failed": 0
+    },
+    "root_node_tests_passed": 13,
+    "standard_secret_scanner_regressions_passed": 7,
+    "quality": "format/lint/typecheck/Prisma/tests/build/secrets/dependency audit PASS",
+    "packages_without_unit_test_files": ["web", "testing"],
+    "stage2_hosted_CI": "NOT RUN; Stage 0+1 Linux CI is separately verified",
+    "disposable_QA_containers_and_volumes_removed": true,
+    "DB_migration": "NONE",
+    "evidence": "Stage 2 branch: artifacts/google-stage2-foundation-quality-20261009/quality-closeout.json"
+  },
+  "security": {
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "standard_secret_scan": "PASS",
+    "CRLF_format_remediation": "PASS on Windows and Ubuntu; scanner remains active",
+    "Next_version_candidate": "16.3.8; production Web not upgraded"
+  },
+  "stage3_stage4": "Proposed backlog/dependency boundaries only, implementation not started. Detailed original PPC Stage 3/4 source not recovered; do not treat proposed extensions as approved exact requirements.",
+  "pending_human_write_approval": null,
+  "historical_evidence_and_original_UNVERIFIED_audit": "PRESERVED; original fixture has separate VERIFIED reconciliation",
+  "release_readiness": "NOT READY FOR PRODUCTION: Q/R and client-specific S, remaining security review, exact candidate human review, immutable image/digest, staging smoke/rollback and explicit merge/deploy authorization required",
+  "integration_review_readiness": "YES: live Stage 0+1 and verified Linux quality evidence available; not permission to merge/deploy",
+  "release_plan": "docs/acceptance/google-ads-stage01-release-review-20261009.md",
+  "production_changed": false,
+  "production_main_merge_or_deploy_executed": false,
+  "main_changed": false,
+  "user_changes_preserved": true
+}
