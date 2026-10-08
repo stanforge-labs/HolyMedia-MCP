@@ -3,6 +3,8 @@
   "globalEnv": [
     "NODE_ENV",
     "V2_INTEGRATION_TESTS",
+    "V2_PG18_REHEARSAL",
+    "V2_PG18_TEST_DATABASE_URL",
     "DATABASE_URL",
     "REDIS_URL",
     "SESSION_HASH_SECRET",
