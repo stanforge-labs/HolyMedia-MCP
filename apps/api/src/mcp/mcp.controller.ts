@@ -24,6 +24,7 @@ import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
 import { oauthEndpoints } from "./oauth-endpoints.js";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
 import { safeMediaSummary } from "../providers/google-ads-media.js";
+import { safeGoogleTrackingSummary } from "../providers/google-ads-tracking-audit.js";
 import {
   GOOGLE_WRITE_PROFILE,
   googleWriteOpenApi,
@@ -291,7 +292,7 @@ export class McpController {
           "provider" in result &&
           result.provider === "GOOGLE_ADS"
         )
-          result = safeMediaSummary(result);
+          result = safeGoogleTrackingSummary(safeMediaSummary(result));
         await Promise.allSettled([
           this.audit.record({
             eventType: "mcp_tool_executed",

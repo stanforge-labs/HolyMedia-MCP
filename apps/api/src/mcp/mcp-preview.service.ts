@@ -8,8 +8,9 @@ import { parseStage2AdvancedIntent } from "../providers/google-ads-stage2-advanc
 import { parseStage3Intent } from "../providers/google-ads-stage3.js";
 import { parseStage4Intent } from "../providers/google-ads-stage4.js";
 import { safeMediaSummary } from "../providers/google-ads-media.js";
+import { safeGoogleTrackingSummary } from "../providers/google-ads-tracking-audit.js";
 function safeGoogleView<T>(value: T): T {
-  return safeMediaSummary(value) as T;
+  return safeGoogleTrackingSummary(safeMediaSummary(value)) as T;
 }
 import {
   assertStage2Gate,

@@ -121,6 +121,7 @@ def command(image, head, run_id, directory, hold=False, env_file=None):
         'V2_PREVIEW_ONLY': 'true', 'V2_CONFIRMED_WRITE_ENABLED': 'false',
         'PUBLIC_MCP_WRITE_SCOPE_ENABLED': 'false', 'PUBLIC_MCP_CONTROLLED_WRITE_ENABLED': 'false',
         'HOLYMEDIA_PUBLIC_BASE_URL': 'http://localhost:4402', 'CORS_ORIGINS': 'http://localhost:4402',
+        'COOKIE_DOMAIN': '',
         'API_PORT': '4000', 'LOG_LEVEL': 'error',
         'NODE_OPTIONS': '--max-old-space-size=192',
     }

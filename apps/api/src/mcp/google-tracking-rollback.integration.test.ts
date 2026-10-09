@@ -7,6 +7,7 @@ import {
   object,
   prefix,
   principal,
+  human,
 } from "./google-write-test.fixture.js";
 
 const oldSuffix = "utm_source=google&utm_campaign=original";
@@ -63,6 +64,41 @@ const rollback = (f: ReturnType<typeof extendedFixture>, commitId: unknown) =>
   f.mcp
     .call(principal, "preview_rollback_commit", { commit_id: commitId })
     .then(object);
+
+describe("Tracking redaction is a display copy, not an immutable payload change", () => {
+  it("browser/MCP/journal omit secret URL values while raw plan and committed update remain exact", async () => {
+    const { f, target, preview } = setup();
+    const privateValue = "private-test-value";
+    target.finalUrlSuffix = `utm_source=google&api_key=${privateValue}`;
+    const p = object(await preview({ clear_fields: ["final_url_suffix"] }));
+    expect(JSON.stringify(p)).not.toContain(privateValue);
+    const stored = f.previewsRows.find((row) => row.id === p.preview_id)!;
+    const state = object(stored.requestedState);
+    const operations = state.operations as Record<string, unknown>[];
+    expect(object(operations[0]!.before).finalUrlSuffix).toContain(
+      privateValue,
+    );
+    const frozen = JSON.stringify(stored.requestedState);
+    const view = await f.previews.googleApprovalView(
+      human,
+      String(p.approval_url).split("#")[1]!,
+    );
+    expect(JSON.stringify(view)).not.toContain(privateValue);
+    expect(JSON.stringify(stored.requestedState)).toBe(frozen);
+    await f.approve(p);
+    const result = object(await commit(f, p));
+    expect(result.status).toBe("VERIFIED");
+    expect(JSON.stringify(result)).not.toContain(privateValue);
+    expect(JSON.stringify(f.events)).not.toContain(privateValue);
+    const journal = await f.mcp.call(principal, "list_change_journal", {
+      provider: "GOOGLE_ADS",
+      account_id: customer,
+    });
+    expect(JSON.stringify(journal)).not.toContain(privateValue);
+    expect(JSON.stringify(stored.requestedState)).toBe(frozen);
+    expect(f.counts().write).toBe(1); // mocked provider only
+  });
+});
 
 describe("P39 tracking rollback: stock services, mocked HTTP only", () => {
   it.each(["account", "campaign", "ad_group"] as const)(

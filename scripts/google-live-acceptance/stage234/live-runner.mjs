@@ -475,6 +475,12 @@ export async function runLivePreview() {
         typeof (await sessionCheck.json()).csrfToken !== "string"
       )
         fail("stage234_human_session_bootstrap_not_ready");
+      if (
+        sessionCheck.headers
+          .getSetCookie()
+          .some((cookie) => /;\s*domain=/i.test(cookie))
+      )
+        fail("stage234_local_human_session_cookie_domain_invalid");
     }
     // K uses the stock MCP schema rejection before the Stage 4 gate/provider.
     // No provider read/validate/mutation and no preview may be created by K.
