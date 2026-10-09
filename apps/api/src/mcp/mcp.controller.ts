@@ -495,19 +495,7 @@ export class McpController {
       );
     const service = await this.tokens.authenticate(token);
     if (service) return service;
-    const oauth = await this.oauthTokens.authenticate(token);
-    // Preserve the existing /mcp principal shape and behavior. The new OAuth
-    // identity is used only on /mcp/public and never enables legacy writes.
-    return oauth
-      ? {
-          kind: "service" as const,
-          tokenId: oauth.tokenId,
-          serviceIdentityId: `oauth:${oauth.clientId}:${oauth.userId}`,
-          workspaceId: oauth.workspaceId,
-          scopes: oauth.scopes,
-          accountIds: oauth.accountIds,
-        }
-      : null;
+    return this.oauthTokens.authenticate(token, this.endpoints.legacyResource);
   }
 }
 
