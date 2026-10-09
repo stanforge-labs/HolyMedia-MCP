@@ -249,10 +249,10 @@ test("Search availability must be real, not a wrong channel or taxonomy assumpti
   input.catalog[0].entity.availabilities = [
     {
       channel: {
-        availabilityMode: "CHANNEL_TYPE",
+        availabilityMode: "CHANNEL_TYPE_AND_ALL_SUBTYPES",
         advertisingChannelType: "DISPLAY",
       },
-      locale: [{ availabilityMode: "LAUNCHED_TO_ALL" }],
+      locale: [{ availabilityMode: "ALL_LOCALES" }],
     },
   ];
   assert.equal(prepareAudienceIScenario(input, head, now).result, "BLOCKED");
@@ -262,6 +262,63 @@ test("Search availability must be real, not a wrong channel or taxonomy assumpti
     prepareAudienceIScenario(input, head, now).result,
     "PREPARED_NOT_LIVE",
   );
+});
+test("actual v24 channel/ALL_LOCALES availability is eligible; old enum spellings and specific locales reject", () => {
+  const input = iInput(),
+    a = input.catalog[0].entity;
+  a.launchedToAll = false;
+  for (const availabilityMode of [
+    "ALL_CHANNELS",
+    "CHANNEL_TYPE_AND_ALL_SUBTYPES",
+    "CHANNEL_TYPE_AND_SUBSET_SUBTYPES",
+  ]) {
+    a.availabilities = [
+      {
+        channel: {
+          availabilityMode,
+          advertisingChannelType: "SEARCH",
+          includeDefaultChannelSubType: true,
+        },
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
+      },
+    ];
+    assert.equal(
+      prepareAudienceIScenario(input, head, now).result,
+      "PREPARED_NOT_LIVE",
+    );
+  }
+  for (const availabilityMode of [
+    "LAUNCHED_TO_ALL",
+    "COUNTRY_AND_ALL_LANGUAGES",
+    "LANGUAGE_AND_ALL_COUNTRIES",
+    "COUNTRY_AND_LANGUAGE",
+    "UNKNOWN",
+  ]) {
+    a.availabilities = [
+      {
+        channel: { availabilityMode: "ALL_CHANNELS" },
+        locale: [{ availabilityMode, countryCode: "KZ", languageCode: "ru" }],
+      },
+    ];
+    assert.equal(prepareAudienceIScenario(input, head, now).result, "BLOCKED");
+  }
+  for (const availabilityMode of [
+    "CHANNEL_TYPE",
+    "CHANNEL_TYPE_AND_SUBTYPES",
+    "UNKNOWN",
+  ]) {
+    a.availabilities = [
+      {
+        channel: {
+          availabilityMode,
+          advertisingChannelType: "SEARCH",
+          includeDefaultChannelSubType: true,
+        },
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
+      },
+    ];
+    assert.equal(prepareAudienceIScenario(input, head, now).result, "BLOCKED");
+  }
 });
 test("USER_LIST and detailed demographic require selected owned references and eligibility", () => {
   const input = iInput();

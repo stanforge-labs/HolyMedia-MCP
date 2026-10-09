@@ -331,12 +331,12 @@ test("globally launched predicate is strict and count diagnostics never echo pro
   row.userInterest.availabilities = [
     {
       channel: {
-        availabilityMode: "CHANNEL_TYPE",
+        availabilityMode: "CHANNEL_TYPE_AND_ALL_SUBTYPES",
         advertisingChannelType: "SEARCH",
       },
       locale: [
         {
-          availabilityMode: "LAUNCHED_TO_ALL",
+          availabilityMode: "ALL_LOCALES",
           ignoredMessage: "private-diagnostic-marker",
         },
       ],

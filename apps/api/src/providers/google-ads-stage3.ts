@@ -719,8 +719,8 @@ function availabilityProven(
       const matches =
         mode === "ALL_CHANNELS" ||
         (channel.advertisingChannelType === campaign.advertisingChannelType &&
-          (mode === "CHANNEL_TYPE" ||
-            (mode === "CHANNEL_TYPE_AND_SUBTYPES" &&
+          (mode === "CHANNEL_TYPE_AND_ALL_SUBTYPES" ||
+            (mode === "CHANNEL_TYPE_AND_SUBSET_SUBTYPES" &&
               (campaign.advertisingChannelSubType &&
               campaign.advertisingChannelSubType !== "UNSPECIFIED"
                 ? Array.isArray(channel.advertisingChannelSubType) &&
@@ -731,9 +731,7 @@ function availabilityProven(
       return (
         matches &&
         Array.isArray(a.locale) &&
-        a.locale
-          .map(extRow)
-          .some((l) => l.availabilityMode === "LAUNCHED_TO_ALL")
+        a.locale.map(extRow).some((l) => l.availabilityMode === "ALL_LOCALES")
       );
     })
   );

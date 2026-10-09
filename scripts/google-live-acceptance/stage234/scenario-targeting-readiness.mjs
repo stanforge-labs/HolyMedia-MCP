@@ -474,11 +474,12 @@ function availability(a) {
         return (
           (channel?.availabilityMode === "ALL_CHANNELS" ||
             (channel?.advertisingChannelType === "SEARCH" &&
-              (channel.availabilityMode === "CHANNEL_TYPE" ||
-                (channel.availabilityMode === "CHANNEL_TYPE_AND_SUBTYPES" &&
+              (channel.availabilityMode === "CHANNEL_TYPE_AND_ALL_SUBTYPES" ||
+                (channel.availabilityMode ===
+                  "CHANNEL_TYPE_AND_SUBSET_SUBTYPES" &&
                   channel.includeDefaultChannelSubType === true)))) &&
           Array.isArray(v.locale) &&
-          v.locale.some((l) => l.availabilityMode === "LAUNCHED_TO_ALL")
+          v.locale.some((l) => l.availabilityMode === "ALL_LOCALES")
         );
       }))
   );

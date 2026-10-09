@@ -507,10 +507,10 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
     f.s.catalog.availabilities = [
       {
         channel: {
-          availabilityMode: "CHANNEL_TYPE",
+          availabilityMode: "CHANNEL_TYPE_AND_ALL_SUBTYPES",
           advertisingChannelType: "SEARCH",
         },
-        locale: [{ availabilityMode: "LAUNCHED_TO_ALL" }],
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
       },
     ];
     const row = {
@@ -525,10 +525,10 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
     f.s.catalog.availabilities = [
       {
         channel: {
-          availabilityMode: "CHANNEL_TYPE",
+          availabilityMode: "CHANNEL_TYPE_AND_ALL_SUBTYPES",
           advertisingChannelType: "DISPLAY",
         },
-        locale: [{ availabilityMode: "LAUNCHED_TO_ALL" }],
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
       },
     ];
     await rejects(
@@ -538,10 +538,12 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
     f.s.catalog.availabilities = [
       {
         channel: {
-          availabilityMode: "CHANNEL_TYPE",
+          availabilityMode: "CHANNEL_TYPE_AND_ALL_SUBTYPES",
           advertisingChannelType: "SEARCH",
         },
-        locale: [{ availabilityMode: "COUNTRY", countryCode: "KZ" }],
+        locale: [
+          { availabilityMode: "COUNTRY_AND_ALL_LANGUAGES", countryCode: "KZ" },
+        ],
       },
     ];
     await rejects(
@@ -564,6 +566,103 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
         f.read,
       ),
       "google_stage3_audience_invalid",
+    );
+  });
+  it("Actual v24 global-locale channel enums work; legacy and constrained locales remain fail-closed", async () => {
+    const f = mock(),
+      row = {
+        ...group,
+        operation: "audience_add",
+        audience: { kind: "DETAILED_DEMOGRAPHIC", id: "6" },
+        mode: "OBSERVATION",
+      };
+    f.s.catalog.launchedToAll = false;
+    for (const channel of [
+      { availabilityMode: "ALL_CHANNELS" },
+      {
+        availabilityMode: "CHANNEL_TYPE_AND_ALL_SUBTYPES",
+        advertisingChannelType: "SEARCH",
+      },
+      {
+        availabilityMode: "CHANNEL_TYPE_AND_SUBSET_SUBTYPES",
+        advertisingChannelType: "SEARCH",
+        includeDefaultChannelSubType: true,
+      },
+    ]) {
+      f.s.catalog.availabilities = [
+        { channel, locale: [{ availabilityMode: "ALL_LOCALES" }] },
+      ];
+      expect(
+        (await buildStage3Plan(account, intent(row), f.read)).operations,
+      ).toHaveLength(1);
+    }
+    for (const availability of [
+      {
+        channel: { availabilityMode: "ALL_CHANNELS" },
+        locale: [{ availabilityMode: "LAUNCHED_TO_ALL" }],
+      },
+      {
+        channel: {
+          availabilityMode: "CHANNEL_TYPE",
+          advertisingChannelType: "SEARCH",
+        },
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
+      },
+      {
+        channel: {
+          availabilityMode: "CHANNEL_TYPE_AND_SUBTYPES",
+          advertisingChannelType: "SEARCH",
+          includeDefaultChannelSubType: true,
+        },
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
+      },
+      {
+        channel: {
+          availabilityMode: "CHANNEL_TYPE_AND_SUBSET_SUBTYPES",
+          advertisingChannelType: "SEARCH",
+          includeDefaultChannelSubType: false,
+        },
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
+      },
+      ...[
+        "COUNTRY_AND_ALL_LANGUAGES",
+        "LANGUAGE_AND_ALL_COUNTRIES",
+        "COUNTRY_AND_LANGUAGE",
+        "UNKNOWN",
+        "UNSPECIFIED",
+      ].map((availabilityMode) => ({
+        channel: { availabilityMode: "ALL_CHANNELS" },
+        locale: [{ availabilityMode, countryCode: "KZ", languageCode: "ru" }],
+      })),
+    ]) {
+      f.s.catalog.availabilities = [availability];
+      await rejects(
+        buildStage3Plan(account, intent(row), f.read),
+        "google_stage3_audience_ineligible",
+      );
+    }
+    f.s.catalog.availabilities = [
+      {
+        channel: { availabilityMode: "ALL_CHANNELS" },
+        locale: [{ availabilityMode: "ALL_LOCALES" }],
+      },
+    ];
+    const plan = await buildStage3Plan(account, intent(row), f.read);
+    f.s.catalog.availabilities = [
+      {
+        channel: { availabilityMode: "ALL_CHANNELS" },
+        locale: [
+          { availabilityMode: "COUNTRY_AND_ALL_LANGUAGES", countryCode: "KZ" },
+        ],
+      },
+    ];
+    expect(canonical(await rereadExtendedChecks(plan, f.read))).not.toBe(
+      canonical(plan.checks),
+    );
+    f.s.catalog.resourceName = "customers/1111111111/detailedDemographics/6";
+    await rejects(
+      buildStage3Plan(account, intent(row), f.read),
+      "google_extended_ownership_invalid",
     );
   });
   it("Detailed demographic remove and observation modifier use exact extended criterion, never ad keyword", async () => {
