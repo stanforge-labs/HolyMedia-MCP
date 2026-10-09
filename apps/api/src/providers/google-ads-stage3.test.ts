@@ -75,6 +75,12 @@ function fixture() {
       taxonomyType: "IN_MARKET",
       launchedToAll: true,
     } as ExtendedRow,
+    detailed: {
+      resourceName: `${prefix}/detailedDemographics/6`,
+      id: "6",
+      name: "synthetic education catalog entry",
+      launchedToAll: true,
+    } as ExtendedRow,
     custom: {
       resourceName: `${prefix}/customAudiences/5`,
       id: "5",
@@ -106,6 +112,8 @@ function fixture() {
       return [{ userList: structuredClone(state.audience) }];
     if (q.includes(" FROM user_interest "))
       return [{ userInterest: structuredClone(state.interest) }];
+    if (q.includes(" FROM detailed_demographic "))
+      return [{ detailedDemographic: structuredClone(state.detailed) }];
     if (q.includes(" FROM custom_audience "))
       return state.customExists
         ? [{ customAudience: structuredClone(state.custom) }]
@@ -423,6 +431,9 @@ describe("Stage 3 typed audiences and targeting (provider transport is mocked)",
   );
   it("Audience manual bid modifier updates only one field and emits inverse", async () => {
     const f = fixture();
+    f.state.group.targetingSetting = {
+      targetRestrictions: [{ targetingDimension: "AUDIENCE", bidOnly: true }],
+    };
     f.state.groupCriteria.push(
       criterion(
         "USER_LIST",
@@ -749,7 +760,9 @@ describe("Stage 3 negative / security / capability rejection", () => {
     )!;
     expect(
       extRow(extRow(extRow(negative.properties).audience).properties).kind,
-    ).toEqual({ enum: ["USER_LIST", "IN_MARKET", "AFFINITY"] });
+    ).toEqual({
+      enum: ["USER_LIST", "IN_MARKET", "AFFINITY", "DETAILED_DEMOGRAPHIC"],
+    });
   });
   it("Campaign PARENTAL_STATUS positive is unsupported; campaign exclusion and group positive remain available", async () => {
     const f = fixture();
