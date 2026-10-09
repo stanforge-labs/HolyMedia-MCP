@@ -35,6 +35,7 @@ export const stage4Actions = [
   "pmax_brand_remove",
   "image_asset_create",
   "pmax_create",
+  "pmax_asset_group_create",
 ] as const;
 const string = (maxLength = 255): BriefSchema => ({
   type: "string",
@@ -80,7 +81,7 @@ export const inlineGoogleMediaSchema = object({
       "Local <=1 MiB inline actual PNG/JPEG bytes; aggregate <=2 MiB, never URL, data URI or filesystem path.",
   },
 });
-const pmaxGroup = object(
+export const pmaxAssetGroupSchema = object(
   {
     name: string(128),
     final_url: string(2048),
@@ -119,7 +120,7 @@ export const pmaxBriefSchema = object(
     conversion_actions: list(id, 1, 50),
     business_name: string(25),
     logos: list(inlineGoogleMediaSchema, 1, 5),
-    asset_groups: list(pmaxGroup, 1, 10),
+    asset_groups: list(pmaxAssetGroupSchema, 1, 10),
     brand_guidelines_enabled: bool,
     bidding_strategy: en(["MAXIMIZE_CONVERSIONS", "MAXIMIZE_CONVERSION_VALUE"]),
     target_cpa: campaignBriefSchema.properties!.daily_budget!,
@@ -201,6 +202,9 @@ export const stage4RowSchema = object({
   path2: string(15),
   search_theme: string(80),
   brief: pmaxBriefSchema,
+  asset_group: pmaxAssetGroupSchema,
+  business_name: string(25),
+  logos: list(inlineGoogleMediaSchema, 1, 5),
   media: inlineGoogleMediaSchema,
   text: string(90),
   shared_set_id: id,

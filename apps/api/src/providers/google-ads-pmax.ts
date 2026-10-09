@@ -1,5 +1,8 @@
 import { validateBriefSchema } from "../mcp/mcp-google-stage0-schema.js";
-import { pmaxBriefSchema } from "../mcp/mcp-google-stage4-schema.js";
+import {
+  pmaxBriefSchema,
+  pmaxAssetGroupSchema,
+} from "../mcp/mcp-google-stage4-schema.js";
 import {
   validateText,
   validateTracking,
@@ -205,6 +208,48 @@ function brandComposition(
       "Campaign branding requires 1–5 verified LOGO and exactly one BUSINESS_NAME; removal cannot violate minimum.",
     );
 }
+function validatePmaxGroup(g: ExtendedRow) {
+  validateBriefSchema(g, pmaxAssetGroupSchema, "asset_group");
+  landing(g.final_url);
+  validateText(String(g.name).trim(), 128, "Asset group name");
+  for (const [field, length] of [
+    ["headlines", 30],
+    ["long_headlines", 90],
+    ["descriptions", 90],
+  ] as const) {
+    const texts = g[field] as string[];
+    for (const text of texts) validateText(text, length, "PMax " + field);
+    if (
+      new Set(texts.map((t) => t.normalize("NFC").trim().toLowerCase()))
+        .size !== texts.length
+    )
+      extFail("google_pmax_duplicate", "Duplicate text assets in field.");
+  }
+  if (g.path2 && !g.path1)
+    extFail("google_ad_path_invalid", "path2 требует path1.");
+  for (const p of ["path1", "path2"])
+    if (g[p]) validateText(String(g[p]), 15, p);
+  for (const role of ["MARKETING_IMAGE", "SQUARE_MARKETING_IMAGE"]) {
+    const count = rows(g.images).filter((i) => i.field_type === role).length;
+    if (count < 1 || count > 20)
+      extFail(
+        "google_pmax_minimum_assets",
+        "Required 1–20 landscape AND square images.",
+      );
+  }
+  const audiences = (g.audience_ids ?? []) as string[],
+    themes = (g.search_themes ?? []) as string[];
+  if (
+    new Set(audiences).size !== audiences.length ||
+    new Set(themes.map((t) => t.normalize("NFC").trim().toLowerCase())).size !==
+      themes.length
+  )
+    extFail(
+      "google_pmax_duplicate",
+      "Duplicate audience IDs/search themes are rejected before provider reads.",
+    );
+  for (const theme of themes) validateText(theme, 80, "Search theme");
+}
 export function preflightPmaxBrief(raw: unknown) {
   validateBriefSchema(raw, pmaxBriefSchema, "pmax_brief");
   const b = structuredClone(raw) as ExtendedRow,
@@ -297,34 +342,7 @@ export function preflightPmaxBrief(raw: unknown) {
         "Имена asset groups должны быть уникальны.",
       );
     groupNames.add(name);
-    landing(g.final_url);
-    validateText(String(g.name).trim(), 128, "Asset group name");
-    for (const [field, length] of [
-      ["headlines", 30],
-      ["long_headlines", 90],
-      ["descriptions", 90],
-    ] as const) {
-      const texts = g[field] as string[];
-      for (const t of texts) validateText(t, length, "PMax " + field);
-      if (
-        new Set(texts.map((t) => t.normalize("NFC").trim().toLowerCase()))
-          .size !== texts.length
-      )
-        extFail("google_pmax_duplicate", "Duplicate text assets in field.");
-    }
-    if (g.path2 && !g.path1)
-      extFail("google_ad_path_invalid", "path2 требует path1.");
-    for (const p of ["path1", "path2"])
-      if (g[p]) validateText(String(g[p]), 15, p);
-    for (const role of ["MARKETING_IMAGE", "SQUARE_MARKETING_IMAGE"])
-      if (
-        !rows(g.images).some((i) => i.field_type === role) ||
-        rows(g.images).filter((i) => i.field_type === role).length > 20
-      )
-        extFail(
-          "google_pmax_minimum_assets",
-          "Каждой группе нужны 1–20 landscape И 1–20 square images.",
-        );
+    validatePmaxGroup(g);
   }
   return b;
 }
@@ -479,6 +497,366 @@ async function mediaResolver(
     },
   };
 }
+async function appendCompleteGroups(
+  ctx: Context,
+  prefix: string,
+  campaign: string,
+  groups: ExtendedRow[],
+  brand: boolean,
+  business: string | null,
+  logos: string[],
+  temp: (kind: string) => string,
+  add: Add,
+  media: Awaited<ReturnType<typeof mediaResolver>>,
+) {
+  const resources: string[] = [];
+  const createText = (text: string) => {
+    const resource = temp("assets");
+    add(
+      "assets",
+      "create",
+      resource,
+      { resourceName: resource, textAsset: { text } },
+      null,
+      { type: "TEXT", textAsset: { text } },
+      "SELECT " +
+        PMAX_ASSET_FIELDS +
+        " FROM asset WHERE asset.resource_name = " +
+        extQuote(resource),
+      "asset",
+    );
+    return resource;
+  };
+  for (const group of groups) {
+    const resource = temp("assetGroups"),
+      fields = {
+        resourceName: resource,
+        campaign,
+        name: String(group.name).trim(),
+        status: "PAUSED",
+        finalUrls: [landing(group.final_url)],
+        ...(group.path1 ? { path1: group.path1 } : {}),
+        ...(group.path2 ? { path2: group.path2 } : {}),
+      };
+    add(
+      "assetGroups",
+      "create",
+      resource,
+      fields,
+      null,
+      fields,
+      "SELECT " +
+        GROUP_FIELDS +
+        " FROM asset_group WHERE asset_group.resource_name = " +
+        extQuote(resource),
+      "assetGroup",
+    );
+    resources.push(resource);
+    const link = (asset: string, fieldType: string) => {
+      const fields = {
+        assetGroup: resource,
+        asset,
+        fieldType,
+        status: "ENABLED",
+      };
+      add(
+        "assetGroupAssets",
+        "create",
+        null,
+        fields,
+        null,
+        fields,
+        "SELECT " +
+          PMAX_LINK_FIELDS +
+          " FROM asset_group_asset WHERE asset_group_asset.asset_group = " +
+          extQuote(resource) +
+          " AND asset_group_asset.status != REMOVED",
+        "assetGroupAsset",
+      );
+    };
+    for (const [property, field] of [
+      ["headlines", "HEADLINE"],
+      ["long_headlines", "LONG_HEADLINE"],
+      ["descriptions", "DESCRIPTION"],
+    ])
+      for (const text of group[property!] as string[])
+        link(createText(text), field!);
+    for (const image of rows(group.images))
+      link(
+        await media.resolve(image.media, String(image.field_type)),
+        String(image.field_type),
+      );
+    if (!brand) {
+      if (!business || !logos.length)
+        extFail(
+          "google_pmax_minimum_assets",
+          "Disabled branding requires group business/logo, not inherited campaign assets.",
+        );
+      link(business, "BUSINESS_NAME");
+      for (const logo of logos) link(logo, "LOGO");
+    }
+    for (const audienceID of (group.audience_ids ?? []) as string[]) {
+      const audience = identity(prefix, "audiences", audienceID),
+        found = await ctx.query(
+          "SELECT audience.resource_name, audience.status FROM audience WHERE audience.resource_name = " +
+            extQuote(audience),
+        );
+      if (
+        found.length !== 1 ||
+        extRow(found[0]?.audience).resourceName !== audience ||
+        extRow(found[0]?.audience).status !== "ENABLED"
+      )
+        extFail(
+          "google_pmax_audience_invalid",
+          "Existing audience not ENABLED/owned.",
+        );
+      const fields = { assetGroup: resource, audience: { audience } };
+      add(
+        "assetGroupSignals",
+        "create",
+        null,
+        fields,
+        null,
+        fields,
+        "SELECT asset_group_signal.resource_name, asset_group_signal.asset_group, asset_group_signal.audience.audience, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group_signal.asset_group = " +
+          extQuote(resource),
+        "assetGroupSignal",
+      );
+    }
+    for (const text of (group.search_themes ?? []) as string[]) {
+      const fields = { assetGroup: resource, searchTheme: { text } };
+      add(
+        "assetGroupSignals",
+        "create",
+        null,
+        fields,
+        null,
+        fields,
+        "SELECT asset_group_signal.resource_name, asset_group_signal.asset_group, asset_group_signal.audience.audience, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group_signal.asset_group = " +
+          extQuote(resource),
+        "assetGroupSignal",
+      );
+    }
+  }
+  return resources;
+}
+
+export async function buildPmaxAssetGroupPlan(
+  account: string,
+  intent: ExtendedRow & { action: string; items: ExtendedRow[] },
+  read: Stage1Reader,
+): Promise<ExtendedPlan> {
+  for (const row of intent.items) {
+    extClosed(
+      row,
+      ["campaign_id", "asset_group", "business_name", "logos"],
+      ["campaign_id", "asset_group"],
+    );
+    validatePmaxGroup(extRow(row.asset_group));
+    if (row.business_name !== undefined)
+      validateText(String(row.business_name), 25, "Business name");
+  }
+  checkMediaQuota(
+    intent.items.flatMap((r) => [
+      ...rows(r.logos),
+      ...rows(extRow(r.asset_group).images).map((i) => i.media),
+    ]),
+  );
+  const ctx = await extContext(account, read),
+    prefix = "customers/" + ctx.account_id,
+    operations: ExtendedOperation[] = [],
+    items: ExtendedPlan["items"] = [],
+    mediaSummary: ExtendedRow[] = [],
+    names = new Set<string>();
+  let sequence = 0;
+  const temp = (kind: string) => prefix + "/" + kind + "/" + --sequence;
+  for (const [index, row] of intent.items.entries()) {
+    const campaign = identity(prefix, "campaigns", row.campaign_id),
+      cRows = await ctx.query(
+        "SELECT " +
+          CAMPAIGN_FIELDS +
+          " FROM campaign WHERE campaign.resource_name = " +
+          extQuote(campaign) +
+          " AND campaign.status != REMOVED",
+      ),
+      c = extRow(cRows[0]?.campaign);
+    if (
+      cRows.length !== 1 ||
+      c.resourceName !== campaign ||
+      c.advertisingChannelType !== "PERFORMANCE_MAX" ||
+      c.status !== "PAUSED" ||
+      typeof c.brandGuidelinesEnabled !== "boolean"
+    )
+      extFail(
+        "google_pmax_campaign_unavailable",
+        "Новая полная группа требует proven owned PAUSED PMax parent and explicit brand mode.",
+      );
+    const group = extRow(row.asset_group),
+      name = String(group.name).normalize("NFC").trim().toLowerCase(),
+      key = campaign + ":" + name,
+      inventoryQuery =
+        "SELECT " +
+        GROUP_FIELDS +
+        " FROM asset_group WHERE asset_group.campaign = " +
+        extQuote(campaign) +
+        " AND asset_group.status != REMOVED",
+      inventory = await ctx.query(inventoryQuery);
+    for (const r of inventory) {
+      const g = extRow(r.assetGroup);
+      extOwner(g.resourceName, ctx.account_id, "assetGroups");
+      if (g.campaign !== campaign)
+        extFail(
+          "google_pmax_group_unavailable",
+          "Group inventory contains foreign parent.",
+        );
+    }
+    if (
+      names.has(key) ||
+      inventory.some(
+        (r) =>
+          String(extRow(r.assetGroup).name)
+            .normalize("NFC")
+            .trim()
+            .toLowerCase() === name,
+      )
+    )
+      extFail(
+        "google_pmax_duplicate",
+        "Asset group name exists/planned; whole atomic graph rejected.",
+      );
+    names.add(key);
+    const item = extItem(
+      index,
+      "PMax complete asset group",
+      String(row.campaign_id),
+    );
+    items.push(item);
+    const add: Add = (
+      kind,
+      method,
+      resource,
+      fields,
+      before,
+      expected,
+      query,
+      response_key,
+      update_mask = null,
+    ) => {
+      item.provider_operations.push(operations.length);
+      operations.push({
+        kind,
+        method,
+        resource_name: resource,
+        fields,
+        before,
+        expected,
+        read_query: query,
+        response_key,
+        update_mask,
+        row: index,
+      });
+    };
+    const media = await mediaResolver(ctx, prefix, temp, add),
+      logos: string[] = [];
+    let business: string | null = null;
+    if (c.brandGuidelinesEnabled) {
+      if (row.business_name !== undefined || row.logos !== undefined)
+        extFail(
+          "google_pmax_brand_level_invalid",
+          "Enabled branding uses existing campaign LOGO/BUSINESS_NAME; new group cannot silently override branding.",
+        );
+      const brandRows = await ctx.query(
+        "SELECT " +
+          BRAND_LINK_FIELDS +
+          " FROM campaign_asset WHERE campaign_asset.campaign = " +
+          extQuote(campaign) +
+          " AND campaign_asset.status != REMOVED",
+      );
+      brandComposition(brandRows, ctx.account_id, campaign, new Set());
+    } else {
+      if (
+        typeof row.business_name !== "string" ||
+        !rows(row.logos).length ||
+        rows(row.logos).length > 5
+      )
+        extFail(
+          "google_pmax_minimum_assets",
+          "Disabled branding requires explicit business_name and1–5logos.",
+        );
+      business = temp("assets");
+      add(
+        "assets",
+        "create",
+        business,
+        { resourceName: business, textAsset: { text: row.business_name } },
+        null,
+        { type: "TEXT", textAsset: { text: row.business_name } },
+        "SELECT " +
+          PMAX_ASSET_FIELDS +
+          " FROM asset WHERE asset.resource_name = " +
+          extQuote(business),
+        "asset",
+      );
+      for (const logo of rows(row.logos))
+        logos.push(await media.resolve(logo, "LOGO"));
+    }
+    const resources = await appendCompleteGroups(
+      ctx,
+      prefix,
+      campaign,
+      [group],
+      c.brandGuidelinesEnabled,
+      business,
+      logos,
+      temp,
+      add,
+      media,
+    );
+    mediaSummary.push(...media.summaries);
+    item.before = {
+      campaign: c,
+      existing_groups: inventory.map((r) => r.assetGroup),
+    };
+    item.after = {
+      campaign,
+      groups: resources,
+      status: "PAUSED",
+      mandatory_links_status: "ENABLED",
+      campaign_changed: false,
+    };
+    item.warnings.push(
+      "Complete asset group+minimum texts/images created atomically under existing PAUSED parent. Existing campaign/budget/goals/branding untouched; no standalone half-group/no automatic deletion rollback.",
+    );
+  }
+  if (
+    mediaSummary.reduce((n, m) => n + Number(m.byte_length ?? 0), 0) >
+    GOOGLE_MEDIA_LIMITS.aggregateBytes
+  )
+    extFail("google_media_request_limit", "Normalized aggregate exceeds2MiB.");
+  const seen = new Set<string>();
+  for (const o of operations) {
+    const key = o.resource_name ?? o.kind + canonical(o.fields);
+    if (seen.has(key))
+      extFail(
+        "google_pmax_duplicate",
+        "Duplicate group assets/associations/signals rejected.",
+      );
+    seen.add(key);
+  }
+  const plan: ExtendedPlan = {
+    version: 4,
+    account_id: ctx.account_id,
+    intent: { ...intent, media_summary: mediaSummary },
+    checks: ctx.checks,
+    operations,
+    items,
+    atomic: true,
+    irreversible: false,
+  };
+  assertExtendedPlan(plan, ctx.account_id);
+  return plan;
+}
+
 export async function buildPmaxCreatePlan(
   account: string,
   raw: unknown,
@@ -879,111 +1257,18 @@ export async function buildPmaxCreatePlan(
         "campaignAsset",
       );
     }
-  for (const group of rows(brief.asset_groups)) {
-    const resource = temp("assetGroups"),
-      fields = {
-        resourceName: resource,
-        campaign,
-        name: String(group.name).trim(),
-        status: "PAUSED",
-        finalUrls: [landing(group.final_url)],
-        ...(group.path1 ? { path1: group.path1 } : {}),
-        ...(group.path2 ? { path2: group.path2 } : {}),
-      };
-    add(
-      "assetGroups",
-      "create",
-      resource,
-      fields,
-      null,
-      fields,
-      "SELECT " +
-        GROUP_FIELDS +
-        " FROM asset_group WHERE asset_group.resource_name = " +
-        extQuote(resource),
-      "assetGroup",
-    );
-    const link = (asset: string, fieldType: string) => {
-      const fields = {
-        assetGroup: resource,
-        asset,
-        fieldType,
-        status: "ENABLED",
-      };
-      add(
-        "assetGroupAssets",
-        "create",
-        null,
-        fields,
-        null,
-        fields,
-        "SELECT " +
-          PMAX_LINK_FIELDS +
-          " FROM asset_group_asset WHERE asset_group_asset.asset_group = " +
-          extQuote(resource) +
-          " AND asset_group_asset.status != REMOVED",
-        "assetGroupAsset",
-      );
-    };
-    for (const [property, field] of [
-      ["headlines", "HEADLINE"],
-      ["long_headlines", "LONG_HEADLINE"],
-      ["descriptions", "DESCRIPTION"],
-    ])
-      for (const text of group[property!] as string[])
-        link(createText(text), field!);
-    for (const image of rows(group.images))
-      link(
-        await media.resolve(image.media, String(image.field_type)),
-        String(image.field_type),
-      );
-    if (!brand) {
-      link(business, "BUSINESS_NAME");
-      for (const l of logos) link(l, "LOGO");
-    }
-    for (const audienceId of (group.audience_ids ?? []) as string[]) {
-      const audience = identity(prefix, "audiences", audienceId),
-        found = await ctx.query(
-          "SELECT audience.resource_name, audience.status FROM audience WHERE audience.resource_name = " +
-            extQuote(audience),
-        );
-      if (
-        found.length !== 1 ||
-        extRow(found[0]?.audience).resourceName !== audience ||
-        extRow(found[0]?.audience).status !== "ENABLED"
-      )
-        extFail(
-          "google_pmax_audience_invalid",
-          "Existing audience not ENABLED/owned.",
-        );
-      const fields = { assetGroup: resource, audience: { audience } };
-      add(
-        "assetGroupSignals",
-        "create",
-        null,
-        fields,
-        null,
-        fields,
-        "SELECT asset_group_signal.resource_name, asset_group_signal.asset_group, asset_group_signal.audience.audience, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group_signal.asset_group = " +
-          extQuote(resource),
-        "assetGroupSignal",
-      );
-    }
-    for (const text of (group.search_themes ?? []) as string[]) {
-      const fields = { assetGroup: resource, searchTheme: { text } };
-      add(
-        "assetGroupSignals",
-        "create",
-        null,
-        fields,
-        null,
-        fields,
-        "SELECT asset_group_signal.resource_name, asset_group_signal.asset_group, asset_group_signal.audience.audience, asset_group_signal.search_theme.text FROM asset_group_signal WHERE asset_group_signal.asset_group = " +
-          extQuote(resource),
-        "assetGroupSignal",
-      );
-    }
-  }
+  await appendCompleteGroups(
+    ctx,
+    prefix,
+    campaign,
+    rows(brief.asset_groups),
+    brand,
+    business,
+    logos,
+    temp,
+    add,
+    media,
+  );
   item.after = {
     campaign,
     budget,
