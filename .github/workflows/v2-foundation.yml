@@ -120,6 +120,10 @@ jobs:
           docker exec ${{ job.services.postgres.id }} createdb -U holymedia public_mcp_upgrade
           pnpm --filter @holymedia/database prisma:deploy
       - run: pnpm test
+      - name: Isolated preview supervisor pure regression and Python compile check
+        run: |
+          python3 -m unittest discover -s scripts/google-live-acceptance/stage234 -p 'test_*.py'
+          python3 -m compileall -q scripts/google-live-acceptance/stage234
       - run: pnpm build
       - name: API readiness integration smoke
         shell: bash

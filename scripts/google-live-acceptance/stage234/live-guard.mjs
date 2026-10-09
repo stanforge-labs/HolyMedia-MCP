@@ -72,6 +72,29 @@ export const toolArguments = Object.freeze({
     },
   ],
 });
+export const invalidRsaArguments = Object.freeze({
+  provider: "GOOGLE_ADS",
+  account_id: target.customer,
+  action: "rsa_create",
+  items: [
+    {
+      campaign_id: target.campaign,
+      ad_group_id: target.group,
+      rsa: {
+        final_url: "https://mcp.holymedia.kz/",
+        headlines: [
+          { text: "A".repeat(31) },
+          { text: "Holy Media Test" },
+          { text: "MCP Test Advertising" },
+        ],
+        descriptions: [
+          { text: "Safe TEST account acceptance only." },
+          { text: "Paused fixture. No client advertising." },
+        ],
+      },
+    },
+  ],
+});
 export const validationPayload = Object.freeze({
   operations: [
     {
@@ -172,6 +195,19 @@ export function validateLiveRequest(
         })
       )
         return "mcp_preview";
+      if (
+        canonical(rpc) ===
+        canonical({
+          jsonrpc: "2.0",
+          id: "stage234-K-invalid-rsa",
+          method: "tools/call",
+          params: {
+            name: "google_ads_ads_assets_preview",
+            arguments: invalidRsaArguments,
+          },
+        })
+      )
+        return "mcp_invalid_rsa";
     }
     blocked("stage234_approval_commit_or_unapproved_tool_blocked");
   }

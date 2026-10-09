@@ -27,6 +27,16 @@ function mock() {
     selectedCategory: "SUBMIT_LEAD_FORM",
   };
   const read = vi.fn<Stage1Reader>(async (q) => {
+    if (q.includes("FROM currency_constant"))
+      return [
+        {
+          currencyConstant: {
+            resourceName: "currencyConstants/USD",
+            code: "USD",
+            billableUnitMicros: "10000",
+          },
+        },
+      ];
     if (q.includes("FROM customer_conversion_goal"))
       return (
         q.includes("WHERE") && state.confirmed ? state.confirmed : state.goals

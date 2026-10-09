@@ -28,6 +28,8 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED=false', text)
         self.assertIn('STAGE234_APPROVAL_GATEWAY=true', text)
         self.assertIn(str(runner.ROOT / 'harness') + ':/acceptance:ro', text)
+        self.assertNotIn(str(runner.ROOT / 'state') + ':/acceptance-state', text)
+        self.assertIn('stage234-20261009T120000Z-test:/acceptance-state/stage234-20261009T120000Z-test', text)
 
     def test_docker_env_does_not_keep_compose_quotes(self):
         self.assertEqual(runner.docker_env_values("A='one'\nB=\"two\"\nC=value$literal\n"), {'A': 'one', 'B': 'two', 'C': 'value$literal'})

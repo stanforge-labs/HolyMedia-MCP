@@ -416,8 +416,12 @@ export function fixture(
           ]);
         let rows = [...resources.values()].filter((row) => row[key]);
         if (table === "currency_constant") {
-          const code = query.match(/currency_constant\.code = '([A-Z]{3})'/)?.[1];
-          rows = rows.filter((entry) => object(entry.currencyConstant).code === code);
+          const code = query.match(
+            /currency_constant\.code = '([A-Z]{3})'/,
+          )?.[1];
+          rows = rows.filter(
+            (entry) => object(entry.currencyConstant).code === code,
+          );
         }
         // A GAQL FROM campaign/ad_group returns one resource, not one row per child.
         if (table === "campaign")

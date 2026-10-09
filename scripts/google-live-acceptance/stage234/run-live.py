@@ -108,7 +108,7 @@ def command(image, head, run_id, directory, hold=False, env_file=None):
             '--label', 'com.docker.compose.project=' + PROJECT, '--memory', '768m', '--cpus', '1',
             '--env-file', str(env_file or ROOT / 'acceptance.env'), '-v', str(directory) + ':/stage234:ro',
             '-v', str(ROOT / 'harness') + ':/acceptance:ro',
-            '-v', str(ROOT / 'state') + ':/acceptance-state', '--entrypoint', 'node']
+            '-v', str(ROOT / 'state' / ('stage234-' + run_id)) + ':/acceptance-state/stage234-' + run_id, '--entrypoint', 'node']
     if hold:
         args += ['-d', '-p', '127.0.0.1:4402:4001']
     variables = {
@@ -149,6 +149,14 @@ def main():
     # Exact acceptance image runs as uid/gid 1000 (node). Only this newly-created,
     # validated disposable checkpoint directory is delegated; no recursive chown.
     os.chown(state, 1000, 1000)
+    # The runner can write only its new checkpoint. Historical state is not
+    # mounted; copy only the minimum existing scoped credential context into a
+    # new mode-600 file, without decoding or printing any secret values.
+    context_file = state / 'fixture-context.json'
+    context_fd = os.open(context_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(context_fd, 'wb') as stream:
+        stream.write((ROOT / 'state/fixture-context.json').read_bytes())
+    os.chown(context_file, 1000, 1000)
     # Docker --env-file does not parse Compose quotes. Convert only disposable
     # acceptance config into a new protected file; never modify the original.
     runtime_env = state / 'runtime.env'

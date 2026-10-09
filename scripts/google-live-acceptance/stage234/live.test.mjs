@@ -8,6 +8,7 @@ import {
   queries,
   originalKeywords,
   toolArguments,
+  invalidRsaArguments,
   validationPayload,
   validateLiveRequest,
   assertProof,
@@ -21,6 +22,7 @@ import {
   assertFixture,
   assertPreview,
   makeCheckpoint,
+  assertInvalidRsaResult,
 } from "./live-runner.mjs";
 
 const env = {
@@ -58,6 +60,50 @@ const req = (body) => ({
 });
 const check = (url, body, opts = {}) =>
   validateLiveRequest(url, req(body), { env, proof, now, ...opts });
+
+test("K allows only the exact invalid RSA stock MCP input, never a valid/raw write", () => {
+  const rpc = {
+    jsonrpc: "2.0",
+    id: "stage234-K-invalid-rsa",
+    method: "tools/call",
+    params: {
+      name: "google_ads_ads_assets_preview",
+      arguments: invalidRsaArguments,
+    },
+  };
+  assert.equal(check("http://127.0.0.1:4000/mcp", rpc), "mcp_invalid_rsa");
+  const changed = structuredClone(rpc);
+  changed.params.arguments.items[0].rsa.headlines[0].text = "A".repeat(30);
+  assert.throws(() => check("http://127.0.0.1:4000/mcp", changed));
+  changed.params.arguments.account_id = target.mcc;
+  assert.throws(() => check("http://127.0.0.1:4000/mcp", changed));
+});
+test("K requires field-specific schema rejection, not gate/auth/provider error", () => {
+  const error = {
+    code: "google_brief_invalid",
+    source: "HOLYMEDIA",
+    provider: "GOOGLE_ADS",
+    field_path: "brief.items[0].rsa.headlines[0].text",
+    google_errors: [],
+  };
+  const result = (e) => ({
+    result: { isError: true, content: [{ text: JSON.stringify(e) }] },
+  });
+  assert.equal(
+    assertInvalidRsaResult(result(error)).code,
+    "google_brief_invalid",
+  );
+  for (const changed of [
+    { code: "google_write_disabled" },
+    { source: "GOOGLE_ADS" },
+    { field_path: "brief" },
+    { google_errors: [{ code: "UPSTREAM" }] },
+  ])
+    assert.throws(() =>
+      assertInvalidRsaResult(result({ ...error, ...changed })),
+    );
+  assert.throws(() => assertInvalidRsaResult({ result: { isError: false } }));
+});
 
 test("authoritative USD unit read is exact, TEST-scoped and cannot enumerate other currencies/accounts", () => {
   const url = `https://googleads.googleapis.com/v24/customers/${target.customer}/googleAds:searchStream`;
