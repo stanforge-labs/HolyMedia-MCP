@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "result": "READ_ONLY_BASELINE_FIX",
+  "source_head": "71f2b732286e2c47a59284c20e0f006852d456f2",
+  "first_N_attempt": {
+    "run_id": "20261009T134200Z-n3",
+    "result": "BLOCKED_BEFORE_MCP",
+    "failure_stage": "fixture_before",
+    "code": "stage234_fixture_targeting_changed",
+    "read": 12,
+    "validate_only": 0,
+    "real_write": 0
+  },
+  "diagnostics": [
+    {
+      "run_id": "20261009T134600Z-dia",
+      "source_head": "71f2b732286e2c47a59284c20e0f006852d456f2",
+      "harness_head": "6d5cdab6deda281681e652b1e64161894e7980e7",
+      "counts": {
+        "read": 34,
+        "oauth_refresh": 0,
+        "failed_http": 0,
+        "validate_only": 0,
+        "write": 0
+      },
+      "unchanged": true
+    },
+    {
+      "run_id": "20261009T135000Z-dev",
+      "source_head": "71f2b732286e2c47a59284c20e0f006852d456f2",
+      "harness_head": "a60bd4346404dbc67c3c2311bb658cd051dd58fe",
+      "counts": {
+        "read": 34,
+        "oauth_refresh": 0,
+        "failed_http": 0,
+        "validate_only": 0,
+        "write": 0
+      },
+      "unchanged": true,
+      "criteria": [
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~1031",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "criterionId": "1031",
+          "type": "LANGUAGE",
+          "status": "ENABLED",
+          "negative": false,
+          "language": {
+            "languageConstant": "languageConstants/1031"
+          }
+        },
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~30000",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "criterionId": "30000",
+          "type": "DEVICE",
+          "status": "ENABLED",
+          "negative": false,
+          "device": {
+            "type": "DESKTOP"
+          }
+        },
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~30001",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "criterionId": "30001",
+          "type": "DEVICE",
+          "status": "ENABLED",
+          "negative": false,
+          "device": {
+            "type": "MOBILE"
+          }
+        },
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~30002",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "criterionId": "30002",
+          "type": "DEVICE",
+          "status": "ENABLED",
+          "negative": false,
+          "device": {
+            "type": "TABLET"
+          }
+        },
+        {
+          "resourceName": "customers/8590146099/campaignCriteria/24324170853~9235214",
+          "campaign": "customers/8590146099/campaigns/24324170853",
+          "criterionId": "9235214",
+          "type": "LOCATION",
+          "status": "ENABLED",
+          "negative": false,
+          "location": {
+            "geoTargetConstant": "geoTargetConstants/9235214"
+          }
+        }
+      ]
+    }
+  ],
+  "root_cause": "Harness read all criteria but expected exactly two explicit targeting criteria, omitting three existing built-in devices.",
+  "fix": "Select and pin exact five owned records including optional device bid modifier; preserve full snapshot and reject any deviation.",
+  "google_writes": 0,
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T13:46:14.572Z"
+}

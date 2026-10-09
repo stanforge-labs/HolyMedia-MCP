@@ -119,23 +119,37 @@ export function assertFixture(snapshot) {
   )
     fail("stage234_fixture_keywords_changed");
   const criteria = snapshot.criteria ?? [];
+  // Fresh read-only evidence includes Google's three built-in device criteria.
+  // Pin all five exact owned records (including absence of an explicit device
+  // bid override). Do not ignore unknown criteria or remove them from snapshot.
+  const expectedCriteria = [
+    [
+      "1031",
+      "LANGUAGE",
+      { language: { languageConstant: "languageConstants/1031" } },
+    ],
+    ["30000", "DEVICE", { device: { type: "DESKTOP" } }],
+    ["30001", "DEVICE", { device: { type: "MOBILE" } }],
+    ["30002", "DEVICE", { device: { type: "TABLET" } }],
+    [
+      "9235214",
+      "LOCATION",
+      { location: { geoTargetConstant: "geoTargetConstants/9235214" } },
+    ],
+  ].map(([id, type, fields]) => ({
+    campaignCriterion: {
+      resourceName: `customers/${target.customer}/campaignCriteria/${target.campaign}~${id}`,
+      campaign: `customers/${target.customer}/campaigns/${target.campaign}`,
+      criterionId: id,
+      type,
+      status: "ENABLED",
+      negative: false,
+      ...fields,
+    },
+  }));
   if (
-    criteria.length !== 2 ||
-    criteria.some(
-      (r) =>
-        r.campaignCriterion?.negative === true ||
-        r.campaignCriterion?.status === "REMOVED",
-    ) ||
-    !criteria.some(
-      (r) =>
-        r.campaignCriterion?.location?.geoTargetConstant ===
-        "geoTargetConstants/9235214",
-    ) ||
-    !criteria.some(
-      (r) =>
-        r.campaignCriterion?.language?.languageConstant ===
-        "languageConstants/1031",
-    )
+    canonical(criteria.map(canonical).sort()) !==
+    canonical(expectedCriteria.map(canonical).sort())
   )
     fail("stage234_fixture_targeting_changed");
 }

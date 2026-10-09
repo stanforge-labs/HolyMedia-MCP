@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "source_head": "71f2b732286e2c47a59284c20e0f006852d456f2",
+  "linux_ci": {
+    "run_id": 37938198959,
+    "job_id": 113845517664,
+    "conclusion": "success",
+    "node_tests": 119,
+    "api_vitest_tests": 1300,
+    "other_vitest_tests": 63,
+    "total_js_tests_passed": 1482,
+    "skipped": 0,
+    "python_regressions": 28,
+    "all_quality_steps_pass": true
+  },
+  "immutable_api_image": {
+    "workflow_run": 37938199016,
+    "job_id": 113845517646,
+    "source_revision": "71f2b732286e2c47a59284c20e0f006852d456f2",
+    "digest": "sha256:44e513de4c7a65bad4e870fbc1945a1dfa90d8b91ac7fab96d9386cab778735d",
+    "api_only": true,
+    "user": "node",
+    "linux_sharp_decode_smoke": true,
+    "production_deployment": false
+  },
+  "local_windows": {
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma": "PASS",
+    "unit_mock_tests": "PASS",
+    "integration_skipped": 26,
+    "skips_reason": "Local DB/Redis gated integration unavailable; hosted Linux executed all with zero skips.",
+    "python": 28,
+    "standard_secret_scan": "PASS",
+    "dependency_audit": {
+      "critical": 0,
+      "high": 0,
+      "moderate": 6
+    }
+  },
+  "security_risk_assessment": "artifacts/google-full-scope/moderate-security-risk-assessment-20261009.json",
+  "migration": "NONE",
+  "stage01_meta_google_read_regression": "PASS_IN_FULL_SUITE",
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T13:40:36Z"
+}

@@ -8,6 +8,9 @@ import {
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import process from "node:process";
+import { URL, URLSearchParams } from "node:url";
+const { Headers } = globalThis;
 
 export const target = Object.freeze({
   customer: "8590146099",
@@ -66,7 +69,7 @@ export const queries = Object.freeze({
   budget:
     "SELECT campaign_budget.resource_name, campaign_budget.amount_micros, campaign_budget.explicitly_shared, campaign_budget.delivery_method FROM campaign_budget WHERE campaign_budget.resource_name = 'customers/8590146099/campaignBudgets/15934365976'",
   criteria:
-    "SELECT campaign_criterion.resource_name, campaign_criterion.type, campaign_criterion.negative, campaign_criterion.status, campaign_criterion.location.geo_target_constant, campaign_criterion.language.language_constant FROM campaign_criterion WHERE campaign.id = 24324170853 AND campaign_criterion.status != REMOVED",
+    "SELECT campaign_criterion.resource_name, campaign_criterion.campaign, campaign_criterion.criterion_id, campaign_criterion.type, campaign_criterion.negative, campaign_criterion.status, campaign_criterion.bid_modifier, campaign_criterion.device.type, campaign_criterion.location.geo_target_constant, campaign_criterion.language.language_constant FROM campaign_criterion WHERE campaign.id = 24324170853 AND campaign_criterion.status != REMOVED",
 });
 export const toolArguments = Object.freeze({
   provider: "GOOGLE_ADS",

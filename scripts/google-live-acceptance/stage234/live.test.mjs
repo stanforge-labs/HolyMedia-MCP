@@ -486,19 +486,30 @@ const fixture = () => ({
     },
   })),
   criteria: [
-    {
-      campaignCriterion: {
-        type: "LOCATION",
-        location: { geoTargetConstant: "geoTargetConstants/9235214" },
-      },
+    [
+      "1031",
+      "LANGUAGE",
+      { language: { languageConstant: "languageConstants/1031" } },
+    ],
+    ["30000", "DEVICE", { device: { type: "DESKTOP" } }],
+    ["30001", "DEVICE", { device: { type: "MOBILE" } }],
+    ["30002", "DEVICE", { device: { type: "TABLET" } }],
+    [
+      "9235214",
+      "LOCATION",
+      { location: { geoTargetConstant: "geoTargetConstants/9235214" } },
+    ],
+  ].map(([id, type, fields]) => ({
+    campaignCriterion: {
+      resourceName: `customers/${target.customer}/campaignCriteria/${target.campaign}~${id}`,
+      campaign: `customers/${target.customer}/campaigns/${target.campaign}`,
+      criterionId: id,
+      type,
+      status: "ENABLED",
+      negative: false,
+      ...fields,
     },
-    {
-      campaignCriterion: {
-        type: "LANGUAGE",
-        language: { languageConstant: "languageConstants/1031" },
-      },
-    },
-  ],
+  })),
 });
 const preview = () => ({
   status: "preview",
@@ -535,6 +546,47 @@ test("fixture proof includes original20+pausedresidual and paused delivery entit
     change(snapshot);
     assert.throws(() => assertFixture(snapshot));
   }
+});
+test("exact live baseline retains default devices and rejects unknown, duplicated, foreign, or changed targeting", () => {
+  assertFixture(fixture());
+  for (const change of [
+    (s) => s.criteria.pop(),
+    (s) => s.criteria.push(structuredClone(s.criteria[0])),
+    (s) => {
+      s.criteria[1].campaignCriterion.bidModifier = 0.9;
+    },
+    (s) => {
+      s.criteria[1].campaignCriterion.device.type = "CONNECTED_TV";
+    },
+    (s) => {
+      s.criteria[1].campaignCriterion.status = "PAUSED";
+    },
+    (s) => {
+      s.criteria[0].campaignCriterion.negative = true;
+    },
+    (s) => {
+      s.criteria[0].campaignCriterion.campaign =
+        "customers/9999999999/campaigns/24324170853";
+    },
+    (s) => {
+      s.criteria[0].campaignCriterion.resourceName =
+        "customers/9999999999/campaignCriteria/24324170853~1031";
+    },
+    (s) => {
+      s.criteria[0].campaignCriterion.language.languageConstant =
+        "languageConstants/1000";
+    },
+    (s) => {
+      s.criteria[4].campaignCriterion.location.geoTargetConstant =
+        "geoTargetConstants/90000";
+    },
+  ]) {
+    const s = fixture();
+    change(s);
+    assert.throws(() => assertFixture(s), /stage234_fixture_targeting_changed/);
+  }
+  assert.ok(queries.criteria.includes("campaign_criterion.device.type"));
+  assert.ok(queries.criteria.includes("campaign_criterion.bid_modifier"));
 });
 test("truthful exact preview BEFORE100000 AFTER110000 and immutable snapshot checkpoint", () => {
   const p = preview();
