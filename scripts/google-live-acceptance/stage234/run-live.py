@@ -223,6 +223,7 @@ def main():
     with os.fdopen(fd, 'w') as stream:
         for key, value in docker_env_values((ROOT / 'acceptance.env').read_text()).items():
             stream.write(key + '=' + value + '\n')
+    os.chown(runtime_env, 1000, 1000)
     script_dir = Path(__file__).resolve().parent
     # Record the immutable source identity and the exact mounted guard/runner
     # bytes before preview creation. A future authorized continuation checks

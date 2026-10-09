@@ -11,6 +11,13 @@ spec.loader.exec_module(runner)
 
 
 class LauncherTests(unittest.TestCase):
+    def test_new_runtime_copy_and_manifest_are_delegated_only_to_exact_node_owner(self):
+        source = Path(runner.__file__).read_text()
+        self.assertIn('os.chown(runtime_env, 1000, 1000)', source)
+        self.assertIn('os.chown(harness_manifest, 1000, 1000)', source)
+        self.assertNotIn('chown -R', source)
+        self.assertLess(source.index('os.chown(runtime_env, 1000, 1000)'), source.index('args = command(options.image'))
+
     def test_harness_manifest_is_closed_and_pins_actual_guard_bytes(self):
         with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'is_symlink', return_value=False), patch.object(Path, 'read_bytes', return_value=b'synthetic-guard-source'):
             manifest = runner.build_harness_manifest('a' * 40, Path('/synthetic'))
