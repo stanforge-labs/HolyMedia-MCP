@@ -244,6 +244,7 @@ function strategyPayload(
   if (
     value.cpcBidFloorMicros &&
     value.cpcBidCeilingMicros &&
+    BigInt(String(value.cpcBidCeilingMicros)) > 0n &&
     BigInt(String(value.cpcBidFloorMicros)) >
       BigInt(String(value.cpcBidCeilingMicros))
   )
