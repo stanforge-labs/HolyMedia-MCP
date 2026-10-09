@@ -319,7 +319,21 @@ export function parseStage3Intent(raw: unknown): Stage3Intent {
         );
       if (a.id !== undefined) extId(a.id, "audience id");
       if (a.name !== undefined) text(a.name, "audience name");
+      if (action === "audience_exclude" && a.kind === "CUSTOM")
+        extFail(
+          "google_stage3_unsupported",
+          "Google Ads API v24 не поддерживает negative CUSTOM_AUDIENCE criterion. Definitions не исключаются этим инструментом.",
+        );
     }
+    if (
+      action === "demographic_add" &&
+      x.dimension === "PARENTAL_STATUS" &&
+      x.level === "CAMPAIGN"
+    )
+      extFail(
+        "google_stage3_unsupported",
+        "Campaign-level PARENTAL_STATUS поддерживает только negative/exclude. Positive targeting допустим на ad group level.",
+      );
     if (action.startsWith("demographic_"))
       choice(
         x.value,
@@ -913,7 +927,7 @@ export async function buildStage3Plan(
         current.some(
           (r) =>
             typeof r.targetingDimension !== "string" ||
-            typeof r.bidOnly !== "boolean",
+            (r.bidOnly !== undefined && typeof r.bidOnly !== "boolean"),
         ) ||
         new Set(current.map((r) => r.targetingDimension)).size !==
           current.length
@@ -994,7 +1008,8 @@ export async function buildStage3Plan(
           "Нельзя задать разные audience modes одному parent в одном batch.",
         );
       modes.set(parentResource, mode);
-      if (already || previous?.bidOnly === bidOnly) return;
+      if (already || (previous && (previous.bidOnly ?? false) === bidOnly))
+        return;
       const targetingSetting = {
         ...extRow(parent.targetingSetting),
         targetRestrictions: [
@@ -1006,14 +1021,24 @@ export async function buildStage3Plan(
         parentKind,
         "update",
         parentResource,
-        { resourceName: parentResource, targetingSetting },
+        {
+          resourceName: parentResource,
+          targetingSetting: {
+            targetRestrictionOperations: [
+              {
+                operator: "ADD",
+                value: { targetingDimension: "AUDIENCE", bidOnly },
+              },
+            ],
+          },
+        },
         { ...parent, targetingSetting },
         parent,
         parentQuery,
         parentResponse,
-        "targeting_setting.target_restrictions",
+        "targeting_setting.target_restriction_operations",
       );
-      if (previous)
+      if (previous && typeof previous.bidOnly === "boolean")
         inverse.push({
           operation: "audience_mode",
           level: x.level,
@@ -1024,7 +1049,7 @@ export async function buildStage3Plan(
       else {
         completelyReversible = false;
         item.warnings.push(
-          "Исходный AUDIENCE restriction отсутствовал: автоматический inverse не обещает точное восстановление отсутствующего provider field.",
+          "Исходный AUDIENCE restriction либо explicit bid_only отсутствовал: автоматический inverse не обещает точное восстановление отсутствующего provider field.",
         );
       }
     };

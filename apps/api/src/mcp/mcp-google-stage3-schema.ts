@@ -157,7 +157,17 @@ export function stage3ToolSchema(
                       k,
                       operation === "device_modifier" && k === "bid_modifier"
                         ? { anyOf: [properties[k], { const: 0 }] }
-                        : properties[k],
+                        : operation === "audience_exclude" && k === "audience"
+                          ? {
+                              ...audience,
+                              properties: {
+                                ...audience.properties,
+                                kind: {
+                                  enum: ["USER_LIST", "IN_MARKET", "AFFINITY"],
+                                },
+                              },
+                            }
+                          : properties[k],
                     ]),
                   ),
                 },
@@ -180,6 +190,19 @@ export function stage3ToolSchema(
                                     },
                                   }),
                                 ),
+                              },
+                            ]
+                          : []),
+                        ...(operation === "demographic_add"
+                          ? [
+                              {
+                                not: {
+                                  properties: {
+                                    level: { const: "CAMPAIGN" },
+                                    dimension: { const: "PARENTAL_STATUS" },
+                                  },
+                                  required: ["level", "dimension"],
+                                },
                               },
                             ]
                           : []),

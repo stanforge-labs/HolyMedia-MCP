@@ -47,11 +47,13 @@ The example is a schema illustration, **not** authorization to mutate any accoun
 | Schedules                    | Campaign add, 1–7 weekdays, quarter hours, end 24:00 only, no overnight interval. Existing/planned overlap rejected, max 6 intervals/day. Account timezone shown. Immutable existing schedule dimensions are not edited in place; exact acknowledged remove and new add are separate explicit changes.                                                                                                   |
 | Device targeting             | Update existing campaign MOBILE/DESKTOP/TABLET criterion bid modifier only, 0.1–10 or 0 exclusion. No creation of implicit devices, no negative-device criterion or unsupported group/device replacement. Normal multipliers require supported standard manual profile; explicit device opt-out remains allowed subject to Google validation.                                                            |
 
+Reviewed v24 capability boundaries: `CUSTOM_AUDIENCE` has no negative targeting; `audience_exclude` therefore accepts only user-list/in-market/affinity references. Campaign-level PARENTAL_STATUS is exclusion-only; positive parental targeting remains available at ad-group level. Both impossible combinations are rejected by runtime parser and closed MCP schema before any provider request. User-interest resource names are customer-scoped (`customers/{customer_id}/userInterests/{id}`), not global constants. Negative geo type supports PRESENCE and PRESENCE_OR_INTEREST.
+
 ## Safety, snapshots and recovery
 
 - Full customer proof, parent resource and campaign/group association, targeting restrictions, channel/strategy, selected criterion and reference inventory are frozen for stale checks. A foreign resource or mismatching association aborts the whole batch.
 - Duplicate raw rows, resolved aliases, positive/negative contradictions and multiple changes to one exact resource fail before provider validation. Underlying operation count, including modes and each schedule day, cannot exceed 500.
-- Criteria are modified with exact update masks or one exact remove, never by overwriting the targeting collection. Mode is the provider's repeated restriction field: the builder preserves every other restriction and shows its scope-wide impact.
+- Criteria are modified with exact update masks or one exact remove, never by overwriting the targeting collection. Audience mode uses v24 `targeting_setting.target_restriction_operations` with one `ADD` operation for the AUDIENCE dimension; Google replaces only that dimension. Other restrictions remain intact even if independently inserted between stale-read and mutation. Expected reread still verifies the merged full restriction list and scope-wide impact. Optional omitted `bid_only` is interpreted as provider-default TARGETING=false, without inventing a reversible original field; nonboolean values still fail.
 - Criteria creations use provider-valid ENABLED; campaign/ad group/ad statuses are never altered by targeting writes. New campaign/ad-group/ad creation remains PAUSED in their respective builders.
 - This targeting plan uses `atomic=true` (partial failure false) so an audience mode change and criterion addition cannot be split accidentally. This is distinct from Stage 1's intentionally partial keyword batches. Invalid input/reference rows fail clearly with a Russian HolyMedia code, never masquerading as Google API errors.
 - Every remove requires `acknowledge_irreversible=true`, a visibly irreversible preview and separate human approval. No automatic delete rollback. Creation cannot be automatically reversed by deleting its new resource.
@@ -67,6 +69,8 @@ Standalone regressions cover enums, account/group ownership, mismatching referen
 ## Primary API v24 references
 
 - [Targeting mode and restriction ownership](https://developers.google.com/google-ads/api/docs/targeting/targeting-settings)
+- [Incremental restriction operations and optional bid-only v24 protocol](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/common/targeting_setting.proto)
+- [Supported positive/negative criteria by level](https://developers.google.com/google-ads/api/docs/targeting/criteria)
 - [CampaignCriterion v24 protocol](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign_criterion.proto)
 - [AdGroupCriterion v24 protocol](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/ad_group_criterion.proto)
 - [CustomAudience v24 protocol](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/custom_audience.proto)
