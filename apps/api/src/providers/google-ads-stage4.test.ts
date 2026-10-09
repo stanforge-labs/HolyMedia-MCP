@@ -406,7 +406,7 @@ describe("Stage 4 typed provider plans — mock only", () => {
       ),
     ).rejects.toThrow(/Duplicate/);
   });
-  it("PMax detach refuses before provider read until minimum remaining graph proven", async () => {
+  it("PMax detach refuses when campaign is not PMax; never fabricates minimum graph", async () => {
     const read = fixture();
     await expect(
       buildStage4Plan(
@@ -422,8 +422,8 @@ describe("Stage 4 typed provider plans — mock only", () => {
         ]),
         read,
       ),
-    ).rejects.toThrow(/minimum remaining/);
-    expect(read).not.toHaveBeenCalled();
+    ).rejects.toThrow(/PERFORMANCE_MAX/);
+    expect(read).toHaveBeenCalled();
   });
   it("PMax reference attach reread verifies PAUSED link and preserves complete sibling inventory", async () => {
     const old = {
@@ -979,13 +979,13 @@ describe("Stage 4 typed provider plans — mock only", () => {
       }),
     ).toThrow();
   });
-  it("PMax creation explicit unsupported, no partial graph and no provider request", async () => {
+  it("PMax creation requires complete closed brief before any provider request", async () => {
     const read = fixture();
     await expect(
       buildStage4Plan(account, intent("pmax_create", [{}]), read),
-    ).rejects.toThrow(/PMax creation/);
+    ).rejects.toThrow();
     expect(read).not.toHaveBeenCalled();
-    expect(stage4CapabilityMatrix.pmax_create).toContain("UNSUPPORTED");
+    expect(stage4CapabilityMatrix.pmax_create).toContain("NON_RETAIL");
   });
   it("existing PMax asset group exact update preserves other fields", async () => {
     const plan = await buildStage4Plan(

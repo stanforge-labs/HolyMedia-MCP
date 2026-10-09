@@ -4,6 +4,7 @@ import {
   stage4Actions,
 } from "../mcp/mcp-google-stage4-schema.js";
 import { normalizeBrief, validateText } from "./google-ads-stage0.js";
+import { buildPmaxCreatePlan, buildPmaxEditPlan } from "./google-ads-pmax.js";
 import { finalUrl, canonical, type Stage1Reader } from "./google-ads-stage1.js";
 import {
   extClosed,
@@ -110,7 +111,55 @@ export function parseStage4Intent(raw: unknown): Stage4Intent {
       "field_type",
       "acknowledge_irreversible",
     ],
-    pmax_create: [],
+    pmax_create: ["brief"],
+    pmax_asset_replace: [
+      "campaign_id",
+      "asset_group_id",
+      "asset_id",
+      "field_type",
+      "media",
+      "text",
+      "acknowledge_irreversible",
+    ],
+    pmax_campaign_asset_replace: [
+      "campaign_id",
+      "asset_id",
+      "field_type",
+      "media",
+      "text",
+      "acknowledge_irreversible",
+    ],
+    pmax_campaign_asset_detach: [
+      "campaign_id",
+      "asset_id",
+      "field_type",
+      "acknowledge_irreversible",
+    ],
+    pmax_signal_remove: [
+      "campaign_id",
+      "asset_group_id",
+      "signal_id",
+      "acknowledge_irreversible",
+    ],
+    pmax_negative_add: ["campaign_id", "text", "match_type"],
+    pmax_negative_remove: [
+      "campaign_id",
+      "criterion_id",
+      "acknowledge_irreversible",
+    ],
+    pmax_brand_exclude: ["campaign_id", "shared_set_id"],
+    pmax_brand_remove: [
+      "campaign_id",
+      "criterion_id",
+      "acknowledge_irreversible",
+    ],
+    image_asset_create: [
+      "level",
+      "campaign_id",
+      "ad_group_id",
+      "media",
+      "field_type",
+    ],
   };
   const items = intent.items.map((v) => {
     const r = extClosed(v, allowed[String(intent.action)]!);
@@ -308,11 +357,29 @@ export async function buildStage4Plan(
   read: Stage1Reader,
 ): Promise<ExtendedPlan> {
   const intent = parseStage4Intent(raw);
-  if (intent.action === "pmax_asset_detach")
-    extFail(
-      "google_pmax_minimum_assets_unsupported",
-      "PMax detach не реализован: требуется доказательство minimum remaining asset/brand profile. Старые assets и связи не изменяются.",
-    );
+  if (intent.action === "pmax_create") {
+    if (intent.items.length !== 1)
+      extFail(
+        "google_pmax_atomic_campaign_limit",
+        "One atomic PMax campaign brief per preview.",
+      );
+    return buildPmaxCreatePlan(account, intent.items[0]!.brief, read);
+  }
+  if (
+    [
+      "pmax_asset_detach",
+      "pmax_asset_replace",
+      "pmax_campaign_asset_replace",
+      "pmax_campaign_asset_detach",
+      "pmax_signal_remove",
+      "pmax_negative_add",
+      "pmax_negative_remove",
+      "pmax_brand_exclude",
+      "pmax_brand_remove",
+      "image_asset_create",
+    ].includes(intent.action)
+  )
+    return buildPmaxEditPlan(account, intent, read);
   if (
     ["ad_remove", "asset_detach"].includes(intent.action) &&
     intent.items.some((i) => i.acknowledge_irreversible !== true)
@@ -320,11 +387,6 @@ export async function buildStage4Plan(
     extFail(
       "google_irreversible_acknowledgement_required",
       "Remove/detach требует acknowledge_irreversible=true и отдельного browser approval.",
-    );
-  if (intent.action === "pmax_create")
-    extFail(
-      "google_pmax_profile_unsupported",
-      "PMax creation не реализован: требуется проверенный atomic minimum-asset/brand-guidelines/conversion/media profile. Ничего не опущено и не создано.",
     );
   const ctx = await extContext(account, read);
   if (
@@ -571,6 +633,17 @@ export async function buildStage4Plan(
       const level = String(row.level),
         c = level === "account" ? null : await campaign(row.campaign_id),
         g = level === "ad_group" ? (await group(row)).g : null;
+      if (
+        intent.action === "asset_detach" &&
+        c?.advertisingChannelType === "PERFORMANCE_MAX" &&
+        ["LOGO", "BUSINESS_LOGO", "BUSINESS_NAME"].includes(
+          String(row.field_type),
+        )
+      )
+        extFail(
+          "google_pmax_brand_minimum_unsupported",
+          "Generic detach не может удалить обязательный PMax branding. Campaign-level branding replacement/minimum proof требуется отдельно; этот путь не bypass.",
+        );
       const kind =
           level === "campaign"
             ? "campaignAssets"
@@ -1199,16 +1272,25 @@ export const stage4CapabilityMatrix = {
   ad_remove: "IMPLEMENTED_EXPLICIT_IRREVERSIBLE",
   text_call_business_assets: "IMPLEMENTED",
   existing_images_logos: "IMPLEMENTED_REFERENCE_ONLY",
-  binary_ingestion: "UNSUPPORTED",
+  binary_ingestion: "IMPLEMENTED_BOUNDED_INLINE_JPEG_PNG_ACTUAL_DECODE",
   campaign_ad_group_updates: "IMPLEMENTED_POINT_MASKS",
   campaign_group_tracking: "IMPLEMENTED",
   account_tracking: "IMPLEMENTED_CUSTOMER_OPERATION",
-  pmax_create: "UNSUPPORTED_ATOMIC_PROFILE_REQUIRED",
+  pmax_create:
+    "IMPLEMENTED_ATOMIC_PAUSED_NON_RETAIL_EXPLICIT_SAME_ACCOUNT_GOALS",
   pmax_existing_asset_group_update: "IMPLEMENTED",
   pmax_existing_search_theme_audience_signal_add: "IMPLEMENTED",
-  pmax_asset_group_create_full_minimum_assets: "UNSUPPORTED",
-  pmax_brand_exclusions_negatives: "UNSUPPORTED_PROFILE",
+  pmax_asset_group_create_full_minimum_assets:
+    "IMPLEMENTED_INSIDE_ATOMIC_CREATE_BRIEF",
+  pmax_brand_exclusions_negatives:
+    "IMPLEMENTED_EXISTING_BRANDS_AND_V24_NEGATIVE_CRITERIA_PROVIDER_ELIGIBILITY_REQUIRED",
   pmax_image_text_attachment:
     "IMPLEMENTED_EXISTING_REFERENCES_PAUSED_LINK_ONLY",
-  pmax_asset_detach: "UNSUPPORTED_MINIMUM_REMAINING_ASSETS_PROFILE",
+  pmax_asset_detach: "IMPLEMENTED_MINIMUM_REMAINING_ASSETS_BRANDING_PROOF",
+  pmax_asset_replace: "IMPLEMENTED_ATOMIC_TEXT_IMAGE_ASSOCIATION_REPLACEMENT",
+  pmax_campaign_brand_assets:
+    "IMPLEMENTED_ATOMIC_REPLACEMENT_AND_MINIMUM_SAFE_DETACH",
+  pmax_signal_remove: "IMPLEMENTED_EXPLICIT_IRREVERSIBLE_ASSOCIATION_REMOVE",
+  pmax_retail_feed_travel_local_services: "UNSUPPORTED_NOT_NON_RETAIL_PROFILE",
+  pmax_cross_account_conversion_goals: "UNSUPPORTED_EXPLICIT_REJECTION",
 } as const;
