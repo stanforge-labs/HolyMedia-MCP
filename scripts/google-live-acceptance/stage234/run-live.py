@@ -45,6 +45,19 @@ def safe_report(value):
     return {key: item for key, item in value.items() if key in names}
 
 
+def build_harness_manifest(head, directory):
+    require(re.fullmatch(r'[0-9a-f]{40}', head) is not None, 'stage234_source_head_invalid')
+    names = ['commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs']
+    hashes = {}
+    for name in names:
+        file = directory / name
+        require(file.is_file() and not file.is_symlink(), 'stage234_harness_file_invalid')
+        data = file.read_bytes()
+        require(0 < len(data) <= 500000, 'stage234_harness_file_invalid')
+        hashes[name] = hashlib.sha256(data).hexdigest()
+    return {'head': head, 'files': hashes}
+
+
 def production_state():
     ids = capture(['docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project=holymedia-v2']).split()
     require(len(ids) == 5, 'stage234_production_service_set_invalid')
@@ -211,6 +224,14 @@ def main():
         for key, value in docker_env_values((ROOT / 'acceptance.env').read_text()).items():
             stream.write(key + '=' + value + '\n')
     script_dir = Path(__file__).resolve().parent
+    # Record the immutable source identity and the exact mounted guard/runner
+    # bytes before preview creation. A future authorized continuation checks
+    # this manifest; it must never replace the preview payload or approval.
+    harness_manifest = state / 'harness-source.json'
+    manifest_fd = os.open(harness_manifest, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(manifest_fd, 'w') as stream:
+        json.dump(build_harness_manifest(options.head, script_dir), stream)
+    os.chown(harness_manifest, 1000, 1000)
     args = command(options.image, options.head, options.run_id, script_dir, options.hold_api, runtime_env)
     output = capture(args) if options.hold_api else subprocess.run(args, capture_output=True, text=True, timeout=240)
     require(hashlib.sha256((ROOT / 'acceptance.env').read_bytes()).hexdigest() == env_hash, 'stage234_existing_acceptance_env_changed')

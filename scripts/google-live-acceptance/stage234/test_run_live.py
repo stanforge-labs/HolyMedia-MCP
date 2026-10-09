@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+import hashlib
 
 spec = importlib.util.spec_from_file_location('stage234_run_live', Path(__file__).with_name('run-live.py'))
 runner = importlib.util.module_from_spec(spec)
@@ -9,6 +11,16 @@ spec.loader.exec_module(runner)
 
 
 class LauncherTests(unittest.TestCase):
+    def test_harness_manifest_is_closed_and_pins_actual_guard_bytes(self):
+        with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'is_symlink', return_value=False), patch.object(Path, 'read_bytes', return_value=b'synthetic-guard-source'):
+            manifest = runner.build_harness_manifest('a' * 40, Path('/synthetic'))
+            self.assertEqual(set(manifest), {'head', 'files'})
+            self.assertEqual(set(manifest['files']), {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs'})
+            self.assertTrue(all(value == hashlib.sha256(b'synthetic-guard-source').hexdigest() for value in manifest['files'].values()))
+        with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'is_symlink', return_value=True):
+            with self.assertRaises(RuntimeError): runner.build_harness_manifest('a' * 40, Path('/synthetic'))
+        with self.assertRaises(RuntimeError): runner.build_harness_manifest('latest', Path('/synthetic'))
+
     def test_immutable_digest_and_source_required(self):
         runner.validate_options('a' * 40, 'ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:' + 'b' * 64, '20261009T120000Z-test')
         for image in ['production', 'latest', 'ghcr.io/stanforge-labs/holymedia-mcp-v2:latest']:
