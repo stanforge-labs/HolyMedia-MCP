@@ -1,5 +1,12 @@
 import { negativeMatch } from "./google-ads-negatives.js";
 import {
+  currencyConstantQuery,
+  moneyUnitFromRows,
+  moneyUnitWarnings,
+  quantizePositiveMicros,
+  type GoogleMoneyUnit,
+} from "./google-ads-money.js";
+import {
   assertGoogleBatch,
   customerId,
   GoogleAdsWriteError,
@@ -41,7 +48,12 @@ export type GoogleResourceKind =
   | "sharedCriteria"
   | "campaignSharedSets";
 export type ResourceSnapshot = {
-  kind: GoogleResourceKind | "campaigns" | "adGroups" | "customers";
+  kind:
+    | GoogleResourceKind
+    | "campaigns"
+    | "adGroups"
+    | "customers"
+    | "currencyConstants";
   resource_name: string;
   id: string;
   campaign_id: string;
@@ -57,6 +69,7 @@ export type ResourceSnapshot = {
   final_urls: string[];
   cpc_bid_micros: string;
   currency: string;
+  billable_unit_micros?: string;
   type: string;
 };
 export type Stage1Operation = {
@@ -131,6 +144,7 @@ const kinds = {
   campaigns: "campaign",
   adGroups: "ad_group",
   customers: "customer",
+  currencyConstants: "currency_constant",
 } as const;
 const fields = {
   adGroupCriteria:
@@ -148,6 +162,8 @@ const fields = {
   adGroups:
     "campaign.id, campaign.name, ad_group.resource_name, ad_group.id, ad_group.name, ad_group.status",
   customers: "customer.resource_name, customer.id, customer.currency_code",
+  currencyConstants:
+    "currency_constant.resource_name, currency_constant.code, currency_constant.billable_unit_micros",
 } as const;
 export function stage1Error(code: string, message: string): never {
   throw new GoogleAdsWriteError(code, message);
@@ -212,6 +228,7 @@ export function currencyMicros(
   amount: string,
   currency: string,
   actualCurrency: string,
+  unit?: GoogleMoneyUnit,
 ): string {
   if (currency !== actualCurrency)
     stage1Error(
@@ -227,7 +244,14 @@ export function currencyMicros(
   const micros = BigInt(whole!) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
   if (micros <= 0n)
     stage1Error("google_bid_invalid", "CPC должен быть больше нуля.");
-  return micros.toString();
+  if (unit && unit.currency !== actualCurrency)
+    stage1Error(
+      "google_currency_unit_mismatch",
+      "Billable unit не соответствует валюте аккаунта.",
+    );
+  return unit
+    ? quantizePositiveMicros(micros.toString(), unit)
+    : micros.toString();
 }
 export function parseStage1Intent(raw: unknown): Stage1Intent {
   const input = record(raw);
@@ -390,6 +414,29 @@ export function normalizeResources(
         group = record(row.adGroup),
         keyword = record(entity.keyword);
       const resource = String(entity.resourceName ?? "");
+      if (kind === "currencyConstants") {
+        const unit = moneyUnitFromRows(String(entity.code ?? ""), [row]);
+        return {
+          kind,
+          resource_name: unit.resource_name,
+          id: unit.currency,
+          campaign_id: "",
+          campaign_name: "",
+          ad_group_id: "",
+          ad_group_name: "",
+          shared_set_id: "",
+          name: "",
+          text: "",
+          match_type: "",
+          status: "",
+          negative: false,
+          final_urls: [],
+          cpc_bid_micros: "0",
+          currency: unit.currency,
+          billable_unit_micros: unit.unit_micros,
+          type: "",
+        };
+      }
       const suffix = [
         "adGroupCriteria",
         "campaignCriteria",
@@ -479,6 +526,7 @@ export function keywordCreateFields(
   parent: { adGroup?: string; campaign?: string; sharedSet?: string },
   negative: boolean,
   currency: string,
+  unit?: GoogleMoneyUnit,
 ): Stage1Operation["fields"] {
   return {
     ...parent,
@@ -494,6 +542,7 @@ export function keywordCreateFields(
             item.cpc_bid.amount,
             item.cpc_bid.currency,
             currency,
+            unit,
           ),
         }
       : {}),
@@ -544,6 +593,18 @@ export async function buildStage1Plan(
   };
   const operations: Stage1Operation[] = [],
     items: Stage1Plan["items"] = [];
+  let moneyUnit: GoogleMoneyUnit | undefined;
+  const monetaryUnit = async (currency: string) => {
+    if (moneyUnit) return moneyUnit;
+    const sql = currencyConstantQuery(currency),
+      rawRows = await read(sql);
+    moneyUnit = moneyUnitFromRows(currency, rawRows);
+    checks.push({
+      query: sql,
+      rows: normalizeResources("currencyConstants", rawRows),
+    });
+    return moneyUnit;
+  };
   for (const [index, item] of intent.items.entries()) {
     let campaign: ResourceSnapshot | null = null,
       group: ResourceSnapshot | null = null;
@@ -709,12 +770,19 @@ export async function buildStage1Plan(
             "google_keyword_duplicate",
             "Batch содержит эквивалентные создаваемые критерии.",
           );
-        const currency = item.cpc_bid
-          ? expectOne(
-              await query("customers"),
-              "Не удалось определить валюту аккаунта.",
-            ).currency
-          : "";
+        const copiedBid =
+          intent.action === "keyword_match" && existing!.cpc_bid_micros !== "0"
+            ? existing!.cpc_bid_micros
+            : undefined;
+        const currency =
+          item.cpc_bid || copiedBid
+            ? expectOne(
+                await query("customers"),
+                "Не удалось определить валюту аккаунта.",
+              ).currency
+            : "";
+        const unit =
+          item.cpc_bid || copiedBid ? await monetaryUnit(currency) : undefined;
         const mutation = keywordCreateFields(
           { ...item, text, match_type },
           kind === "adGroupCriteria"
@@ -730,12 +798,25 @@ export async function buildStage1Plan(
                 },
           negative,
           currency,
+          unit,
         );
         if (intent.action === "keyword_match") {
           mutation.finalUrls = existing!.final_urls;
-          if (existing!.cpc_bid_micros !== "0")
-            mutation.cpcBidMicros = existing!.cpc_bid_micros;
+          if (copiedBid)
+            mutation.cpcBidMicros = quantizePositiveMicros(copiedBid, unit!);
         } else if (item.final_url) mutation.finalUrls = [item.final_url];
+        if (unit && mutation.cpcBidMicros) {
+          const requested = item.cpc_bid
+            ? currencyMicros(
+                item.cpc_bid.amount,
+                item.cpc_bid.currency,
+                currency,
+              )
+            : copiedBid!;
+          display.warnings.push(
+            ...moneyUnitWarnings(requested, mutation.cpcBidMicros, unit),
+          );
+        }
         const conflicts: {
           negative: string;
           affected_keyword: string;
@@ -816,7 +897,14 @@ export async function buildStage1Plan(
           display.warnings.push(
             `Минус-слово блокирует действующий/создаваемый ключ: ${conflicts.length} конфликтов. Проверьте строки перед подтверждением.`,
           );
-        display.after = { ...mutation, cpc_bid: item.cpc_bid ?? null };
+        const moneyDisplay = unit
+          ? { currency, billable_unit_micros: unit.unit_micros }
+          : {};
+        display.after = {
+          ...mutation,
+          cpc_bid: item.cpc_bid ?? null,
+          ...moneyDisplay,
+        };
         add({
           kind,
           method: "create",
@@ -848,7 +936,11 @@ export async function buildStage1Plan(
           },
         });
         if (intent.action === "keyword_match") {
-          display.after = { new_keyword: mutation, old_status: "PAUSED" };
+          display.after = {
+            new_keyword: mutation,
+            old_status: "PAUSED",
+            ...moneyDisplay,
+          };
           display.warnings.push(
             "Две операции: создать новый ключ и приостановить старый. При частичном результате возможны два активных ключа; автоматический rollback не поддерживается.",
           );
