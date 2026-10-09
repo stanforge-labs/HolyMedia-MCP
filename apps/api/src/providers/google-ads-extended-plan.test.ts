@@ -67,6 +67,152 @@ function plan(): ExtendedPlan {
   };
 }
 describe("Google extension immutable plan primitives (mock reads only)", () => {
+  it("ad-group device modifier uses the real v24 mutate operation and ownership", () => {
+    const p = plan();
+    p.operations[0] = {
+      ...p.operations[0]!,
+      kind: "adGroupBidModifiers",
+      resource_name: `${prefix}/adGroupBidModifiers/10~11`,
+      fields: {
+        resourceName: `${prefix}/adGroupBidModifiers/10~11`,
+        bidModifier: 1.1,
+      },
+      update_mask: "bid_modifier",
+      response_key: "adGroupBidModifier",
+    };
+    expect(() => assertExtendedPlan(p, account)).not.toThrow();
+    expect(extendedProviderOperation(p.operations[0]!)).toHaveProperty(
+      "adGroupBidModifierOperation.update.bidModifier",
+      1.1,
+    );
+    p.operations[0]!.resource_name = "customers/999/adGroupBidModifiers/10~11";
+    expect(() => assertExtendedPlan(p, account)).toThrow(/Resource/);
+  });
+  it("temporary goal config update requires exact new campaign in the same atomic graph", () => {
+    const p = plan();
+    p.atomic = true;
+    const campaign = `${prefix}/campaigns/-1`;
+    p.operations[0] = {
+      ...p.operations[0]!,
+      method: "create",
+      resource_name: campaign,
+      fields: { resourceName: campaign, status: "PAUSED" },
+      expected: { resourceName: campaign, status: "PAUSED" },
+      before: null,
+      update_mask: null,
+    };
+    p.operations.push({
+      ...p.operations[0]!,
+      kind: "conversionGoalCampaignConfigs",
+      method: "update",
+      resource_name: `${prefix}/conversionGoalCampaignConfigs/-1`,
+      fields: {
+        resourceName: `${prefix}/conversionGoalCampaignConfigs/-1`,
+        goalConfigLevel: "CAMPAIGN",
+      },
+      expected: { campaign, goalConfigLevel: "CAMPAIGN" },
+      update_mask: "goal_config_level",
+      response_key: "conversionGoalCampaignConfig",
+    });
+    expect(() => assertExtendedPlan(p, account)).not.toThrow();
+    p.operations[1]!.expected.campaign = `${prefix}/campaigns/-2`;
+    expect(() => assertExtendedPlan(p, account)).toThrow(/Resource/);
+    p.operations[1]!.expected.campaign = campaign;
+    p.atomic = false;
+    expect(() => assertExtendedPlan(p, account)).toThrow();
+  });
+  it("arbitrary negative update IDs do not bypass existing-resource guards", () => {
+    const p = plan();
+    p.atomic = true;
+    p.operations[0]!.resource_name = `${prefix}/campaigns/-1`;
+    p.operations[0]!.fields.resourceName = p.operations[0]!.resource_name;
+    expect(() => assertExtendedPlan(p, account)).toThrow(/Resource/);
+  });
+  it.each([
+    ["TARGET_SPEND", "targetSpend", "cpcBidCeilingMicros"],
+    ["MAXIMIZE_CONVERSIONS", "maximizeConversions", "targetCpaMicros"],
+    ["TARGET_CPA", "targetCpa", "cpcBidCeilingMicros"],
+    ["TARGET_ROAS", "targetRoas", "cpcBidFloorMicros"],
+  ])(
+    "clear optional %s limit normalizes only an independently proven zero",
+    async (type, scheme, field) => {
+      const p = plan();
+      p.version = 5;
+      const expected = {
+        ...p.operations[0]!.expected,
+        biddingStrategyType: type,
+        [scheme]: { [field]: "0" },
+      };
+      p.operations[0]!.expected = expected;
+      const result = [
+        {
+          success: true,
+          resource_name: p.operations[0]!.resource_name,
+          error: null,
+        },
+      ];
+      const read = async (q: string) =>
+        q.includes("FROM customer")
+          ? p.checks[0]!.rows
+          : [{ campaign: { ...expected, [scheme]: {} } }];
+      expect((await verifyExtendedMutation(p, result, read)).status).toBe(
+        "VERIFIED",
+      );
+      expect(
+        (
+          await verifyExtendedMutation(p, result, async (q) =>
+            q.includes("FROM customer")
+              ? p.checks[0]!.rows
+              : [
+                  {
+                    campaign: {
+                      ...expected,
+                      biddingStrategyType: "OTHER",
+                      [scheme]: {},
+                    },
+                  },
+                ],
+          )
+        ).status,
+      ).toBe("NOT_VERIFIED");
+      expect(
+        (
+          await verifyExtendedMutation(p, result, async (q) =>
+            q.includes("FROM customer")
+              ? p.checks[0]!.rows
+              : [{ campaign: { ...expected, [scheme]: { [field]: "100" } } }],
+          )
+        ).status,
+      ).toBe("NOT_VERIFIED");
+    },
+  );
+  it("mandatory target CPA zero is never globally normalized", async () => {
+    const p = plan();
+    p.operations[0]!.expected = {
+      ...p.operations[0]!.expected,
+      biddingStrategyType: "TARGET_CPA",
+      targetCpa: { targetCpaMicros: "0" },
+    };
+    const actual = { ...p.operations[0]!.expected, targetCpa: {} };
+    expect(
+      (
+        await verifyExtendedMutation(
+          p,
+          [
+            {
+              success: true,
+              resource_name: p.operations[0]!.resource_name,
+              error: null,
+            },
+          ],
+          async (q) =>
+            q.includes("FROM customer")
+              ? p.checks[0]!.rows
+              : [{ campaign: actual }],
+        )
+      ).status,
+    ).toBe("NOT_VERIFIED");
+  });
   it("temporary -1 never corrupts -10/-11 refs or user text", () => {
     const refs = new Map(
       Array.from({ length: 12 }, (_, i) => [
