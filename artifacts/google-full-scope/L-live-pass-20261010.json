@@ -89,6 +89,7 @@
     "provider_read_call_count": 30,
     "validate_only_call_count": 0,
     "real_provider_write_call_count": 1,
+    "oauth_refresh_call_count_separate": 2,
     "semantic_write_operations": 1,
     "automatic_retries": 0,
     "other_account_writes": 0,

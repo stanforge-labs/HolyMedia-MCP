@@ -1,0 +1,78 @@
+{
+  "result": "PASS_READ_ONLY",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "running_source": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+  "harness_head": "3d787c469baf2ee0192ae7ed4342161f360c9b79",
+  "image_digest": "sha256:2d7cd20cb25c268f74abd16f324d7b92ce5d804989a8de9b3fa062a0ca138d35",
+  "test_customer_id": "8590146099",
+  "mcc_read_context": "4378327049",
+  "test_account": true,
+  "fixture_unchanged": true,
+  "snapshot_sha256": "0fc4859cd7211281db5052adbe03478615e762a9a137d417b508ec43db2b09ec",
+  "protected_evidence_sha256": "120bd3e19df8b3cd8de8f3466f54e475ffbc99c5c3066b398b63a5606f210345",
+  "protected_evidence": "/opt/holymedia-google-acceptance/state/stage234-readiness-20261009T203610Z-rd4/targeting-readiness-evidence.json",
+  "G": {
+    "live_status": "BLOCKED_PREREQUISITES",
+    "eligible_paused_auto_search_campaigns_observed": 0,
+    "next_action": "Separate approved explicit keyword CPC setup and MAXIMIZE_CLICKS strategy setup, followed by G and independent verified rollbacks. No setup authorized or executed."
+  },
+  "H": {
+    "nonshared_warning_validation": "PASS_PREVIOUS",
+    "shared_impact": "MOCK_ONLY",
+    "shared_fixture_not_proved": true,
+    "no_account_global_shared_budget_absence_claim": true,
+    "next_action": "Use an actual shared budget if proved; stock shared create/attach profile is unavailable. Nonshared warning-only does not require an unnecessary mutation."
+  },
+  "I": {
+    "live_status": "PREPARED_NOT_LIVE",
+    "prerequisite_blocker_resolved": true,
+    "availability_enum_correction": "ALL_LOCALES and actual v24 channel values",
+    "affinity_observed_count": 190,
+    "affinity_catalog_exhausted_within_bound": true,
+    "search_global_locale_eligible_rows": 145,
+    "selected_audience": { "kind": "AFFINITY", "id": "90100" },
+    "selected_campaign_id": "24324170853",
+    "selected_ad_group_id": "206587491811",
+    "mode": "OBSERVATION",
+    "existing_group_audience_criteria": 0,
+    "new_google_resources_created": 0,
+    "next_action": "Fresh stock preview and Google validate_only, then human approval; separate approved removal after verified add. Explicit OBSERVATION mode may remain as a disclosed residual if prior restriction was absent.",
+    "in_market_bound": 500,
+    "in_market_catalog_exhausted": false,
+    "no_global_absence_claim": true
+  },
+  "J": {
+    "live_status": "BLOCKED_PREREQUISITES",
+    "actual_city_id": "1009806",
+    "actual_city_name": "Astana",
+    "provider_confirmed_direct_districts": 0,
+    "existing_provider_proximity_centers": 0,
+    "next_action": "Provider-supported district/city relationship and legitimate verified radius center required; do not substitute invented IDs or coordinates."
+  },
+  "PMax": {
+    "live_status": "BLOCKED_PREREQUISITES",
+    "usable_same_account_enabled_conversion_actions_observed": 0,
+    "eligible_landscape_images_observed": 0,
+    "eligible_square_images_observed": 0,
+    "eligible_logos_observed": 0,
+    "candidate_business_name_text_asset_ids": [
+      "428412289294",
+      "428412289297",
+      "428412289300",
+      "428791309301",
+      "428791309304"
+    ],
+    "branding_associations_proved": false,
+    "inventory_coverage": "BOUNDED_SAMPLE_ONLY",
+    "next_action": "Legitimate same-account conversion action, authorized decoded landscape/square/logo media and reviewed brand identity before one atomic paused TEST brief. No setup or upload authorized by this artifact."
+  },
+  "provider_read_call_count": 46,
+  "validate_only_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "oauth_refresh_call_count_separate": 0,
+  "all_write_gates_off": true,
+  "production_changed": false,
+  "main_changed": false,
+  "historical_evidence_preserved": true,
+  "timestamp": "2026-10-09T20:37:29.516Z"
+}
