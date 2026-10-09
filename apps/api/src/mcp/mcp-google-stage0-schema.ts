@@ -211,6 +211,34 @@ export const campaignBriefSchema = obj(
       50,
       1,
     ),
+    proximities: arr(
+      "Optional additional coordinate-radius includes; PRESENCE mode, no negative radius or address geocoding. Each adds one atomic campaign criterion.",
+      obj("One radius include.", {
+        latitude: {
+          type: "number",
+          description:
+            "Latitude -90..90, at most six decimal places; exact microdegree conversion.",
+          minimum: -90,
+          maximum: 90,
+        },
+        longitude: {
+          type: "number",
+          description:
+            "Longitude -180..180, at most six decimal places; exact microdegree conversion.",
+          minimum: -180,
+          maximum: 180,
+        },
+        radius: {
+          type: "number",
+          description:
+            "Radius 1..500 in selected units (bounded supported product profile); Google validates local privacy eligibility.",
+          minimum: 1,
+          maximum: 500,
+        },
+        unit: en("Radius measurement unit.", ["KILOMETERS", "MILES"]),
+      }),
+      50,
+    ),
     languages: arr(
       "Language names/codes: Russian/русский/ru, Kazakh/казахский/kk, English/английский/en.",
       str("Google language name or supported alias.", 80),
@@ -381,6 +409,13 @@ export function validateBriefSchema(
     );
   } else {
     if (typeof value !== schema.type) return fail();
+    if (
+      typeof value === "number" &&
+      (!Number.isFinite(value) ||
+        value < (schema.minimum ?? -Infinity) ||
+        value > (schema.maximum ?? Infinity))
+    )
+      return fail();
     if (
       typeof value === "string" &&
       (value.length < (schema.minLength ?? 0) ||
