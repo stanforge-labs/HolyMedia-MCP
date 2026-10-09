@@ -1,5 +1,5 @@
 // N preparation through the unmodified exact-image private HTTP MCP only.
-import { readFileSync, writeFileSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, statSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -49,6 +49,56 @@ export function assertInvalidRsaResult(rpc) {
     code: error.code,
     source: error.source,
     field_path: error.field_path,
+  };
+}
+export function assertPriorKEvidence(raw, source, expectedSha256) {
+  if (
+    !/^stage234-[0-9]{8}T[0-9]{6}Z-[a-z0-9]{1,12}\/acceptance-K-evidence\.json$/.test(
+      source ?? "",
+    ) ||
+    !/^[a-f0-9]{64}$/.test(expectedSha256 ?? "") ||
+    typeof raw !== "string" ||
+    raw.length > 65536 ||
+    digest(raw) !== expectedSha256
+  )
+    fail("stage234_prior_k_reference_invalid");
+  let prior;
+  try {
+    prior = JSON.parse(raw);
+  } catch {
+    fail("stage234_prior_k_evidence_invalid");
+  }
+  if (
+    prior?.acceptance_test !== "K" ||
+    prior.result !== "PASS" ||
+    prior.test_customer_id !== target.customer ||
+    !/^[a-f0-9]{40}$/.test(prior.source_head ?? "") ||
+    prior.runtime !== "stock_private_HTTP_MCP_exact_immutable_image" ||
+    prior.invalid_headline_length !== 31 ||
+    prior.rejection?.code !== "google_brief_invalid" ||
+    prior.rejection?.source !== "HOLYMEDIA" ||
+    prior.rejection?.field_path !== "brief.items[0].rsa.headlines[0].text" ||
+    prior.provider_read_call_count !== 0 ||
+    prior.validate_only_call_count !== 0 ||
+    prior.real_provider_write_call_count !== 0 ||
+    prior.preview_created !== false ||
+    prior.production_changed !== false ||
+    prior.main_changed !== false ||
+    typeof prior.timestamp !== "string" ||
+    !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,3})?(?:Z|[+-][0-9]{2}:[0-9]{2})$/.test(
+      prior.timestamp,
+    ) ||
+    !Number.isFinite(Date.parse(prior.timestamp))
+  )
+    fail("stage234_prior_k_evidence_invalid");
+  return {
+    acceptance_test: "K",
+    result: "REUSED_PRIOR_PASS_NOT_RERUN",
+    prior_source: source,
+    prior_source_sha256: expectedSha256,
+    prior_source_head: prior.source_head,
+    prior_timestamp: prior.timestamp,
+    calls_this_run: 0,
   };
 }
 export function assertFixture(snapshot) {
@@ -271,10 +321,30 @@ export async function runLivePreview() {
     gateway,
     stage = "runtime_preflight",
     evidence,
-    preview;
+    preview,
+    priorK;
   try {
     if ((statSync(root).mode & 0o077) !== 0)
       fail("stage234_state_directory_permissions_invalid");
+    if (
+      env.STAGE234_REUSE_K_EVIDENCE_SOURCE ||
+      env.STAGE234_REUSE_K_EVIDENCE_SHA256
+    ) {
+      const file = join(root, "prior-K-evidence.json");
+      const stat = lstatSync(file);
+      if (
+        !stat.isFile() ||
+        stat.isSymbolicLink() ||
+        (stat.mode & 0o077) !== 0 ||
+        stat.size > 65536
+      )
+        fail("stage234_prior_k_file_invalid");
+      priorK = assertPriorKEvidence(
+        readFileSync(file, "utf8"),
+        env.STAGE234_REUSE_K_EVIDENCE_SOURCE,
+        env.STAGE234_REUSE_K_EVIDENCE_SHA256,
+      );
+    }
     const contextFile = join(root, "fixture-context.json");
     if ((statSync(contextFile).mode & 0o077) !== 0)
       fail("stage234_protected_context_permissions_invalid");
@@ -562,61 +632,67 @@ export async function runLivePreview() {
     }
     // K uses the stock MCP schema rejection before the Stage 4 gate/provider.
     // No provider read/validate/mutation and no preview may be created by K.
-    stage = "K_invalid_rsa";
-    const readCalls = () => {
-      try {
-        return readFileSync(join(root, "calls.jsonl"), "utf8");
-      } catch {
-        return "";
-      }
-    };
-    const callsBeforeK = readCalls();
-    const previewsBeforeK = await db.client.mcpPreview.count({
-      where: { workspaceId: account.workspaceId },
-    });
-    const invalidResponse = await fetch("http://127.0.0.1:4000/mcp", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${context.service_token}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "stage234-K-invalid-rsa",
-        method: "tools/call",
-        params: {
-          name: "google_ads_ads_assets_preview",
-          arguments: invalidRsaArguments,
-        },
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!invalidResponse.ok) fail("stage234_invalid_rsa_transport_rejected");
-    const invalidResult = assertInvalidRsaResult(await invalidResponse.json());
-    if (
-      readCalls() !== callsBeforeK ||
-      (await db.client.mcpPreview.count({
+    if (priorK) {
+      save("acceptance-K-reused-reference.json", priorK);
+    } else {
+      stage = "K_invalid_rsa";
+      const readCalls = () => {
+        try {
+          return readFileSync(join(root, "calls.jsonl"), "utf8");
+        } catch {
+          return "";
+        }
+      };
+      const callsBeforeK = readCalls();
+      const previewsBeforeK = await db.client.mcpPreview.count({
         where: { workspaceId: account.workspaceId },
-      })) !== previewsBeforeK
-    )
-      fail("stage234_invalid_rsa_side_effect");
-    save("acceptance-K-evidence.json", {
-      acceptance_test: "K",
-      result: "PASS",
-      test_customer_id: target.customer,
-      source_head: env.STAGE234_SOURCE_HEAD,
-      runtime: "stock_private_HTTP_MCP_exact_immutable_image",
-      invalid_headline_length: 31,
-      rejection: invalidResult,
-      provider_read_call_count: 0,
-      validate_only_call_count: 0,
-      real_provider_write_call_count: 0,
-      preview_created: false,
-      production_changed: false,
-      main_changed: false,
-      timestamp: new Date().toISOString(),
-    });
+      });
+      const invalidResponse = await fetch("http://127.0.0.1:4000/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${context.service_token}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "stage234-K-invalid-rsa",
+          method: "tools/call",
+          params: {
+            name: "google_ads_ads_assets_preview",
+            arguments: invalidRsaArguments,
+          },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!invalidResponse.ok) fail("stage234_invalid_rsa_transport_rejected");
+      const invalidResult = assertInvalidRsaResult(
+        await invalidResponse.json(),
+      );
+      if (
+        readCalls() !== callsBeforeK ||
+        (await db.client.mcpPreview.count({
+          where: { workspaceId: account.workspaceId },
+        })) !== previewsBeforeK
+      )
+        fail("stage234_invalid_rsa_side_effect");
+      save("acceptance-K-evidence.json", {
+        acceptance_test: "K",
+        result: "PASS",
+        test_customer_id: target.customer,
+        source_head: env.STAGE234_SOURCE_HEAD,
+        runtime: "stock_private_HTTP_MCP_exact_immutable_image",
+        invalid_headline_length: 31,
+        rejection: invalidResult,
+        provider_read_call_count: 0,
+        validate_only_call_count: 0,
+        real_provider_write_call_count: 0,
+        preview_created: false,
+        production_changed: false,
+        main_changed: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
     stage = "N_JIT_preview";
     // JIT: all fixture/image/API/gateway prechecks are complete before preview.
     const response = await fetch("http://127.0.0.1:4000/mcp", {
@@ -741,6 +817,7 @@ export async function runLivePreview() {
       persisted_preview_immutable: true,
       historical_evidence_unchanged: true,
       approval_url_ready: approvalReady,
+      ...(priorK ? { prior_acceptance_K: priorK } : {}),
     };
     save("evidence.json", evidence);
     console.log(

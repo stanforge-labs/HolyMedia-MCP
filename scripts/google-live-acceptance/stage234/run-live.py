@@ -5,6 +5,7 @@ local Docker/config checks without launching the preview or provider requests.
 Never restarts/recreates an existing application container.
 """
 import argparse
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -43,6 +44,33 @@ def context_source(basename):
     require(basename == 'fixture-context.json' or re.fullmatch(r'stage234-scoped-context-[0-9]{8}T[0-9]{6}Z\.json', basename) is not None,
             'stage234_protected_context_basename_invalid')
     return ROOT / 'state' / basename
+
+
+def prior_k_source(relative, expected_sha256):
+    if relative is None and expected_sha256 is None:
+        return None
+    require(isinstance(relative, str) and re.fullmatch(r'stage234-[0-9]{8}T[0-9]{6}Z-[a-z0-9]{1,12}/acceptance-K-evidence\.json', relative) is not None
+            and re.fullmatch(r'[a-f0-9]{64}', expected_sha256 or '') is not None, 'stage234_prior_k_reference_invalid')
+    path = ROOT / 'state' / relative
+    permissions(path)
+    require(not path.parent.is_symlink() and path.stat().st_size <= 65536, 'stage234_prior_k_file_invalid')
+    data = path.read_bytes()
+    require(hashlib.sha256(data).hexdigest() == expected_sha256, 'stage234_prior_k_hash_mismatch')
+    prior = json.loads(data)
+    require(isinstance(prior, dict) and isinstance(prior.get('timestamp'), str)
+            and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,3})?(?:Z|[+-][0-9]{2}:[0-9]{2})', prior['timestamp']) is not None,
+            'stage234_prior_k_evidence_invalid')
+    try:
+        datetime.fromisoformat(prior['timestamp'].replace('Z', '+00:00'))
+    except ValueError:
+        raise RuntimeError('stage234_prior_k_evidence_invalid') from None
+    require(prior.get('acceptance_test') == 'K' and prior.get('result') == 'PASS' and prior.get('test_customer_id') == '8590146099'
+            and prior.get('invalid_headline_length') == 31 and prior.get('rejection') == {'code': 'google_brief_invalid', 'source': 'HOLYMEDIA', 'field_path': 'brief.items[0].rsa.headlines[0].text'}
+            and isinstance(prior.get('source_head'), str) and re.fullmatch(r'[a-f0-9]{40}', prior['source_head']) is not None and prior.get('runtime') == 'stock_private_HTTP_MCP_exact_immutable_image'
+            and all(type(prior.get(key)) is int and prior[key] == 0 for key in ['provider_read_call_count', 'validate_only_call_count', 'real_provider_write_call_count'])
+            and prior.get('preview_created') is False and prior.get('production_changed') is False and prior.get('main_changed') is False,
+            'stage234_prior_k_evidence_invalid')
+    return {'source': relative, 'sha256': expected_sha256, 'bytes': data}
 
 
 def safe_report(value):
@@ -162,7 +190,7 @@ def prepare_network():
                       'existing_services_restarted': False, 'provider_reads': 0, 'validate_only': 0, 'real_writes': 0}))
 
 
-def command(image, head, run_id, directory, hold=False, env_file=None):
+def command(image, head, run_id, directory, hold=False, env_file=None, prior_k=None):
     # No product module mounts, volumes-from, production networks or host network.
     args = ['docker', 'run', '--init', '--rm', '--name', 'hm-stage234-' + run_id, '--network', NETWORK,
             '--label', 'com.docker.compose.project=' + PROJECT, '--memory', '768m', '--cpus', '1',
@@ -185,6 +213,8 @@ def command(image, head, run_id, directory, hold=False, env_file=None):
         'API_PORT': '4000', 'LOG_LEVEL': 'error',
         'NODE_OPTIONS': '--max-old-space-size=192',
     }
+    if prior_k:
+        variables.update({'STAGE234_REUSE_K_EVIDENCE_SOURCE': prior_k['source'], 'STAGE234_REUSE_K_EVIDENCE_SHA256': prior_k['sha256']})
     for key, value in variables.items():
         args += ['-e', key + '=' + value]
     return args + [image, '--max-old-space-size=192', '/stage234/live-runner.mjs']
@@ -199,6 +229,8 @@ def main():
     parser.add_argument('--hold-api', action='store_true', help='Keep exact API alive; root must prepare stock human approval gateway separately.')
     parser.add_argument('--prepare-network', action='store_true', help='Prepare a secondary isolated acceptance-only DB/Redis network; no provider call.')
     parser.add_argument('--context-basename', default='fixture-context.json', help='Protected acceptance-state basename only; a separately authorized new scoped key must not overwrite historical context.')
+    parser.add_argument('--reuse-k-evidence', help='Explicit prior state-relative acceptance-K-evidence.json reference; never marks a new K PASS.')
+    parser.add_argument('--reuse-k-sha256', help='Exact SHA256 of the complete immutable prior K evidence; required together with --reuse-k-evidence.')
     options = parser.parse_args()
     validate_options(options.head, options.image, options.run_id)
     require(hasattr(os, 'geteuid') and os.geteuid() == 0, 'stage234_vps_sudo_required')
@@ -207,6 +239,7 @@ def main():
         return
     selected_context = context_source(options.context_basename)
     permissions(selected_context)
+    prior_k = prior_k_source(options.reuse_k_evidence, options.reuse_k_sha256)
     production = production_state()
     env_hash = inspect_ready(options.head, options.image)
     if options.check_only:
@@ -225,6 +258,12 @@ def main():
     with os.fdopen(context_fd, 'wb') as stream:
         stream.write(selected_context.read_bytes())
     os.chown(context_file, 1000, 1000)
+    if prior_k:
+        prior_file = state / 'prior-K-evidence.json'
+        fd = os.open(prior_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(prior_k['bytes'])
+        os.chown(prior_file, 1000, 1000)
     # Docker --env-file does not parse Compose quotes. Convert only disposable
     # acceptance config into a new protected file; never modify the original.
     runtime_env = state / 'runtime.env'
@@ -242,7 +281,7 @@ def main():
     with os.fdopen(manifest_fd, 'w') as stream:
         json.dump(build_harness_manifest(options.head, script_dir), stream)
     os.chown(harness_manifest, 1000, 1000)
-    args = command(options.image, options.head, options.run_id, script_dir, options.hold_api, runtime_env)
+    args = command(options.image, options.head, options.run_id, script_dir, options.hold_api, runtime_env, prior_k)
     output = capture(args) if options.hold_api else subprocess.run(args, capture_output=True, text=True, timeout=240)
     require(hashlib.sha256((ROOT / 'acceptance.env').read_bytes()).hexdigest() == env_hash, 'stage234_existing_acceptance_env_changed')
     require(production_state() == production, 'stage234_production_state_changed_stop')

@@ -14,6 +14,7 @@ import {
   assertProof,
   assertRuntime,
   canonical,
+  digest,
   sanitized,
   safeError,
   claimValidation,
@@ -24,6 +25,7 @@ import {
   makeCheckpoint,
   assertInvalidRsaResult,
   assertPausedDeliveryFixtures,
+  assertPriorKEvidence,
 } from "./live-runner.mjs";
 
 const env = {
@@ -53,6 +55,83 @@ const now = Date.parse("2026-10-09T12:00:00Z"),
     source_head: env.STAGE234_SOURCE_HEAD,
     verified_at: new Date(now).toISOString(),
   };
+const priorK = () => ({
+  acceptance_test: "K",
+  result: "PASS",
+  test_customer_id: target.customer,
+  source_head: "a".repeat(40),
+  runtime: "stock_private_HTTP_MCP_exact_immutable_image",
+  invalid_headline_length: 31,
+  rejection: {
+    code: "google_brief_invalid",
+    source: "HOLYMEDIA",
+    field_path: "brief.items[0].rsa.headlines[0].text",
+  },
+  provider_read_call_count: 0,
+  validate_only_call_count: 0,
+  real_provider_write_call_count: 0,
+  preview_created: false,
+  production_changed: false,
+  main_changed: false,
+  timestamp: "2026-10-09T12:00:00Z",
+});
+test("N-only explicitly references prior K full bytes and identity, never creates a new K PASS", () => {
+  const raw = JSON.stringify(priorK());
+  const ref = assertPriorKEvidence(
+    raw,
+    "stage234-20261009T120000Z-test/acceptance-K-evidence.json",
+    digest(raw),
+  );
+  assert.equal(ref.result, "REUSED_PRIOR_PASS_NOT_RERUN");
+  assert.equal(ref.prior_source_head, "a".repeat(40));
+  assert.equal(ref.prior_timestamp, priorK().timestamp);
+  assert.equal(ref.calls_this_run, 0);
+  assert.equal(ref.prior_source_sha256, digest(raw));
+});
+test("K reuse rejects missing/hash changed/foreign account/nonzero calls/wrong rejection", () => {
+  const source = "stage234-20261009T120000Z-test/acceptance-K-evidence.json",
+    raw = JSON.stringify(priorK());
+  for (const [path, hash] of [
+    [source, undefined],
+    [source, "f".repeat(64)],
+    ["../acceptance-K-evidence.json", digest(raw)],
+    ["/tmp/acceptance-K-evidence.json", digest(raw)],
+  ])
+    assert.throws(() => assertPriorKEvidence(raw, path, hash));
+  for (const change of [
+    (p) => (p.test_customer_id = target.mcc),
+    (p) => (p.result = "BLOCKED"),
+    (p) => (p.invalid_headline_length = 30),
+    (p) => (p.preview_created = true),
+    (p) => (p.real_provider_write_call_count = 1),
+    (p) => (p.provider_read_call_count = false),
+    (p) => (p.rejection.code = "stage4_gate_disabled"),
+    (p) => (p.source_head = "latest"),
+    (p) => (p.timestamp = "invalid"),
+  ]) {
+    const p = priorK();
+    change(p);
+    const text = JSON.stringify(p);
+    assert.throws(() => assertPriorKEvidence(text, source, digest(text)));
+  }
+});
+test("runner K reuse branch bypasses only K and records a reference before N JIT", () => {
+  const source = readFileSync(
+    new URL("./live-runner.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /if \(priorK\) \{\s*save\("acceptance-K-reused-reference\.json", priorK\);\s*\} else \{/,
+  );
+  assert.match(source, /prior_acceptance_K: priorK/);
+  assert.equal(
+    source.indexOf("priorK = assertPriorKEvidence(") >= 0 &&
+      source.indexOf("priorK = assertPriorKEvidence(") <
+        source.indexOf("fresh_customer_hierarchy_proof"),
+    true,
+  );
+});
 const endpoint = `https://googleads.googleapis.com/v24/customers/${target.customer}/adGroups:mutate`;
 const req = (body) => ({
   method: "POST",

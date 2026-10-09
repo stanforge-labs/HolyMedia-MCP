@@ -2,6 +2,10 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+import hashlib
+import json
 from unittest.mock import patch
 import hashlib
 
@@ -11,6 +15,38 @@ spec.loader.exec_module(runner)
 
 
 class LauncherTests(unittest.TestCase):
+    def test_n_only_reuse_options_are_paired_and_command_keeps_write_off(self):
+        self.assertIsNone(runner.prior_k_source(None, None))
+        for source, sha in [(None, 'a' * 64), ('../acceptance-K-evidence.json', 'a' * 64), ('stage234-20261009T120000Z-test/acceptance-K-evidence.json', None)]:
+            with self.assertRaises(RuntimeError): runner.prior_k_source(source, sha)
+        args = runner.command('ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:' + 'b' * 64, 'a' * 40, '20261009T120000Z-test', Path('/safe'), prior_k={'source': 'stage234-20261009T120000Z-old/acceptance-K-evidence.json', 'sha256': 'c' * 64})
+        self.assertIn('STAGE234_REUSE_K_EVIDENCE_SOURCE=stage234-20261009T120000Z-old/acceptance-K-evidence.json', args)
+        self.assertIn('STAGE234_REUSE_K_EVIDENCE_SHA256=' + 'c' * 64, args)
+        self.assertIn('V2_CONFIRMED_WRITE_ENABLED=false', args)
+        self.assertIn('V2_PREVIEW_ONLY=true', args)
+
+    def test_prior_k_bytes_are_hashed_bound_to_test_identity_and_returned_without_rewriting(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            file = root / 'state/stage234-20261009T120000Z-old/acceptance-K-evidence.json'
+            file.parent.mkdir(parents=True)
+            prior = {'acceptance_test': 'K', 'result': 'PASS', 'test_customer_id': '8590146099', 'source_head': 'a' * 40,
+                     'runtime': 'stock_private_HTTP_MCP_exact_immutable_image', 'invalid_headline_length': 31,
+                     'rejection': {'code': 'google_brief_invalid', 'source': 'HOLYMEDIA', 'field_path': 'brief.items[0].rsa.headlines[0].text'},
+                     'provider_read_call_count': 0, 'validate_only_call_count': 0, 'real_provider_write_call_count': 0,
+                     'preview_created': False, 'production_changed': False, 'main_changed': False, 'timestamp': '2026-10-09T12:00:00Z'}
+            raw = json.dumps(prior).encode()
+            file.write_bytes(raw)
+            sha = hashlib.sha256(raw).hexdigest()
+            with patch.object(runner, 'ROOT', root), patch.object(runner, 'permissions'):
+                reused = runner.prior_k_source('stage234-20261009T120000Z-old/acceptance-K-evidence.json', sha)
+                self.assertEqual(reused['bytes'], raw)
+                self.assertEqual(file.read_bytes(), raw)
+                with self.assertRaises(RuntimeError): runner.prior_k_source(reused['source'], 'b' * 64)
+                prior['test_customer_id'] = '4378327049'
+                raw = json.dumps(prior).encode()
+                file.write_bytes(raw)
+                with self.assertRaises(RuntimeError): runner.prior_k_source(reused['source'], hashlib.sha256(raw).hexdigest())
     def test_context_selection_never_overwrites_or_reads_arbitrary_credentials(self):
         self.assertEqual(runner.context_source('fixture-context.json'), runner.ROOT / 'state/fixture-context.json')
         self.assertEqual(runner.context_source('stage234-scoped-context-20261009T120000Z.json'), runner.ROOT / 'state/stage234-scoped-context-20261009T120000Z.json')
