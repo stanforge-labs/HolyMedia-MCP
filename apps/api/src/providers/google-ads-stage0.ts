@@ -2,6 +2,11 @@ import { safeGet } from "@holymedia/site-audit";
 import type { Stage2Plan } from "./google-ads-stage2.js";
 import type { ExtendedPlan } from "./google-ads-extended-plan.js";
 import {
+  currencyConstantQuery,
+  moneyUnitFromRows,
+  moneyUnitWarnings,
+} from "./google-ads-money.js";
+import {
   campaignBriefSchema,
   campaignIdSchema,
   campaignCloneSchema,
@@ -482,11 +487,16 @@ export async function buildStage0Plan(
     );
   const currency = String(customer.currencyCode),
     timezone = String(customer.timeZone);
+  const moneyUnit = moneyUnitFromRows(
+    currency,
+    await query(currencyConstantQuery(currency)),
+  );
   const budget = row(brief.daily_budget),
     budgetMicros = currencyMicros(
       String(budget.amount),
       String(budget.currency),
       currency,
+      moneyUnit,
     );
   const strategy = String(brief.bidding_strategy ?? "MANUAL_CPC"),
     groups = list(brief.ad_groups);
@@ -511,7 +521,11 @@ export async function buildStage0Plan(
       "google_campaign_duplicate",
       "Кампания с таким именем уже существует.",
     );
-  const warnings: string[] = [],
+  const warnings: string[] = moneyUnitWarnings(
+      currencyMicros(String(budget.amount), String(budget.currency), currency),
+      budgetMicros,
+      moneyUnit,
+    ),
     geo: JsonRow[] = [],
     languages: JsonRow[] = [],
     conversion: JsonRow[] = [];
@@ -780,6 +794,7 @@ export async function buildStage0Plan(
     ...budgetFields,
     name: brief.campaign_name,
   });
+  items.at(-1)!.warnings.push(...warnings);
   add("campaign", {
     resourceName: campaignName,
     name: brief.campaign_name,
@@ -917,10 +932,28 @@ export async function buildStage0Plan(
               String(row(group.default_bid).amount),
               String(row(group.default_bid).currency),
               currency,
+              moneyUnit,
             ),
           }
         : {}),
     });
+    if (group.default_bid) {
+      const bid = row(group.default_bid),
+        requested = currencyMicros(
+          String(bid.amount),
+          String(bid.currency),
+          currency,
+        );
+      items
+        .at(-1)!
+        .warnings.push(
+          ...moneyUnitWarnings(
+            requested,
+            String(operations.at(-1)!.fields.cpcBidMicros),
+            moneyUnit,
+          ),
+        );
+    }
     const negatives = [...campaignNegatives, ...list(group.negative_keywords)];
     for (const k of list(group.keywords)) {
       add(
@@ -930,8 +963,26 @@ export async function buildStage0Plan(
           { adGroup: groupName },
           false,
           currency,
+          moneyUnit,
         ),
       );
+      if (k.cpc_bid) {
+        const bid = row(k.cpc_bid),
+          requested = currencyMicros(
+            String(bid.amount),
+            String(bid.currency),
+            currency,
+          );
+        items
+          .at(-1)!
+          .warnings.push(
+            ...moneyUnitWarnings(
+              requested,
+              String(operations.at(-1)!.fields.cpcBidMicros),
+              moneyUnit,
+            ),
+          );
+      }
       const conflicts = negatives.flatMap((n) => {
         const reason = conflictReason(
           String(n.text),
@@ -1067,7 +1118,13 @@ export async function buildStage0Plan(
       campaign_name: brief.campaign_name,
       currency,
       timezone,
-      budget: { ...budget, micros: budgetMicros, shared: false },
+      budget: {
+        ...budget,
+        micros: budgetMicros,
+        shared: false,
+        billable_unit_micros: moneyUnit.unit_micros,
+        currency_constant: moneyUnit.resource_name,
+      },
       strategy,
       networks: operations[1]!.fields.networkSettings,
       dates: { start: brief.start_date ?? null, end: brief.end_date ?? null },
