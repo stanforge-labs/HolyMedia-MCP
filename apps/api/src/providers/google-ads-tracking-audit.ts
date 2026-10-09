@@ -434,6 +434,122 @@ export async function auditGoogleLinksAndUtms(
 ): Promise<GoogleTrackingReport> {
   return report(accountId, rawOptions, read, true);
 }
+export type GoogleTrackingContextNode = {
+  level: "account" | "campaign" | "ad_group";
+  fields: Record<string, unknown>;
+};
+/** Same syntax/redaction rules as READ audit, limited to independently selected parent fields. */
+export function auditGoogleTrackingContext(
+  accountId: string,
+  chain: GoogleTrackingContextNode[],
+) {
+  const account = customerId(accountId);
+  const expectedLevels = ["account", "campaign", "ad_group"];
+  if (
+    !chain.length ||
+    chain.length > 3 ||
+    chain.some((node, i) => node.level !== expectedLevels[i])
+  )
+    throw new ProviderError(
+      "invalid_request",
+      "Tracking audit context требует account→campaign→group без пропущенных уровней.",
+    );
+  let previous = "";
+  const rows = chain.map((node) => {
+    const r = node.fields,
+      kind =
+        node.level === "account"
+          ? "customers"
+          : node.level === "campaign"
+            ? "campaigns"
+            : "adGroups";
+    const resource = text(get(r, "resourceName"));
+    if (node.level === "account") {
+      owner(resource, `customers/${account}`);
+      if (id(r.id) !== account)
+        throw new ProviderError(
+          "invalid_account",
+          "Tracking audit customer mismatch.",
+        );
+    } else {
+      if (
+        !new RegExp(`^customers/${account}/${kind}/[0-9]{1,20}$`).test(resource)
+      )
+        throw new ProviderError(
+          "provider_response_invalid",
+          "Tracking audit context resource принадлежит другому account/type.",
+        );
+      if (node.level === "ad_group" && r.campaign !== previous)
+        throw new ProviderError(
+          "provider_response_invalid",
+          "Tracking audit group parent mismatch.",
+        );
+    }
+    previous = resource;
+    const warnings: TrackingAuditWarning[] = [],
+      values = local(r, warnings);
+    auditValue(values.template, "tracking_url_template", warnings, "template");
+    auditValue(values.suffix, "final_url_suffix", warnings, "suffix");
+    return {
+      level: node.level,
+      resource_name: resource,
+      local: {
+        tracking_url_template: values.template,
+        final_url_suffix: values.suffix,
+      },
+      warnings,
+    };
+  });
+  const selected = rows.at(-1)!;
+  const resolve = (field: "tracking_url_template" | "final_url_suffix") => {
+    const source = [...rows].reverse().find((row) => row.local[field]);
+    return {
+      value: source?.local[field] ?? "",
+      source_resource: source?.resource_name ?? null,
+    };
+  };
+  return {
+    provider: "GOOGLE_ADS" as const,
+    scope: "EXACT_LOCAL_AND_PARENT_FIELDS" as const,
+    resource_name: selected.resource_name,
+    fields_selected: ["tracking_url_template", "final_url_suffix"],
+    downstream_urls: "NOT_READ" as const,
+    landing_reachability: "NOT_CHECKED" as const,
+    serving_url_expansion: "NOT_EXECUTED" as const,
+    rows,
+    effective: {
+      template: resolve("tracking_url_template"),
+      suffix: resolve("final_url_suffix"),
+    },
+    warnings: rows.flatMap((row) => row.warnings),
+  };
+}
+/** Display/audit copy only: never use this value to replace raw immutable provider snapshots. */
+export function safeGoogleTrackingSummary<T>(value: T): T {
+  const keys = new Set([
+    "trackingUrlTemplate",
+    "tracking_url_template",
+    "finalUrlSuffix",
+    "final_url_suffix",
+    "finalUrls",
+    "final_urls",
+    "finalMobileUrls",
+    "final_mobile_urls",
+    "final_url",
+    "template",
+    "suffix",
+  ]);
+  const visit = (v: unknown, key = ""): unknown => {
+    if (typeof v === "string") return keys.has(key) ? safeValue(v, key, []) : v;
+    if (Array.isArray(v)) return v.map((item) => visit(item, key));
+    if (v && typeof v === "object")
+      return Object.fromEntries(
+        Object.entries(v).map(([k, child]) => [k, visit(child, k)]),
+      );
+    return v;
+  };
+  return visit(value) as T;
+}
 async function report(
   accountId: string,
   rawOptions: unknown,

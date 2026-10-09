@@ -5,6 +5,10 @@ import {
 } from "../mcp/mcp-google-stage4-schema.js";
 import { normalizeBrief, validateText } from "./google-ads-stage0.js";
 import {
+  auditGoogleTrackingContext,
+  type GoogleTrackingContextNode,
+} from "./google-ads-tracking-audit.js";
+import {
   buildPmaxCreatePlan,
   buildPmaxEditPlan,
   buildPmaxAssetGroupPlan,
@@ -1036,6 +1040,88 @@ export async function buildStage4Plan(
             "Provider state уже совпадает с изменением.",
           );
         if (intent.action === "tracking_update") {
+          // Exact selected fields and their parents are already account-owned reads;
+          // ctx.query freezes the extra account tracking context in the common stale checks.
+          const accountTracking = accountLevel
+            ? before
+            : await one(customerQuery, "customer", prefix, "customers");
+          const chain: GoogleTrackingContextNode[] = [
+            { level: "account", fields: accountTracking },
+          ];
+          if (!accountLevel)
+            chain.push({
+              level: "campaign",
+              fields: groupLevel ? await campaign(row.campaign_id) : before,
+            });
+          if (groupLevel) chain.push({ level: "ad_group", fields: before });
+          const beforeAudit = auditGoogleTrackingContext(ctx.account_id, chain);
+          const afterAudit = auditGoogleTrackingContext(
+            ctx.account_id,
+            chain.map((node) => {
+              if (node.fields.resourceName === resource)
+                return { ...node, fields: expected };
+              const plannedParent = intent.items.find(
+                (candidate) =>
+                  candidate.level === node.level &&
+                  (node.level === "account" ||
+                    node.fields.resourceName ===
+                      `${prefix}/${node.level === "campaign" ? "campaigns" : "adGroups"}/${candidate[node.level === "campaign" ? "campaign_id" : "ad_group_id"]}`),
+              );
+              if (!plannedParent) return node;
+              const normalized = extRow(
+                reusableValidation(ctx.account_id, ctx.currency, {
+                  utm: {
+                    ...(plannedParent.final_url_suffix !== undefined
+                      ? { final_url_suffix: plannedParent.final_url_suffix }
+                      : {}),
+                    ...(plannedParent.tracking_url_template !== undefined
+                      ? {
+                          tracking_url_template:
+                            plannedParent.tracking_url_template,
+                        }
+                      : {}),
+                  },
+                }).effective_tracking,
+              );
+              const changes: ExtendedRow = {};
+              if (plannedParent.final_url_suffix !== undefined)
+                changes.finalUrlSuffix = normalized.finalUrlSuffix;
+              if (plannedParent.tracking_url_template !== undefined)
+                changes.trackingUrlTemplate = normalized.trackingUrlTemplate;
+              for (const field of (plannedParent.clear_fields as
+                string[] | undefined) ?? [])
+                changes[
+                  field === "final_url_suffix"
+                    ? "finalUrlSuffix"
+                    : "trackingUrlTemplate"
+                ] = "";
+              return { ...node, fields: { ...node.fields, ...changes } };
+            }),
+          );
+          Object.assign(item, {
+            tracking_audit: {
+              source: "GOOGLE_ADS_READ",
+              comparison: "EXACT_INTENDED_LOCAL_OVERRIDE",
+              after_assumption: "ALL_REQUESTED_ANCESTOR_WRITES_SUCCEED",
+              before: beforeAudit,
+              after: afterAudit,
+            },
+          });
+          for (const [phase, result] of [
+            ["BEFORE", beforeAudit],
+            ["AFTER", afterAudit],
+          ] as const)
+            for (const warning of result.warnings)
+              item.warnings.push(
+                `Tracking READ audit ${phase}: ${warning.code}: ${warning.message}`,
+              );
+          item.warnings.push(
+            "Tracking READ audit scope: selected account/campaign/group fields only; ad/keyword/asset URLs and landing reachability were NOT checked.",
+          );
+          if (intent.items.length > 1)
+            item.warnings.push(
+              "Tracking batch AFTER inheritance assumes requested parent writes succeed; partial_failure may leave another inherited result. Provider reread remains authoritative.",
+            );
           const previous: ExtendedRow = { ...row };
           delete previous.clear_fields;
           delete previous.final_url_suffix;
