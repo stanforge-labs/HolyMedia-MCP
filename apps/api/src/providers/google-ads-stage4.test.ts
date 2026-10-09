@@ -425,6 +425,59 @@ describe("Stage 4 typed provider plans — mock only", () => {
     ).rejects.toThrow(/minimum remaining/);
     expect(read).not.toHaveBeenCalled();
   });
+  it("PMax reference attach reread verifies PAUSED link and preserves complete sibling inventory", async () => {
+    const old = {
+      resourceName: `${prefix}/assetGroupAssets/5~99~DESCRIPTION`,
+      assetGroup: assetGroup.resourceName,
+      asset: `${prefix}/assets/99`,
+      fieldType: "DESCRIPTION",
+      status: "ENABLED",
+    };
+    const read = fixture({
+        campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+        asset: {
+          resourceName: asset.resourceName,
+          type: "TEXT",
+          textAsset: { text: "Existing headline" },
+        },
+        assetGroupLinks: [{ assetGroupAsset: old }],
+      }),
+      plan = await buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [
+          {
+            campaign_id: "1",
+            asset_group_id: "5",
+            asset_id: "4",
+            field_type: "HEADLINE",
+          },
+        ]),
+        read,
+      ),
+      created = {
+        ...plan.operations[0]!.fields,
+        resourceName: `${prefix}/assetGroupAssets/5~4~HEADLINE`,
+      },
+      result = [
+        { success: true, resource_name: created.resourceName, error: null },
+      ];
+    const verify = await verifyExtendedMutation(plan, result, async (q) =>
+      q.includes("FROM asset_group_asset")
+        ? [{ assetGroupAsset: old }, { assetGroupAsset: created }]
+        : read(q),
+    );
+    expect(verify.status).toBe("VERIFIED");
+    const changed = await verifyExtendedMutation(plan, result, async (q) =>
+      q.includes("FROM asset_group_asset")
+        ? [
+            { assetGroupAsset: { ...old, status: "PAUSED" } },
+            { assetGroupAsset: created },
+          ]
+        : read(q),
+    );
+    expect(changed.context_verified).toBe(false);
+    expect(changed.status).toBe("NOT_VERIFIED");
+  });
   it("wide-character RSA and asset limits fail before any reader", async () => {
     for (const [action, items] of [
       [
@@ -613,9 +666,47 @@ describe("Stage 4 typed provider plans — mock only", () => {
         },
       ],
       async (q) =>
-        q.includes("FROM ad_group_ad") ? [{ adGroupAd: actual }] : fixture()(q),
+        q.includes("FROM ad_group_ad")
+          ? [{ adGroupAd: groupAd }, { adGroupAd: actual }]
+          : fixture()(q),
     );
     expect(result.status).toBe("VERIFIED");
+  });
+  it("RSA creation reread cannot hide unexpected sibling ad activation", async () => {
+    const plan = await buildStage4Plan(
+        account,
+        intent("rsa_create", [
+          {
+            campaign_id: "1",
+            ad_group_id: "2",
+            rsa: {
+              ...rsa,
+              headlines: [
+                { text: "Sibling protected copy" },
+                ...rsa.headlines.slice(1),
+              ],
+            },
+          },
+        ]),
+        fixture(),
+      ),
+      actual = {
+        ...plan.operations[0]!.fields,
+        resourceName: `${prefix}/adGroupAds/2~9`,
+      };
+    const result = await verifyExtendedMutation(
+      plan,
+      [{ success: true, resource_name: actual.resourceName, error: null }],
+      async (q) =>
+        q.includes("FROM ad_group_ad")
+          ? [
+              { adGroupAd: { ...groupAd, status: "ENABLED" } },
+              { adGroupAd: actual },
+            ]
+          : fixture()(q),
+    );
+    expect(result.context_verified).toBe(false);
+    expect(result.status).toBe("NOT_VERIFIED");
   });
   it("uses AdService for RSA edits, exact mask and moderation warning", async () => {
     const plan = await buildStage4Plan(
