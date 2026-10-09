@@ -992,6 +992,76 @@ describe("Stage 2 advanced v24 plans: mocked readers only", () => {
       cpcBidCeilingMicros: "0",
     });
   });
+  it.each([
+    {
+      type: "TARGET_CPA",
+      field: "targetCpa",
+      parameter: { target_cpa: money() },
+      oldGoal: { targetCpaMicros: "1000000" },
+    },
+    {
+      type: "TARGET_ROAS",
+      field: "targetRoas",
+      parameter: { target_roas: "2" },
+      oldGoal: { targetRoas: 2 },
+    },
+    {
+      type: "MAXIMIZE_CONVERSIONS",
+      field: "maximizeConversions",
+      parameter: {},
+      oldGoal: {},
+    },
+  ])(
+    "portfolio $type accepts positive floor with cleared unbounded ceiling, preserves inverse",
+    async ({ type, field, parameter, oldGoal }) => {
+      const f = fixture();
+      f.state.b.type = type;
+      delete f.state.b.targetCpa;
+      f.state.b[field] = {
+        ...oldGoal,
+        cpcBidFloorMicros: "500000",
+        cpcBidCeilingMicros: "3000000",
+      };
+      const p = await buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "portfolio_update",
+          strategy_id: "3",
+          strategy: {
+            type,
+            ...parameter,
+            cpc_floor: money("0.7"),
+            clear_fields: ["cpc_ceiling"],
+          },
+        }),
+        f.read,
+      );
+      expect(p.operations[0]!.fields[field]).toMatchObject({
+        cpcBidFloorMicros: "700000",
+        cpcBidCeilingMicros: "0",
+      });
+      expect(p.operations[0]!.expected[field]).toEqual({
+        ...oldGoal,
+        cpcBidFloorMicros: "700000",
+        cpcBidCeilingMicros: "0",
+      });
+      expect(p.operations[0]!.update_mask).toContain(
+        `${field.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}.cpc_bid_floor_micros`,
+      );
+      expect(p.operations[0]!.update_mask).toContain("cpc_bid_ceiling_micros");
+      expect(p.inverse_intent).toMatchObject({
+        items: [
+          {
+            strategy: {
+              type,
+              cpc_floor: money("0.500000"),
+              cpc_ceiling: money("3.000000"),
+            },
+          },
+        ],
+      });
+    },
+  );
   it("cleared provider-default zero verifies only with exact scheme type proof", async () => {
     const f = fixture();
     f.state.c.biddingStrategyType = "TARGET_SPEND";
