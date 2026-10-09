@@ -11,6 +11,12 @@ spec.loader.exec_module(runner)
 
 
 class LauncherTests(unittest.TestCase):
+    def test_context_selection_never_overwrites_or_reads_arbitrary_credentials(self):
+        self.assertEqual(runner.context_source('fixture-context.json'), runner.ROOT / 'state/fixture-context.json')
+        self.assertEqual(runner.context_source('stage234-scoped-context-20261009T120000Z.json'), runner.ROOT / 'state/stage234-scoped-context-20261009T120000Z.json')
+        for name in ['../acceptance.env', '/etc/holymedia-v2/app.env', 'runtime.env', 'latest.json', 'stage234-scoped-context-x.json']:
+            with self.assertRaises(RuntimeError): runner.context_source(name)
+
     def test_new_runtime_copy_and_manifest_are_delegated_only_to_exact_node_owner(self):
         source = Path(runner.__file__).read_text()
         self.assertIn('os.chown(runtime_env, 1000, 1000)', source)

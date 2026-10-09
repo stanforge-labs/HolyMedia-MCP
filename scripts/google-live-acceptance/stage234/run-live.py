@@ -39,6 +39,12 @@ def permissions(path):
     require(path.is_file() and not path.is_symlink() and path.stat().st_mode & 0o077 == 0, 'stage234_protected_file_permissions_invalid')
 
 
+def context_source(basename):
+    require(basename == 'fixture-context.json' or re.fullmatch(r'stage234-scoped-context-[0-9]{8}T[0-9]{6}Z\.json', basename) is not None,
+            'stage234_protected_context_basename_invalid')
+    return ROOT / 'state' / basename
+
+
 def safe_report(value):
     # Only explicitly safe checkpoint fields leave this supervisor.
     names = {'result', 'preview_id', 'expires_at', 'provider_reads', 'validate_only', 'real_writes', 'evidence', 'failure_stage', 'code'}
@@ -192,12 +198,15 @@ def main():
     parser.add_argument('--check-only', action='store_true')
     parser.add_argument('--hold-api', action='store_true', help='Keep exact API alive; root must prepare stock human approval gateway separately.')
     parser.add_argument('--prepare-network', action='store_true', help='Prepare a secondary isolated acceptance-only DB/Redis network; no provider call.')
+    parser.add_argument('--context-basename', default='fixture-context.json', help='Protected acceptance-state basename only; a separately authorized new scoped key must not overwrite historical context.')
     options = parser.parse_args()
     validate_options(options.head, options.image, options.run_id)
     require(hasattr(os, 'geteuid') and os.geteuid() == 0, 'stage234_vps_sudo_required')
     if options.prepare_network:
         prepare_network()
         return
+    selected_context = context_source(options.context_basename)
+    permissions(selected_context)
     production = production_state()
     env_hash = inspect_ready(options.head, options.image)
     if options.check_only:
@@ -214,7 +223,7 @@ def main():
     context_file = state / 'fixture-context.json'
     context_fd = os.open(context_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     with os.fdopen(context_fd, 'wb') as stream:
-        stream.write((ROOT / 'state/fixture-context.json').read_bytes())
+        stream.write(selected_context.read_bytes())
     os.chown(context_file, 1000, 1000)
     # Docker --env-file does not parse Compose quotes. Convert only disposable
     # acceptance config into a new protected file; never modify the original.

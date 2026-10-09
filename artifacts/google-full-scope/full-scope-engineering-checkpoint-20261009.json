@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "result": "PARTIAL_LIVE_BLOCKED_BEFORE_MCP",
+  "timestamp": "2026-10-09 12:13:03 UTC",
+  "repository": "stanforge-labs/HolyMedia-MCP",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "baseline": "2173047386e5b2fb54ba9987ea96330da4c330fd",
+  "engineering_code_head": "f69310b7c9fdc662e1b9e8b5efbad2263f816d3e",
+  "release_candidate_stage01_unchanged": "bb5b8d16979a41720129243927a6c9f56e091083",
+  "original_source": {
+    "filename": "ТЗ запись в Google Ads для HolyMedia MCP.docx",
+    "date": "2026-10-05",
+    "sha256": "51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0",
+    "paragraphs_read": 336,
+    "unchanged": true,
+    "matrix": "artifacts/google-full-scope/requirements-matrix-20261009.json",
+    "matrix_areas": 62,
+    "not_a_weighted_completion_percentage": true
+  },
+  "stages": {
+    "0": {
+      "historical_live": "PASS",
+      "new_features_mock": "PASS",
+      "new_features_live": "PENDING",
+      "limitations": [
+        "Bounded Search clone still rejects unsupported source components rather than silently dropping them.",
+        "New Stage0 keyword PAUSED default, proximity and authoritative money changes need dedicated fresh live evidence."
+      ]
+    },
+    "1": {
+      "historical_live": "PASS",
+      "regression": "PASS",
+      "historical_evidence_unchanged": true
+    },
+    "2": {
+      "supported_profiles_implementation": "PASS",
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "new_packages": [
+        "Strategies/portfolio/modifiers/bulk limits and per-row safety.",
+        "Authoritative billable currency units.",
+        "Server-recorded inherited CPC inverse with selected effective/source/owned-parent proof; arbitrary public clearing rejected."
+      ]
+    },
+    "3": {
+      "supported_profiles_implementation": "PASS",
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "audience_readiness": "No eligible IN_MARKET/AFFINITY criterion has been proved. Initial100 catalog rows were VERTICAL_GEO; new eligible-only discovery did not run because scoped key preflight stopped first.",
+      "privacy": "No Customer Match/PII uploads."
+    },
+    "4": {
+      "supported_profiles_implementation": "PASS",
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "pmax_creation": "Atomic complete paused non-retail campaign + asset-group graph; stock mock26/26 VERIFIED. Complete group on owned PAUSED PMax supported.",
+      "media": "Bounded real JPEG/PNG inline decode/reencode + owned references; no arbitrary downloads/secret paths.",
+      "tracking": "Shared READ/preview inheritance audit + exact set/clear inverse; raw immutable payload preserved, secret-bearing presentation redacted.",
+      "live_prerequisites": [
+        "TEST media asset inventory0; conversion actions0 in actual initial READ preflight.",
+        "Need suitable real eligible media and existing usable TEST conversion action before PMax live; do not invent IDs."
+      ]
+    }
+  },
+  "acceptance": {
+    "G": {
+      "mock": "PASS",
+      "live": "NOT_RUN"
+    },
+    "H": {
+      "mock": "PASS",
+      "live": "NOT_RUN"
+    },
+    "I": {
+      "mock": "PASS",
+      "live": "NOT_RUN"
+    },
+    "J": {
+      "mock": "PASS",
+      "live": "NOT_RUN"
+    },
+    "K": {
+      "mock": "PASS",
+      "stock_live": "NOT_RUN_KEY_PREFLIGHT_FAILED_BEFORE_MCP"
+    },
+    "L": {
+      "mock": "PASS",
+      "live": "NOT_RUN"
+    },
+    "N": {
+      "mock": "PASS",
+      "live": "BLOCKED_BEFORE_PREVIEW",
+      "intended_operation": {
+        "account_id": "8590146099",
+        "campaign_id": "24324170853",
+        "ad_group_id": "206587491811",
+        "before_cpc_micros": "100000",
+        "after_cpc_micros": "110000",
+        "currency": "USD",
+        "partial_failure": true
+      },
+      "preview_created": false,
+      "approval_created": false,
+      "committed": false
+    }
+  },
+  "cross_client": {
+    "Q": "BLOCKED_NOT_CONNECTED_TO_PRIVATE_CANDIDATE",
+    "R": "BLOCKED_NOT_CONNECTED_TO_PRIVATE_CANDIDATE",
+    "S": "NEW_PROFILE_REAL_CLIENT_CONSENT_PENDING",
+    "native_private_oauth": "IMPLEMENTED_MOCK_PASS",
+    "profile": "46 bounded Google-only tools; stock routes/closed schemas; Public writes stay OFF.",
+    "client_inventory": "Claude CLI available is not evidence of a configured/tested private connection. Existing hosted READ plugin is not this candidate; no production client/account calls made."
+  },
+  "quality": {
+    "source_head": "f69310b7c9fdc662e1b9e8b5efbad2263f816d3e",
+    "run_id": 37927206404,
+    "job_id": 113808909213,
+    "conclusion": "success",
+    "api_pass": 1265,
+    "vitest_pass": 1328,
+    "node_pass": 49,
+    "pnpm_test_pass": 1377,
+    "skipped": 0,
+    "python_pass": 18,
+    "secret_scan_regression_pass": 7,
+    "critical": 0,
+    "high": 0,
+    "moderate": 6
+  },
+  "local_windows": {
+    "standard_checks": "PASS",
+    "api_pass": 1244,
+    "api_skipped": 21,
+    "total_disposable_db_redis_skipped": 26,
+    "linux_equivalents_all_pass": true,
+    "node_pass": 49,
+    "python_pass": 18,
+    "additional_read_only_diagnostic_regression_pass": 1
+  },
+  "live_checkpoint": {
+    "run_id": "20261009T120322Z-n1",
+    "source_head": "f69310b7c9fdc662e1b9e8b5efbad2263f816d3e",
+    "image": "ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:57582b66b52bd0fbe86491e6f6cb0fbf4bb114242ebd49ea9db1303a9ef62dd5",
+    "result": "BLOCKED",
+    "stage": "runtime_preflight",
+    "code": "stage234_owned_account_or_scoped_key_invalid",
+    "timestamp": "2026-10-09T12:04:51.443Z",
+    "provider_read_calls": 0,
+    "validate_only_calls": 0,
+    "real_write_calls": 0
+  },
+  "exact_blocker": {
+    "diagnosis": "MCP_SERVICE_KEY_EXPIRED_NOT_GOOGLE_OAUTH",
+    "token_exists": true,
+    "token_revoked": false,
+    "expired": true,
+    "expires_at": "2026-10-08T13:48:37.732Z",
+    "selected_test_account": true,
+    "account_enabled": true,
+    "identity_revoked": false,
+    "same_workspace": true,
+    "static_allowlist": true,
+    "account_scope_count": 1,
+    "scope_exact_selected_account": true,
+    "read_scope_present": true,
+    "write_scope_present": true,
+    "no_expiry_or_authority_bypass": true,
+    "new_key_created": false
+  },
+  "provider_calls_this_work_cycle": {
+    "read": 15,
+    "validate_only": 0,
+    "real_write": 0,
+    "normal_oauth_refresh": 1,
+    "independent_browser_doc_requests_not_google_provider_calls": true
+  },
+  "last_read_test_state": {
+    "client_id": "8590146099",
+    "test_account": true,
+    "mcc": "4378327049",
+    "hierarchy": true,
+    "currency": "USD",
+    "campaigns_paused": ["24324170853", "24339483523"],
+    "groups_paused": 3,
+    "rsa_paused": 3,
+    "original_keywords_enabled": 20,
+    "residual_phrase_11479221": "PAUSED",
+    "group_206587491811_cpc_micros": "100000",
+    "source": "artifacts/google-full-scope/read-only-preflight-20261009.json",
+    "not_new_runtime_live_verification": true
+  },
+  "remaining_required_gates": [
+    "Bounded full-clone coverage limits explicitly retained.",
+    "New G/H/I/J/K/L/N controlled live acceptance and separate restoration approvals.",
+    "Real private cross-client Q/R/S and native consent.",
+    "PMax/media live eligibility and dedicated validation/approval."
+  ],
+  "optional_not_mandated": [
+    "Cross-account portfolio management",
+    "Customer Match uploads/privacy processing",
+    "Arbitrary parameter-clear API",
+    "Retail/feed PMax profiles"
+  ],
+  "next_action": "Obtain explicit authority for a new disposable TEST scoped MCP key through the stock human-authenticated API; same read/write scopes, STATIC_ALLOWLIST only selected TEST internal account, 1-day expiry. Store only in new protected acceptance context, preserve old key/fixture/audit. Never request/copy key in chat. Google OAuth need not be repeated. Then fresh read-only preflight → K → one JIT N preview → human approval STOP.",
+  "production_changed": false,
+  "main_changed": false,
+  "production_merge_or_deploy": false,
+  "google_write_defaults_off": true,
+  "public_write_defaults_off": true,
+  "original_tz_complete": false
+}

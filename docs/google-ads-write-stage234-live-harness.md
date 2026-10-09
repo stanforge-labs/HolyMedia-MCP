@@ -45,6 +45,22 @@ It does not execute restoration: a new human approval is mandatory. Original evi
 and claims are not overwritten; the original gateway stays available for that approval.
 The manifest and context never expose service keys or provider credentials in reports.
 
+## Expired service authority is a hard stop
+
+The 20261009T120322Z-n1 live attempt stopped during DB preflight, before stock MCP,
+Google reads/validation/writes or a preview. READ-only diagnosis proves the existing
+single-account key expired at 2026-10-08T13:48:37.732Z; owner/account/scopes are correct.
+This is MCP authority expiry, not Google provider OAuth failure. Do not edit its TTL,
+revocation, scopes or historical context to make the guard pass.
+
+A new disposable scoped key needs explicit authority and stock human-authenticated
+token provisioning. Keep the secret only in a **new** protected
+`state/stage234-scoped-context-<UTC>.json`; `run-live.py --context-basename <basename>`
+accepts only that strict local basename or the original fixture context, never a path,
+env file or production configuration. The runner independently rechecks the new key,
+actual ownership, exact single-account scope and expiry before provider calls. No key
+is created by this launcher, and operation-level human approval remains mandatory.
+
 ## Local/mock verification
 
 `node --test scripts/google-live-acceptance/stage234/live.test.mjs`
