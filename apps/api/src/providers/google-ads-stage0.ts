@@ -1,5 +1,6 @@
 import { safeGet } from "@holymedia/site-audit";
 import type { Stage2Plan } from "./google-ads-stage2.js";
+import type { ExtendedPlan } from "./google-ads-extended-plan.js";
 import {
   campaignBriefSchema,
   campaignIdSchema,
@@ -48,7 +49,8 @@ export type Stage0Plan = {
   items: Stage1Plan["items"];
   summary: JsonRow;
 };
-export type GoogleWritePlan = Stage0Plan | Stage1Plan | Stage2Plan;
+export type GoogleWritePlan =
+  Stage0Plan | Stage1Plan | Stage2Plan | ExtendedPlan;
 export const row = (v: unknown): JsonRow =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as JsonRow) : {};
 const list = (v: unknown): JsonRow[] => (Array.isArray(v) ? v.map(row) : []);
@@ -158,7 +160,7 @@ export async function rereadStage0Checks(plan: Stage0Plan, read: Stage1Reader) {
     checks.push({ query: c.query, rows: await checkedRead(read, c.query) });
   return checks;
 }
-function validateText(v: string, max: number, field: string) {
+export function validateText(v: string, max: number, field: string) {
   // Google counts full-width/CJK characters as two characters.
   const length = [...v].reduce(
     (n, c) =>
@@ -185,7 +187,7 @@ function validateDate(value: unknown) {
   )
     error("google_date_invalid", "Неверная дата кампании.");
 }
-function validateTracking(input: JsonRow): JsonRow {
+export function validateTracking(input: JsonRow): JsonRow {
   const suffix = String(
     input.final_url_suffix ??
       "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
