@@ -197,10 +197,15 @@ export async function readAcceptanceContext(
       current.dev !== first.dev
     )
       fail("stage234_context_protected_file_changed");
-    value = JSON.parse(readFileSync(fd, "utf8"));
+    try {
+      value = JSON.parse(readFileSync(fd, "utf8"));
+    } catch {
+      fail("stage234_context_file_json_invalid");
+    }
   } finally {
     closeSync(fd);
   }
+  if (!plain(value)) fail("stage234_context_file_json_invalid");
   if (
     value.version !== undefined ||
     value.ciphertext !== undefined ||
