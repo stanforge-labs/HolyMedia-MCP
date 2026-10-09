@@ -12,6 +12,14 @@ def options(**change):
     return SimpleNamespace(**dict(dict(head='a'*40,harness_head='c'*40,image='ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:'+'b'*64,run_id='20261009T120000Z-rdy',context_basename='stage234-scoped-context-20261009T120000Z.json',check_only=True),**change))
 
 class ReadinessSupervisorTests(unittest.TestCase):
+    def test_discovery_is_opt_in_and_never_enables_writes(self):
+        default=' '.join(runner.command(options(),Path('/safe/harness'),Path('/safe/state')))
+        enabled=' '.join(runner.command(options(discovery=True),Path('/safe/harness'),Path('/safe/state')))
+        self.assertNotIn('STAGE234_DISCOVERY=true',default)
+        self.assertIn('STAGE234_DISCOVERY=true',enabled)
+        self.assertIn('V2_CONFIRMED_WRITE_ENABLED=false',enabled)
+        self.assertIn('PROVIDER_GOOGLE_ADS_WRITE_ENABLED=false',enabled)
+
     def test_only_disposable_network_two_mounts_no_ports_all_write_flags_off(self):
         args=runner.command(options(),Path('/safe/harness'),Path('/safe/state'));text=' '.join(args)
         self.assertIn(runner.base.NETWORK,text);self.assertEqual(args.count('-v'),2)

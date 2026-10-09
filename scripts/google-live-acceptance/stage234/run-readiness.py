@@ -23,6 +23,7 @@ def command(opts,directory,state):
             'V2_CONFIRMED_WRITE_ENABLED':'false','PUBLIC_MCP_WRITE_SCOPE_ENABLED':'false','PUBLIC_MCP_CONTROLLED_WRITE_ENABLED':'false',
             'GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST':'8590146099','PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID':'4378327049','PROVIDER_GOOGLE_API_VERSION':'v24',
             'LOG_LEVEL':'error','NODE_OPTIONS':'--max-old-space-size=192'}
+    if getattr(opts,'discovery',False):values['STAGE234_DISCOVERY']='true'
     for k,v in values.items():args+=['-e',k+'='+v]
     return args+[opts.image,'/stage234/targeting-readiness-runner.mjs']
 
@@ -61,6 +62,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for k in ['head','harness-head','image','run-id','context-basename']:parser.add_argument('--'+k,required=True)
     parser.add_argument('--check-only',action='store_true')
+    parser.add_argument('--discovery',action='store_true')
     execute(parser.parse_args())
 
 if __name__=='__main__':

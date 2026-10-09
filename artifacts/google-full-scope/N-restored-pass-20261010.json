@@ -1,0 +1,105 @@
+{
+  "acceptance_test": "N",
+  "result": "LIVE PASS",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "harness_head": "35054868ecde62c5c037855f8252418889dbbe43",
+  "runtime_source": "c11f14c263b8e3a27418d87146b1894c7d9107dc",
+  "image_digest": "sha256:8f6af88c3ab81a162ae63d3c862c614884388410ea0610f40b800cb16fd3bfba",
+  "previous_checkpoint": "artifacts/google-full-scope/N-commit-rollback-checkpoint-20261010.json",
+  "test_customer_id": "8590146099",
+  "campaign_id": "24324170853",
+  "ad_group_id": "206587491811",
+  "test_account": true,
+  "hierarchy_verified": true,
+  "write_allowlist": ["8590146099"],
+  "forward": {
+    "preview_id": "2b213f13-803c-4941-b274-9aacacc66b3f",
+    "commit_id": "hmc_Ug6A_ROA-8Y0viM8qxJ6v36OX3ZrTJpLfyWvGQirKMs",
+    "confirmed_at": "2026-10-09T19:00:19.111Z",
+    "before_cpc_micros": "100000",
+    "after_cpc_micros": "110000",
+    "result": "VERIFIED"
+  },
+  "rollback": {
+    "preview_id": "7affa2a4-75f1-44ae-9048-c019050302a7",
+    "commit_id": "hmc_517CPN612IM4-ZWqCu05wujhybFq1em_VH92Ha58XbA",
+    "confirmed_at": "2026-10-09T19:06:51.099Z",
+    "expires_at": "2026-10-09T19:32:44.794Z",
+    "session_valid": true,
+    "approval_audit_valid": true,
+    "immutable_digest": "bc50041f744c96180db75c7e301dd4b6146af87336c9a94f6632b51090b1d8ac",
+    "original_verified_commit_bound": true,
+    "stale_guard_passed": true,
+    "before_cpc_micros": "110000",
+    "after_cpc_micros": "100000",
+    "result": "VERIFIED",
+    "partial_failure": true,
+    "operation_count": 1,
+    "stock_tool": "commit_preview",
+    "provider_reread": "VERIFIED",
+    "journal": "VERIFIED",
+    "automatic_retries": 0,
+    "raw_provider_mutations": 0,
+    "counts": { "provider_read": 29, "validate_only": 0, "real_write": 1 },
+    "audit": [
+      {
+        "type": "mcp_preview_web_approved",
+        "success": true,
+        "timestamp": "2026-10-09T19:06:51.117Z"
+      },
+      {
+        "type": "mcp_google_commit_attempted",
+        "success": true,
+        "timestamp": "2026-10-09T19:20:25.669Z"
+      },
+      {
+        "type": "mcp_google_stage1_operation",
+        "success": true,
+        "timestamp": "2026-10-09T19:20:27.924Z"
+      },
+      {
+        "type": "mcp_google_stage1_operation",
+        "success": true,
+        "timestamp": "2026-10-09T19:20:30.910Z"
+      },
+      {
+        "type": "mcp_google_commit_result",
+        "success": true,
+        "timestamp": "2026-10-09T19:20:30.918Z"
+      }
+    ],
+    "audit_note": "Two operation audit events reflect stock apply and reread; only one Google mutation request was sent.",
+    "protected_evidence": "/opt/holymedia-google-acceptance/state/stage234-20261009T192000Z-r1/nr-restored-evidence.json"
+  },
+  "final_fixture": {
+    "currency": "USD",
+    "ad_group_cpc_micros": "100000",
+    "campaigns": "2 PAUSED",
+    "groups": "3 PAUSED",
+    "rsa": "3 PAUSED",
+    "original_keywords": "20 ENABLED",
+    "residual_phrase": "11479221 PAUSED",
+    "only_expected_field_changed": true
+  },
+  "counts_current_cycle_at_N_closeout": {
+    "provider_read": 402,
+    "validate_only": 4,
+    "real_write": 2,
+    "historical_stage01_excluded": true
+  },
+  "quality": {
+    "linux_ci_run": 37979357742,
+    "head": "35054868ecde62c5c037855f8252418889dbbe43",
+    "result": "SUCCESS",
+    "js_pass": 1538,
+    "python_pass": 30,
+    "skipped": 0,
+    "critical": 0,
+    "high": 0,
+    "moderate": 6
+  },
+  "production_changed": false,
+  "main_changed": false,
+  "historical_evidence_retained": true,
+  "timestamp": "2026-10-09T19:20:31.939Z"
+}
