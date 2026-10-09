@@ -193,16 +193,24 @@ describe("Stage 3 typed audiences and targeting (provider transport is mocked)",
     expect(p.operations[0]).toMatchObject({
       kind: "adGroups",
       method: "update",
-      update_mask: "targeting_setting.target_restrictions",
+      update_mask: "targeting_setting.target_restriction_operations",
       fields: {
         targetingSetting: {
-          targetRestrictions: [
-            { targetingDimension: "AGE_RANGE", bidOnly: false },
-            { targetingDimension: "AUDIENCE", bidOnly: true },
+          targetRestrictionOperations: [
+            {
+              operator: "ADD",
+              value: { targetingDimension: "AUDIENCE", bidOnly: true },
+            },
           ],
         },
       },
     });
+    expect(
+      extRow(p.operations[0]!.expected.targetingSetting).targetRestrictions,
+    ).toEqual([
+      { targetingDimension: "AGE_RANGE", bidOnly: false },
+      { targetingDimension: "AUDIENCE", bidOnly: true },
+    ]);
     expect(p.operations[1]).toMatchObject({
       kind: "adGroupCriteria",
       method: "create",
@@ -259,7 +267,12 @@ describe("Stage 3 typed audiences and targeting (provider transport is mocked)",
       f.read,
     );
     expect(p.operations[0]!.fields.targetingSetting).toEqual({
-      targetRestrictions: [{ targetingDimension: "AUDIENCE", bidOnly: false }],
+      targetRestrictionOperations: [
+        {
+          operator: "ADD",
+          value: { targetingDimension: "AUDIENCE", bidOnly: false },
+        },
+      ],
     });
     expect(p.checks.some((c) => c.query.includes("ad_group.campaign ="))).toBe(
       true,
@@ -295,6 +308,103 @@ describe("Stage 3 typed audiences and targeting (provider transport is mocked)",
     expect(updatedMode.inverse_intent!.items).toEqual([
       { ...group, operation: "audience_mode", mode: "TARGETING" },
     ]);
+  });
+  it("Optional bidOnly omission means TARGETING, preserves sibling bytes and provides no fabricated inverse", async () => {
+    const f = fixture();
+    f.state.group.targetingSetting = {
+      targetRestrictions: [
+        { targetingDimension: "AGE_RANGE" },
+        { targetingDimension: "AUDIENCE" },
+      ],
+    };
+    const p = await buildStage3Plan(
+      account,
+      intent({ ...group, operation: "audience_mode", mode: "OBSERVATION" }),
+      f.read,
+    );
+    expect(p.inverse_intent).toBeUndefined();
+    expect(
+      extRow(p.operations[0]!.expected.targetingSetting).targetRestrictions,
+    ).toEqual([
+      { targetingDimension: "AGE_RANGE" },
+      { targetingDimension: "AUDIENCE", bidOnly: true },
+    ]);
+    const g = fixture();
+    g.state.group.targetingSetting = {
+      targetRestrictions: [{ targetingDimension: "AUDIENCE" }],
+    };
+    const unchanged = await buildStage3Plan(
+      account,
+      intent({ ...audienceAdd, mode: "TARGETING" }),
+      g.read,
+    );
+    expect(unchanged.operations).toHaveLength(1);
+    expect(unchanged.operations[0]!.kind).toBe("adGroupCriteria");
+    const bad = fixture();
+    bad.state.group.targetingSetting = {
+      targetRestrictions: [
+        { targetingDimension: "AUDIENCE", bidOnly: "false" },
+      ],
+    };
+    await errorCode(
+      buildStage3Plan(
+        account,
+        intent({ ...group, operation: "audience_mode", mode: "OBSERVATION" }),
+        bad.read,
+      ),
+      "google_stage3_mode_invalid",
+    );
+  });
+  it("Incremental ADD replaces only AUDIENCE dimension, preserving multiple siblings and verifying merged provider state", async () => {
+    const f = fixture(),
+      siblings = [
+        { targetingDimension: "AGE_RANGE", bidOnly: false },
+        { targetingDimension: "GENDER", bidOnly: true },
+      ];
+    f.state.group.targetingSetting = {
+      targetRestrictions: [
+        ...siblings,
+        { targetingDimension: "AUDIENCE", bidOnly: false },
+      ],
+    };
+    const p = await buildStage3Plan(
+        account,
+        intent({ ...group, operation: "audience_mode", mode: "OBSERVATION" }),
+        f.read,
+      ),
+      op = p.operations[0]!;
+    expect(op.fields.targetingSetting).toEqual({
+      targetRestrictionOperations: [
+        {
+          operator: "ADD",
+          value: { targetingDimension: "AUDIENCE", bidOnly: true },
+        },
+      ],
+    });
+    expect(op.fields.targetingSetting).not.toHaveProperty("targetRestrictions");
+    const add = extRow(
+      (
+        extRow(op.fields.targetingSetting)
+          .targetRestrictionOperations as unknown[]
+      )[0],
+    );
+    expect(add.operator).toBe("ADD");
+    f.state.group.targetingSetting = {
+      targetRestrictions: [...siblings, add.value],
+    };
+    expect(extRow(f.state.group.targetingSetting).targetRestrictions).toEqual([
+      ...siblings,
+      { targetingDimension: "AUDIENCE", bidOnly: true },
+    ]);
+    expect(
+      (
+        await verifyExtendedMutation(
+          p,
+          [{ success: true, resource_name: groupResource, error: null }],
+          f.read,
+        )
+      ).status,
+    ).toBe("VERIFIED");
   });
   it.each(["IN_MARKET", "AFFINITY"])(
     "Resolves %s audience with exact taxonomy",
@@ -615,6 +725,92 @@ describe("Stage 3 typed audiences and targeting (provider transport is mocked)",
 });
 
 describe("Stage 3 negative / security / capability rejection", () => {
+  it("Negative CUSTOM_AUDIENCE is unsupported in v24: rejected by parser/schema before provider read", async () => {
+    const f = fixture();
+    await errorCode(
+      buildStage3Plan(
+        account,
+        intent({
+          ...audienceAdd,
+          operation: "audience_exclude",
+          audience: { kind: "CUSTOM", id: "5" },
+        }),
+        f.read,
+      ),
+      "google_stage3_unsupported",
+    );
+    expect(f.read).not.toHaveBeenCalled();
+    const schema = stage3ToolSchema("google_ads_targeting_preview")!,
+      rows = extRow(extRow(extRow(schema.properties).items).items)
+        .oneOf as ExtendedRow[];
+    const negative = rows.find(
+      (r) =>
+        extRow(extRow(r.properties).operation).const === "audience_exclude",
+    )!;
+    expect(
+      extRow(extRow(extRow(negative.properties).audience).properties).kind,
+    ).toEqual({ enum: ["USER_LIST", "IN_MARKET", "AFFINITY"] });
+  });
+  it("Campaign PARENTAL_STATUS positive is unsupported; campaign exclusion and group positive remain available", async () => {
+    const f = fixture();
+    await errorCode(
+      buildStage3Plan(
+        account,
+        intent({
+          ...base,
+          operation: "demographic_add",
+          dimension: "PARENTAL_STATUS",
+          value: "PARENT",
+        }),
+        f.read,
+      ),
+      "google_stage3_unsupported",
+    );
+    expect(f.read).not.toHaveBeenCalled();
+    expect(
+      (
+        await buildStage3Plan(
+          account,
+          intent({
+            ...base,
+            operation: "demographic_exclude",
+            dimension: "PARENTAL_STATUS",
+            value: "PARENT",
+          }),
+          f.read,
+        )
+      ).operations[0]!.fields.negative,
+    ).toBe(true);
+    expect(
+      (
+        await buildStage3Plan(
+          account,
+          intent({
+            ...group,
+            operation: "demographic_add",
+            dimension: "PARENTAL_STATUS",
+            value: "PARENT",
+          }),
+          f.read,
+        )
+      ).operations[0]!.fields.negative,
+    ).toBe(false);
+    const schema = stage3ToolSchema("google_ads_targeting_preview")!,
+      rows = extRow(extRow(extRow(schema.properties).items).items)
+        .oneOf as ExtendedRow[];
+    const positive = rows.find(
+      (r) => extRow(extRow(r.properties).operation).const === "demographic_add",
+    )!;
+    expect(positive.allOf).toContainEqual({
+      not: {
+        properties: {
+          level: { const: "CAMPAIGN" },
+          dimension: { const: "PARENTAL_STATUS" },
+        },
+        required: ["level", "dimension"],
+      },
+    });
+  });
   it.each([
     [{ ...audienceAdd, mode: "DEFAULT" }, "google_stage3_input_invalid"],
     [
