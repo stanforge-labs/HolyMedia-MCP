@@ -39,6 +39,7 @@ export function extClosed(value: unknown, allowed: string[], required: string[] 
   return r;
 }
 export function extOwner(v: unknown, account: string, kind?: string, temporary = false): string {
+  if (kind === "customers" && v === `customers/${customerId(account)}`) return String(v);
   if (typeof v !== "string" || !new RegExp(`^customers/${customerId(account)}/${kind ?? "[A-Za-z]+"}/${temporary ? "-?" : ""}[0-9]{1,20}(?:~[A-Za-z0-9_~-]+)?$`).test(v)) extFail("google_extended_ownership_invalid", "Resource не принадлежит выбранному Google customer; вся пачка отклонена.");
   return v;
 }
