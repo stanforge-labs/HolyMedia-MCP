@@ -8,6 +8,7 @@ import {
 } from "./scenario-targeting-readiness.mjs";
 import { PREFLIGHT_QUERIES } from "./read-only-guard.mjs";
 import { originalKeywords } from "./live-guard.mjs";
+import { mockLProof, mockLAd } from "./verified-l-residual.test.mjs";
 import {
   assertReadinessRuntime,
   assertReadinessAuthority,
@@ -15,6 +16,8 @@ import {
   installReadinessGuard,
   safeReadinessError,
   runTargetingReadiness,
+  readinessSnapshotDigest,
+  READINESS_SNAPSHOT_QUERIES,
 } from "./targeting-readiness-runner.mjs";
 const now = Date.parse("2026-10-09T12:00:00.000Z"),
   prefix = `customers/${target.customer}`,
@@ -353,12 +356,28 @@ async function mockedRun({
   badDirectory = false,
   campaignCriteria = [],
   discovery = false,
+  verifiedL = false,
+  invalidL = false,
+  enabledL = false,
 } = {}) {
   const a = authority(),
     rows = fixtureRows(),
     saved = [],
     calls = [];
   rows.campaignCriteria = campaignCriteria;
+  if (verifiedL) {
+    rows.ads = [mockLAd(target.rsa), mockLAd()];
+    rows.deliveryAds = [
+      ...rows.ads,
+      mockLAd("827487091340", "24339483523", "200180930839"),
+      mockLAd("827362851813", "24339483523", "200180931039"),
+    ];
+    rows.deliveryGroups[1].adGroup.id = "200180930839";
+    rows.deliveryGroups[1].adGroup.resourceName = `${prefix}/adGroups/200180930839`;
+    rows.deliveryGroups[2].adGroup.id = "200180931039";
+    rows.deliveryGroups[2].adGroup.resourceName = `${prefix}/adGroups/200180931039`;
+    if (enabledL) rows.ads[1].adGroupAd.status = "ENABLED";
+  }
   let keywordReads = 0,
     vaultUpdates = 0;
   const oldFetch = globalThis.fetch;
@@ -441,7 +460,12 @@ async function mockedRun({
   };
   try {
     const result = await runTargetingReadiness({
-      env: discovery ? { ...env, STAGE234_DISCOVERY: "true" } : env,
+      env: {
+        ...env,
+        ...(discovery ? { STAGE234_DISCOVERY: "true" } : {}),
+        ...(verifiedL ? { STAGE234_VERIFIED_L: "true" } : {}),
+      },
+      readLProof: () => (invalidL ? {} : mockLProof()),
       load: async () => ({
         config: config(),
         Vault,
@@ -464,6 +488,39 @@ async function mockedRun({
     globalThis.fetch = oldFetch;
   }
 }
+test("verified L opt-in keeps complete four RSA proof with original-only scenario view", async () => {
+  const r = await mockedRun({ verifiedL: true });
+  assert.equal(r.result.result, "PASS_READ_ONLY");
+  assert.equal(r.result.real_writes, 0);
+  assert.equal(r.result.validate_only, 0);
+  assert.equal(r.saved[0].value.verified_l_residual.full_delivery_rsa_count, 4);
+  assert.equal(
+    r.saved[0].value.verified_l_residual.original_group_rsa_count,
+    2,
+  );
+  assert.equal(r.saved[0].value.fixture_unchanged, true);
+  const bad = await mockedRun({ verifiedL: true, invalidL: true });
+  assert.equal(bad.result.result, "BLOCKED");
+  assert.equal(bad.calls.length, 0);
+  const enabled = await mockedRun({ verifiedL: true, enabledL: true });
+  assert.equal(enabled.result.result, "BLOCKED");
+  assert.equal(enabled.result.real_writes, 0);
+});
+test("snapshot digest freezes all eleven raw query projections including L and ignores row ordering", () => {
+  const r = fixtureRows(),
+    snapshot = Object.fromEntries(
+      Object.keys(READINESS_SNAPSHOT_QUERIES).map((n) => [n, r[n]]),
+    );
+  const d = readinessSnapshotDigest(snapshot);
+  snapshot.ads.push(mockLAd());
+  assert.notEqual(readinessSnapshotDigest(snapshot), d);
+  const full = readinessSnapshotDigest(snapshot);
+  snapshot.ads.reverse();
+  assert.equal(readinessSnapshotDigest(snapshot), full);
+  snapshot.ads[0].adGroupAd.status = "ENABLED";
+  assert.notEqual(readinessSnapshotDigest(snapshot), full);
+  assert.throws(() => readinessSnapshotDigest({}));
+});
 test("READ runner emits one sanitized evidence, readiness blockers independent of N, no execution of MCP", async () => {
   const r = await mockedRun({
     unavailable: ["eligibleInterests", "detailedDemographics", "conversions"],

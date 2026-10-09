@@ -8,6 +8,12 @@ import process from "node:process";
 const { AbortSignal, structuredClone, console } = globalThis;
 import { readAcceptanceContext } from "./context-vault.mjs";
 import {
+  readVerifiedLResidual,
+  assertVerifiedLResidual,
+  assertVerifiedLGroupAds,
+  assertVerifiedLDeliveryAds,
+} from "./verified-l-residual.mjs";
+import {
   isDiscoveryQuery,
   runTargetingDiscovery,
 } from "./targeting-discovery.mjs";
@@ -62,6 +68,25 @@ const snapshotNames = [
   "campaignCriteria",
   ...Object.keys(extraQueries),
 ];
+export const READINESS_SNAPSHOT_QUERIES = Object.freeze(
+  Object.fromEntries(
+    snapshotNames.map((name) => [name, queries[name] ?? extraQueries[name]]),
+  ),
+);
+export function readinessSnapshotDigest(snapshot) {
+  const ordered = Object.fromEntries(
+    snapshotNames.map((name) => {
+      if (!Array.isArray(snapshot?.[name])) fail("readiness_snapshot_invalid");
+      return [
+        name,
+        structuredClone(snapshot[name]).sort((a, b) =>
+          canonical(a).localeCompare(canonical(b), "en"),
+        ),
+      ];
+    }),
+  );
+  return digest(ordered);
+}
 const inventoryNames = [
   "eligibleInterests",
   "userLists",
@@ -305,6 +330,7 @@ export function normalizedReadinessFixture(
   hierarchyRows,
   source,
   now = Date.now(),
+  verifiedL,
 ) {
   assertReadinessCustomer(customerRows, hierarchyRows);
   const c = single(snapshot.campaign, "campaign", "readiness_campaign_missing"),
@@ -332,7 +358,11 @@ export function normalizedReadinessFixture(
     k.negative = k.negative ?? false;
     return k;
   });
-  const ads = snapshot.ads.map((r) => {
+  if (verifiedL) assertVerifiedLGroupAds(snapshot.ads, verifiedL);
+  const scenarioAds = verifiedL
+    ? snapshot.ads.filter((r) => r.adGroupAd.ad.id === target.rsa)
+    : snapshot.ads;
+  const ads = scenarioAds.map((r) => {
     if (
       String(r.campaign?.id) !== target.campaign ||
       String(r.adGroup?.id) !== target.group
@@ -397,7 +427,7 @@ export function normalizedReadinessFixture(
     ads,
   };
 }
-export function assertReadinessDelivery(snapshot) {
+export function assertReadinessDelivery(snapshot, verifiedL) {
   const allowed = [target.campaign, "24339483523"],
     prefix = `customers/${target.customer}`;
   if (
@@ -411,9 +441,10 @@ export function assertReadinessDelivery(snapshot) {
         r.campaign.resourceName !== `${prefix}/campaigns/${r.campaign.id}`,
     ) ||
     snapshot.deliveryGroups?.length !== 3 ||
-    snapshot.deliveryAds?.length !== 3
+    snapshot.deliveryAds?.length !== (verifiedL ? 4 : 3)
   )
     fail("readiness_delivery_fixture_invalid");
+  if (verifiedL) assertVerifiedLDeliveryAds(snapshot.deliveryAds, verifiedL);
   for (const r of snapshot.deliveryGroups)
     if (
       !allowed.includes(String(r.campaign?.id)) ||
@@ -649,6 +680,7 @@ export async function runTargetingReadiness({
   env = process.env,
   load = loadStock,
   readContext = readAcceptanceContext,
+  readLProof = readVerifiedLResidual,
   checkDirectory = secureDirectory,
   save = (file, value) =>
     writeFileSync(file, JSON.stringify(value, null, 2), {
@@ -680,6 +712,9 @@ export async function runTargetingReadiness({
     directoryChecked = true;
     stock = await load();
     assertReadinessRuntime(env, stock.config);
+    const verifiedL =
+      env.STAGE234_VERIFIED_L === "true" ? readLProof() : undefined;
+    if (env.STAGE234_VERIFIED_L === "true") assertVerifiedLResidual(verifiedL);
     globalThis.fetch = installReadinessGuard(
       nativeFetch,
       counts,
@@ -776,7 +811,7 @@ export async function runTargetingReadiness({
     const snapshot = async () => {
       const result = {};
       for (const name of snapshotNames) result[name] = await read(name);
-      assertReadinessDelivery(result);
+      assertReadinessDelivery(result, verifiedL);
       return result;
     };
     stage = "fresh_test_customer_hierarchy";
@@ -789,6 +824,7 @@ export async function runTargetingReadiness({
       beforeProof.hierarchy,
       env.STAGE234_SOURCE_HEAD,
       now(),
+      verifiedL,
     );
     if (
       prepareAudienceIScenario(
@@ -847,6 +883,7 @@ export async function runTargetingReadiness({
       afterProof.hierarchy,
       env.STAGE234_SOURCE_HEAD,
       now(),
+      verifiedL,
     );
     evidence = buildTargetingReadinessEvidence({
       fixture,
@@ -861,6 +898,19 @@ export async function runTargetingReadiness({
       now: now(),
     });
     if (discovery) evidence.discovery = discovery;
+    evidence.snapshot_attestation = {
+      canonical_format: "sorted_object_keys_sorted_query_rows_v1",
+      query_names: Object.keys(READINESS_SNAPSHOT_QUERIES),
+      sha256: readinessSnapshotDigest(after),
+    };
+    if (verifiedL)
+      evidence.verified_l_residual = {
+        ...verifiedL,
+        scenario_view: "ORIGINAL_RSA_ONLY",
+        full_snapshot_digest: readinessSnapshotDigest(after),
+        full_delivery_rsa_count: 4,
+        original_group_rsa_count: 2,
+      };
   } catch (e) {
     evidence = {
       kind: "stage234_targeting_readiness_fixed_READ_only",

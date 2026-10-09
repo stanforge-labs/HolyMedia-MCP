@@ -13,6 +13,18 @@ spec=importlib.util.spec_from_file_location('readiness_preview_supervisor',Path(
 base=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(base)
 
+L_CONTEXT='state/stage234-l-commit-20261009T202050Z-lc1/l-verified-evidence.json'
+L_SHA256='962cdada67ba61df6f3cb67442c5855aa9aa8d961c18e0e0ee0a3e7acebc4017'
+
+def verified_l_source(relative):
+    if relative is None:return None
+    base.require(relative==L_CONTEXT,'stage234_readiness_verified_l_path_invalid')
+    file=base.ROOT/L_CONTEXT
+    base.permissions(file)
+    value=file.read_bytes()
+    base.require(len(value)<=1024*1024 and hashlib.sha256(value).hexdigest()==L_SHA256,'stage234_readiness_verified_l_hash_invalid')
+    return value
+
 def command(opts,directory,state):
     args=['docker','run','--rm','--init','--name','hm-stage234-readiness-'+opts.run_id,'--network',base.NETWORK,
           '--label','com.docker.compose.project='+base.PROJECT,'--memory','768m','--cpus','1','--env-file',str(state/'runtime.env'),
@@ -24,6 +36,9 @@ def command(opts,directory,state):
             'GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST':'8590146099','PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID':'4378327049','PROVIDER_GOOGLE_API_VERSION':'v24',
             'LOG_LEVEL':'error','NODE_OPTIONS':'--max-old-space-size=192'}
     if getattr(opts,'discovery',False):values['STAGE234_DISCOVERY']='true'
+    if getattr(opts,'verified_l_context',None):
+        values['STAGE234_VERIFIED_L']='true'
+        args+=['-v',str(state/'verified-L-evidence.json')+':/verified-l/l-verified-evidence.json:ro']
     for k,v in values.items():args+=['-e',k+'='+v]
     return args+[opts.image,'/stage234/targeting-readiness-runner.mjs']
 
@@ -32,6 +47,7 @@ def execute(opts):
     base.require(re.fullmatch(r'[0-9a-f]{40}',opts.harness_head or '') is not None,'stage234_readiness_harness_head_invalid')
     base.require(re.fullmatch(r'stage234-scoped-context-[0-9]{8}T[0-9]{6}Z\.json',opts.context_basename or '') is not None,'stage234_readiness_encrypted_context_required')
     base.require(hasattr(os,'geteuid') and os.geteuid()==0,'stage234_readiness_vps_sudo_required')
+    l_bytes=verified_l_source(getattr(opts,'verified_l_context',None))
     before=base.production_state();env_hash=base.inspect_ready(opts.head,opts.image)
     selected=base.context_source(opts.context_basename);base.permissions(selected)
     envelope=json.loads(selected.read_text())
@@ -44,6 +60,10 @@ def execute(opts):
         fd=os.open(state/name,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         with os.fdopen(fd,'wb') as f:f.write(data)
         os.chown(state/name,1000,1000)
+    if l_bytes:
+        fd=os.open(state/'verified-L-evidence.json',os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        with os.fdopen(fd,'wb') as f:f.write(l_bytes)
+        os.chown(state/'verified-L-evidence.json',1000,1000)
     output=None
     try:
         output=subprocess.run(command(opts,Path(__file__).resolve().parent,state),capture_output=True,text=True,timeout=240)
@@ -63,6 +83,7 @@ def main():
     for k in ['head','harness-head','image','run-id','context-basename']:parser.add_argument('--'+k,required=True)
     parser.add_argument('--check-only',action='store_true')
     parser.add_argument('--discovery',action='store_true')
+    parser.add_argument('--verified-l-context',choices=[L_CONTEXT])
     execute(parser.parse_args())
 
 if __name__=='__main__':

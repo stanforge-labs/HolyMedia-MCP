@@ -12,6 +12,17 @@ def options(**change):
     return SimpleNamespace(**dict(dict(head='a'*40,harness_head='c'*40,image='ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:'+'b'*64,run_id='20261009T120000Z-rdy',context_basename='stage234-scoped-context-20261009T120000Z.json',check_only=True),**change))
 
 class ReadinessSupervisorTests(unittest.TestCase):
+    def test_verified_l_is_exact_readonly_third_mount(self):
+        args=runner.command(options(verified_l_context=runner.L_CONTEXT),Path('/safe/harness'),Path('/safe/state'));text=' '.join(args)
+        self.assertEqual(args.count('-v'),3)
+        self.assertIn('/verified-l/l-verified-evidence.json:ro',text)
+        self.assertIn('STAGE234_VERIFIED_L=true',text)
+        self.assertIn('PROVIDER_GOOGLE_ADS_WRITE_ENABLED=false',text)
+        self.assertNotIn('-p',args)
+        with patch.object(runner.base,'permissions') as check:
+            with self.assertRaises(RuntimeError):runner.verified_l_source('../arbitrary.json')
+            check.assert_not_called()
+        self.assertIsNone(runner.verified_l_source(None))
     def test_discovery_is_opt_in_and_never_enables_writes(self):
         default=' '.join(runner.command(options(),Path('/safe/harness'),Path('/safe/state')))
         enabled=' '.join(runner.command(options(discovery=True),Path('/safe/harness'),Path('/safe/state')))
