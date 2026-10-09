@@ -12,7 +12,7 @@ SHA-256: `51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0`.
 [original-tz-source-20261009.json](../artifacts/google-full-scope/original-tz-source-20261009.json).
 
 Аудирована ветка `codex/google-ads-write-full-scope-final`, HEAD
-`ba0d2059be96624e4d372eb4e548f6716402cd9d` (revision до обновления этой матрицы).
+`5c8d8b6af01a3124405b31291d24263334fdf71d` (revision до обновления этой матрицы).
 Интегрированы native private OAuth, закрытые profile schemas, tracking clear/default
 verification и P244 READ-аудит. Raw provider snapshots/immutable payload не редактируются
 ради presentation: media и URL secrets redacted только в response/browser/journal copies.
@@ -132,8 +132,11 @@ performance-filtered bulk с exact money comparisons и замороженной
 Auto-bidding совместимость проверяется, а не обещается для всех modifiers. Device0 exclusion
 и neutral restore отличаются от ignored bid changes; audience modifier требует OBSERVATION.
 Captured explicit positive bid/budget и reversible selected-leaf updates имеют новую inverse
-операцию. Для inherited/zero override и создания local device override автоматическое
-восстановление наследования/delete inverse не рекламируется. Создания/removals не удаляются
+операцию. Manual Search keyword с доказанным AD_GROUP source/effective/parent now имеет
+точный server-recorded inherited inverse: unset CPC + exact mask, новая validation/approval,
+strict provider reread. Public arbitrary clear не добавлен; unknown/auto/portfolio source
+не угадывается. См. [bounded CPC rollback](google-ads-inherited-cpc-rollback.md).
+Для создания local device override автоматическое delete inverse не рекламируется. Создания/removals не удаляются
 автоматически. G/H/N — mock/disposable PASS equivalents, настоящий live ещё pending.
 
 Manager cross-account portfolios, hotel profiles и arbitrary parameter clears не вытекают

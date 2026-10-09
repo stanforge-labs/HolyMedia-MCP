@@ -2,7 +2,7 @@
   "schema_version": 1,
   "audit_date": "2026-10-09",
   "audited_branch": "codex/google-ads-write-full-scope-final",
-  "audited_head": "ba0d2059be96624e4d372eb4e548f6716402cd9d",
+  "audited_head": "5c8d8b6af01a3124405b31291d24263334fdf71d",
   "source": {
     "artifact": "artifacts/google-full-scope/original-tz-source-20261009.json",
     "filename": "ТЗ запись в Google Ads для HolyMedia MCP.docx",
@@ -194,7 +194,7 @@
         "apps/api/src/providers/google-ads-stage4.test.ts",
         "apps/api/src/providers/google-ads-pmax.test.ts"
       ],
-      "live_status": "Stage01 Search previous PASS; new PMax pending",
+      "live_status": "Stage01 Search previous PASS; new Stage0 positive-keyword PAUSED default and PMax pending",
       "remaining_limits": [
         "Asset/link criteria may be ENABLED beneath PAUSED campaign/group; preview states this, no activation of delivery parents."
       ],
@@ -537,11 +537,13 @@
       ],
       "tests": [
         "apps/api/src/mcp/google-stage2.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage2-inherited.test.ts",
         "apps/api/src/providers/google-ads-money.test.ts"
       ],
       "live_status": "NOT_RUN_NEW_PROFILE",
       "remaining_limits": [
         "Inherited zero keyword bid needs explicit absolute input, not invented default.",
+        "Server-recorded Manual Search AD_GROUP inherited CPC now has an exact controlled inverse; absent/zero only verifies with frozen source/effective/parent proof. Automated/portfolio/unknown-source inheritance is not guessed.",
         "G/H/N are mock/disposable equivalents, live pending."
       ]
     },
