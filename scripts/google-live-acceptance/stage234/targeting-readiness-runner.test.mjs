@@ -8,7 +8,7 @@ import {
 } from "./scenario-targeting-readiness.mjs";
 import { PREFLIGHT_QUERIES } from "./read-only-guard.mjs";
 import { originalKeywords } from "./live-guard.mjs";
-import { mockLProof, mockLAd } from "./verified-l-residual.test.mjs";
+import { mockLProof, mockLAd } from "./verified-l-residual.fixtures.mjs";
 import {
   assertReadinessRuntime,
   assertReadinessAuthority,
