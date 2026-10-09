@@ -3,7 +3,16 @@ name: HolyMedia MCP v2 foundation
 on:
   push:
     branches:
-      [main, "v2/**", "feat/**", "codex/google-ads-stage01-integration-final"]
+      [
+        main,
+        "v2/**",
+        "feat/**",
+        "codex/google-ads-stage01-integration-final",
+        "codex/google-ads-write-stage234-integration",
+        "codex/google-ads-write-stage2-completion",
+        "codex/google-ads-write-stage3-targeting",
+        "codex/google-ads-write-stage4-ads-assets",
+      ]
   pull_request:
 
 permissions:
@@ -19,6 +28,9 @@ jobs:
       V2_PG18_REHEARSAL: "true"
       V2_PG18_TEST_DATABASE_URL: postgresql://holymedia:change-me-local-only@127.0.0.1:5432/public_mcp_upgrade
       PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "false"
       GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: ""
       PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
       PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
