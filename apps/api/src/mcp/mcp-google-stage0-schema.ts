@@ -356,7 +356,7 @@ export const campaignIdSchema = obj(
   },
 );
 export const campaignCloneSchema = obj(
-  "Preview clone of supported Search campaign structure; target PAUSED. Unsupported criteria/assets/shared lists cause an explicit error, never silent omission.",
+  "Preview bounded Search clone, target PAUSED, including supported proximity, owned CALL/BUSINESS_NAME assets and same-account shared negative lists. Unsupported source components cause an explicit error, never silent omission.",
   {
     provider: campaignIdSchema.properties!.provider!,
     account_id: campaignIdSchema.properties!.account_id!,

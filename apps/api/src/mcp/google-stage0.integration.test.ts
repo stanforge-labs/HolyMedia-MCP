@@ -684,7 +684,7 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
       )[0]!.status,
     ).toBe("PAUSED");
   });
-  it("Clone does not silently omit unsupported source assets or shared list links", async () => {
+  it("Clone does not silently omit unsupported source device criteria", async () => {
     const f = fixture(true),
       b = brief();
     b.assets = {
@@ -692,6 +692,17 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
     };
     await f.commit(await f.call("create_campaign_from_brief", b));
     const id = String(resource(f, "campaign")[0]!.id);
+    f.resources.set(`${prefix}/campaignCriteria/${id}~900`, {
+      campaign: resource(f, "campaign")[0],
+      campaignCriterion: {
+        resourceName: `${prefix}/campaignCriteria/${id}~900`,
+        campaign: `${prefix}/campaigns/${id}`,
+        type: "DEVICE",
+        status: "ENABLED",
+        negative: false,
+        device: { type: "MOBILE" },
+      },
+    });
     await expect(
       f.call("clone_campaign_preview", {
         source_campaign_id: id,

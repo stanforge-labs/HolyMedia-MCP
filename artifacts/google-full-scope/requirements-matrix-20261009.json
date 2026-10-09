@@ -2,7 +2,17 @@
   "schema_version": 1,
   "audit_date": "2026-10-09",
   "audited_branch": "codex/google-ads-write-full-scope-final",
-  "audited_head": "5c8d8b6af01a3124405b31291d24263334fdf71d",
+  "audited_head": "eed4aad",
+  "current_evidence": {
+    "historical_evidence_preserved": true,
+    "disposable_key": "artifacts/google-full-scope/test-key-issuance-20261009.json",
+    "clone_extension": "docs/google-ads-write-clone-final.md",
+    "stage2_scenarios": "docs/google-ads-live-ghkln-preparation.md",
+    "stage3_scenarios": "docs/google-ads-targeting-live-readiness.md",
+    "new_clone_live": "PENDING",
+    "stage234_real_commits": "PENDING_HUMAN_APPROVAL",
+    "cross_client_QRS": "BLOCKED_CLIENTS_NOT_CONNECTED"
+  },
   "source": {
     "artifact": "artifacts/google-full-scope/original-tz-source-20261009.json",
     "filename": "ТЗ запись в Google Ads для HolyMedia MCP.docx",
@@ -334,7 +344,7 @@
       "provider_objects": ["CampaignCriterion"],
       "classification": "DONE+LIVEPENDING",
       "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
-      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts", "apps/api/src/providers/google-ads-stage0-clone.test.ts"],
       "live_status": "NOT_RUN_NEW_PROFILE",
       "remaining_limits": []
     },
@@ -439,7 +449,8 @@
       "live_status": "NOT_RUN_NEW_PROFILE",
       "remaining_limits": [
         "Implemented bounded Search MANUAL_CPC/MAXIMIZE_CONVERSIONS clone.",
-        "Whole preview rejects shared-list links, proximity/audience/device criteria, non-keyword/non-RSA resources, multi-final URLs, custom/cross-account goals, call/business/unknown assets and unsupported networks/bidding/geo modes.",
+        "Positive proximity, same-account frozen shared negative lists and CALL/BUSINESS_NAME reuse are implemented/mock-tested.",
+        "Whole preview still rejects audience/device criteria, negative proximity or ambiguous radius relocation, non-keyword/non-RSA resources, multi-final URLs, custom/cross-account goals, unknown assets and unsupported networks/bidding/geo modes.",
         "These are local coverage gaps, not Google API impossibility. No silently dropped component."
       ]
     },

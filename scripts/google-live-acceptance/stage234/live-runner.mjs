@@ -264,8 +264,8 @@ export async function runLivePreview() {
     const contextFile = join(root, "fixture-context.json");
     if ((statSync(contextFile).mode & 0o077) !== 0)
       fail("stage234_protected_context_permissions_invalid");
-    const context = await readAcceptanceContext(contextFile);
     createRequire("/workspace/apps/api/package.json")("reflect-metadata");
+    const context = await readAcceptanceContext(contextFile);
     const { loadConfig } =
       await import("/workspace/packages/config/dist/index.js");
     const { createDatabase, closeDatabase } =

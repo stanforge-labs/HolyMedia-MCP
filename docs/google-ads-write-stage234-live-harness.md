@@ -61,6 +61,13 @@ env file or production configuration. The runner independently rechecks the new 
 actual ownership, exact single-account scope and expiry before provider calls. No key
 is created by this launcher, and operation-level human approval remains mandatory.
 
+The separately authorized one-time stock administrative issuance is documented in
+[disposable key issuance](google-ads-disposable-key-issuance.md). New contexts are
+encrypted using the existing disposable CredentialVaultService, including opaque
+preview/approval fields and future inverse contexts. Mode 600 plaintext is not a
+substitute for the explicit encrypted-vault requirement. The pinned continuation
+manifest now includes `context-vault.mjs`; public hints are not commit authority.
+
 ## Local/mock verification
 
 `node --test scripts/google-live-acceptance/stage234/live.test.mjs`

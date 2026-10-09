@@ -1,5 +1,7 @@
 // Pure preparation only: no fetch, preview, approval, commit, or filesystem writes.
 import { createHash } from "node:crypto";
+import { URL } from "node:url";
+const { Headers } = globalThis;
 import { originalKeywords } from "./live-guard.mjs";
 
 export const TARGETING_BASE_HEAD = "94edb8c3c082bbd8951bf166e8797e83f3b8a5dc";

@@ -103,11 +103,13 @@ known geo/language/schedule, campaign/group negatives, sitelinks/callouts/snippe
 existing image/logo links, совместимые full-category goals/tracking.
 Target delivery entities PAUSED; source snapshots входят в stale guard.
 
-Whole clone preview отклоняется, а не молча урезается, при shared-list links,
-proximity/audience/device criteria, non-keyword/non-RSA groups/ads, multi-final URLs,
-custom/cross-account goals, call/business-name/unknown asset details и неподдерживаемых
-networks/bidding/geo modes. Даже поддерживаемый в новом create proximity пока не означает
-поддержку clone. Полный clone coverage — REQUIREDGAP, не «Google API не умеет».
+Новый [bounded clone пакет](google-ads-write-clone-final.md) добавляет positive proximity,
+owned CALL/BUSINESS_NAME reuse и same-account shared negative lists с frozen membership.
+Whole clone preview отклоняется, а не молча урезается, при audience/device criteria,
+negative proximity/ambiguous radius relocation, non-keyword/non-RSA groups/ads, multi-final URLs,
+custom/cross-account goals, unknown asset details и неподдерживаемых networks/bidding/geo modes.
+Полный clone coverage остаётся REQUIREDGAP, не «Google API не умеет»; новые пути mock-tested,
+но dedicated LIVE clone ещё не выполнялся.
 
 ### Stage 1 — P134–164
 

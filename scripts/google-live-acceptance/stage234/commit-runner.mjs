@@ -126,10 +126,10 @@ export async function runNContinuation() {
     const stat = lstatSync(root);
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.mode & 0o077)
       fail("stage234_commit_directory_permissions_invalid");
+    createRequire("/workspace/apps/api/package.json")("reflect-metadata");
     const context = await readAcceptanceContext(
       join(root, "protected-preview-context.json"),
     );
-    createRequire("/workspace/apps/api/package.json")("reflect-metadata");
     const { loadConfig } =
       await import("/workspace/packages/config/dist/index.js");
     const database = await import("/workspace/packages/database/dist/index.js");

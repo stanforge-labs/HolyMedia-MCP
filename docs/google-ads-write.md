@@ -21,8 +21,9 @@ READ **15**, VALIDATE_ONLY **0**, WRITE **0** на runtime source `7da2fbbe7d150
 новый PMax live profile требует подходящих данных/credential permissions и отдельных manual approvals.
 Счётчики «0 real calls/writes» ниже относятся к указанным engineering/mock пакетам, не ко всей истории.
 
-Обязательные незакрытые пункты на этой базе: полный clone coverage, READ link/UTM audit integration
-(P244), native MCP OAuth write identity (P46, отдельная реализация в работе), новые live G/H/I/J/K/L/N
+На текущей full-scope ветке READ link/UTM audit (P244) и native MCP OAuth write identity
+(P46) реализованы и stock mock-tested; это не live cross-client acceptance.
+Обязательные незакрытые gates: оставшиеся bounded clone ограничения, новые live G/H/I/J/K/L/N
 и Q/R/S из реальных подключённых MCP-клиентов. Release FULL SCOPE READY не объявляется.
 
 ## Исторические границы первого Stage 1 пакета
@@ -489,12 +490,18 @@ timeout 4s на HTTP запрос, body max 64 KiB, max 20 unique URLs, без c
 Clone inputs: source_campaign_id/new_name; optional new_budget/new_locations/new_dates.
 Supported profile: Search MANUAL_CPC/MAXIMIZE_CONVERSIONS, standard groups, keyword criteria,
 RSA с одним URL, known geo/language/schedule, campaign/group negatives, sitelinks/callouts/snippets,
-existing image/logo links, compatible full-category goals/tracking. Все target entities PAUSED.
+existing image/logo links, owned CALL/BUSINESS_NAME reuse, positive proximity, same-account
+shared negative-list associations, compatible full-category goals/tracking. Все target delivery entities PAUSED.
 Source snapshots входят в stale protection. Past dates могут потребовать explicit new_dates.
 Unsupported source parts fail the **whole clone preview**, не silently omitted:
-shared list links, proximity/audience/device criteria, non-keyword/non-RSA groups/ads,
-multi-final-URL overrides, custom/cross-account goals, call/business-name/unknown asset details,
+audience/device criteria, negative proximity or ambiguous radius relocation, non-keyword/non-RSA groups/ads,
+multi-final-URL overrides, custom/cross-account goals, unknown asset details,
 unsupported networks/bidding/geo modes. Поэтому clone статус **PARTIAL support**, не full Google clone.
+
+CALL/BUSINESS_NAME и shared-list references переиспользуются, не создаются заново и не
+изменяются на source. Их полные settings/membership входят в immutable stale snapshots.
+CampaignSharedSet.status — output-only: ожидается ENABLED связь с новой PAUSED campaign,
+но status никогда не отправляется в create payload. См. [clone profile](google-ads-write-clone-final.md).
 
 ### Stage 0 isolated evidence / live prerequisites
 

@@ -263,6 +263,7 @@ export function fixture(
           adGroupAd: "adGroupAds",
           asset: "assets",
           campaignAsset: "campaignAssets",
+          campaignSharedSet: "campaignSharedSets",
           campaignConversionGoal: "campaignConversionGoals",
           customConversionGoal: "customConversionGoals",
           conversionGoalCampaignConfig: "conversionGoalCampaignConfigs",
@@ -307,6 +308,8 @@ export function fixture(
             name = `${prefix}/adGroupAds/${String(fields.adGroup).split("/").at(-1)}~${sequence}`;
           if (create && kind === "campaignCriterion")
             name = `${prefix}/campaignCriteria/${String(fields.campaign).split("/").at(-1)}~${sequence}`;
+          if (create && kind === "campaignSharedSet")
+            name = `${prefix}/campaignSharedSets/${String(fields.campaign).split("/").at(-1)}~${String(fields.sharedSet).split("/").at(-1)}`;
           const old = object(resources.get(name)?.[kind]),
             value: MockRow = {
               ...old,
@@ -345,6 +348,21 @@ export function fixture(
             value.goalConfigLevel = "CAMPAIGN";
           }
           if (kind === "customConversionGoal") value.status = "ENABLED";
+          if (kind === "campaignSharedSet") value.status = "ENABLED";
+          if (kind === "asset")
+            value.type = value.sitelinkAsset
+              ? "SITELINK"
+              : value.calloutAsset
+                ? "CALLOUT"
+                : value.structuredSnippetAsset
+                  ? "STRUCTURED_SNIPPET"
+                  : value.callAsset
+                    ? "CALL"
+                    : value.businessNameAsset
+                      ? "BUSINESS_NAME"
+                      : value.imageAsset
+                        ? "IMAGE"
+                        : value.type;
           const campaignResource =
             kind === "campaign"
               ? name
