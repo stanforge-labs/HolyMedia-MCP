@@ -30,13 +30,18 @@ const autoTypes = [
 ];
 export const DISCOVERY_AUTO_CAMPAIGNS =
   "SELECT campaign.id, campaign.resource_name, campaign.status, campaign.advertising_channel_type, campaign.bidding_strategy_type, campaign.bidding_strategy FROM campaign WHERE campaign.status = PAUSED AND campaign.advertising_channel_type = SEARCH AND campaign.bidding_strategy_type IN ('TARGET_SPEND', 'MAXIMIZE_CONVERSIONS', 'MAXIMIZE_CONVERSION_VALUE', 'TARGET_CPA', 'TARGET_ROAS', 'TARGET_IMPRESSION_SHARE') ORDER BY campaign.id LIMIT 21";
-export function discoveryInterestQuery(kind, after = "0") {
+export function discoveryInterestQuery(
+  kind,
+  after = "0",
+  launchedOnly = false,
+) {
   if (
     !["IN_MARKET", "AFFINITY"].includes(kind) ||
-    (after !== "0" && !positiveId(after))
+    (after !== "0" && !positiveId(after)) ||
+    typeof launchedOnly !== "boolean"
   )
     fail("discovery_catalog_query_invalid");
-  return `SELECT user_interest.resource_name, user_interest.user_interest_id, user_interest.name, user_interest.taxonomy_type, user_interest.launched_to_all, user_interest.availabilities FROM user_interest WHERE user_interest.taxonomy_type = '${kind}' AND user_interest.user_interest_id > ${after} ORDER BY user_interest.user_interest_id LIMIT 101`;
+  return `SELECT user_interest.resource_name, user_interest.user_interest_id, user_interest.name, user_interest.taxonomy_type, user_interest.launched_to_all, user_interest.availabilities FROM user_interest WHERE user_interest.taxonomy_type = '${kind}'${launchedOnly ? " AND user_interest.launched_to_all = TRUE" : ""} AND user_interest.user_interest_id > ${after} ORDER BY user_interest.user_interest_id LIMIT 101`;
 }
 export function discoveryKeywordQuery(ids) {
   if (
@@ -63,10 +68,13 @@ export function isDiscoveryQuery(query) {
   if (typeof query !== "string") return false;
   try {
     const interest =
-      /taxonomy_type = '(IN_MARKET|AFFINITY)' AND user_interest\.user_interest_id > ([0-9]{1,20}) ORDER BY/u.exec(
+      /taxonomy_type = '(IN_MARKET|AFFINITY)'( AND user_interest\.launched_to_all = TRUE)? AND user_interest\.user_interest_id > ([0-9]{1,20}) ORDER BY/u.exec(
         query,
       );
-    if (interest && query === discoveryInterestQuery(interest[1], interest[2]))
+    if (
+      interest &&
+      query === discoveryInterestQuery(interest[1], interest[3], !!interest[2])
+    )
       return true;
     const keywords = /campaign\.id IN \(([0-9, ]+)\)/u.exec(query);
     if (keywords && query === discoveryKeywordQuery(keywords[1].split(", ")))
@@ -304,15 +312,24 @@ export async function runTargetingDiscovery({
       ? "eligible_explicit_auto_cpc"
       : "discovery_explicit_cpc_unproven";
   });
-  for (const kind of ["IN_MARKET", "AFFINITY"])
-    await safe(kind, async () => {
+  const catalog = async (kind, launchedOnly) => {
+    const key = launchedOnly ? `GLOBAL_${kind}` : kind;
+    await safe(key, async () => {
       let after = "0",
         exhausted = false,
         candidate;
-      const seen = new Set();
+      const seen = new Set(),
+        diagnostics = {
+          launched_true: 0,
+          launched_false: 0,
+          launched_omitted: 0,
+          availability_records: 0,
+          search_channel_global_locale_rows: 0,
+        },
+        planBlockers = new Set();
       for (let page = 0; page < 5; page++) {
         const response = rows(
-          await read(discoveryInterestQuery(kind, after)),
+          await read(discoveryInterestQuery(kind, after, launchedOnly)),
           101,
         );
         let previous = BigInt(after);
@@ -324,14 +341,45 @@ export async function runTargetingDiscovery({
             a.resourceName !== `${prefix}/userInterests/${a.userInterestId}` ||
             a.taxonomyType !== kind ||
             BigInt(a.userInterestId) <= previous ||
-            seen.has(a.resourceName)
+            seen.has(a.resourceName) ||
+            (launchedOnly && a.launchedToAll !== true)
           )
             fail("discovery_catalog_proof_invalid");
           previous = BigInt(a.userInterestId);
         }
         const accepted =
           response.length === 101 ? response.slice(0, 100) : response;
-        for (const r of accepted) seen.add(r.userInterest.resourceName);
+        for (const r of accepted) {
+          const a = r.userInterest;
+          seen.add(a.resourceName);
+          diagnostics[
+            a.launchedToAll === true
+              ? "launched_true"
+              : a.launchedToAll === false
+                ? "launched_false"
+                : "launched_omitted"
+          ]++;
+          const availability = Array.isArray(a.availabilities)
+            ? a.availabilities
+            : [];
+          diagnostics.availability_records += availability.length;
+          if (
+            availability.some((v) => {
+              const channel = v?.channel;
+              return (
+                (channel?.availabilityMode === "ALL_CHANNELS" ||
+                  (channel?.advertisingChannelType === "SEARCH" &&
+                    (channel.availabilityMode === "CHANNEL_TYPE" ||
+                      (channel.availabilityMode ===
+                        "CHANNEL_TYPE_AND_SUBTYPES" &&
+                        channel.includeDefaultChannelSubType === true)))) &&
+                Array.isArray(v.locale) &&
+                v.locale.some((l) => l.availabilityMode === "LAUNCHED_TO_ALL")
+              );
+            })
+          )
+            diagnostics.search_channel_global_locale_rows++;
+        }
         const plan = prepareAudienceIScenario(
           {
             fixture,
@@ -345,18 +393,27 @@ export async function runTargetingDiscovery({
           now,
         );
         if (!candidate && plan.result === "PREPARED_NOT_LIVE") candidate = plan;
+        for (const error of plan.blockers ?? [])
+          if (
+            error.source === "HOLYMEDIA" &&
+            /^[a-z_]{1,80}$/u.test(error.code)
+          )
+            planBlockers.add(error.code);
         if (response.length < 101) {
           exhausted = true;
           break;
         }
         after = accepted.at(-1).userInterest.userInterestId;
       }
-      output.I[kind] = {
+      output.I[key] = {
         result: candidate && exhausted ? "PREPARED_NOT_LIVE" : "BLOCKED",
         observed_count: seen.size,
         exhausted_within_bound: exhausted,
         limit_reached: !exhausted,
         no_global_absence_claim: true,
+        launched_filter: launchedOnly,
+        eligibility_diagnostics: diagnostics,
+        plan_blocker_codes: [...planBlockers].sort(),
         code: !exhausted
           ? "discovery_catalog_bound_reached"
           : candidate
@@ -365,6 +422,9 @@ export async function runTargetingDiscovery({
         ...(candidate && exhausted ? { candidate } : {}),
       };
     });
+  };
+  for (const kind of ["IN_MARKET", "AFFINITY"]) await catalog(kind, false);
+  for (const kind of ["IN_MARKET", "AFFINITY"]) await catalog(kind, true);
   await safe("J", async () => {
     const city = cityProof(await read(TARGETING_READ_QUERIES.city));
     const districtRows = rows(

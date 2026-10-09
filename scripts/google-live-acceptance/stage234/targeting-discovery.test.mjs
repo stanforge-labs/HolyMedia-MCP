@@ -162,6 +162,8 @@ test("only exact bounded templates enrolled by trusted proof stage pass READ gua
     DISCOVERY_AUTO_CAMPAIGNS,
     discoveryInterestQuery("IN_MARKET"),
     discoveryInterestQuery("AFFINITY", "12"),
+    discoveryInterestQuery("IN_MARKET", "0", true),
+    discoveryInterestQuery("AFFINITY", "12", true),
     discoveryDistrictQuery(city.geoTargetConstant.resourceName),
     discoveryKeywordQuery([t.campaign]),
   ]) {
@@ -195,6 +197,7 @@ test("only exact bounded templates enrolled by trusted proof stage pass READ gua
   }
   assert.throws(() => discoveryInterestQuery("CUSTOM"));
   assert.throws(() => discoveryInterestQuery("AFFINITY", "1 OR 1"));
+  assert.throws(() => discoveryInterestQuery("AFFINITY", "0", "true"));
   assert.throws(() => discoveryKeywordQuery(["12", "12"]));
   assert.throws(() =>
     discoveryDistrictQuery("customers/1111111111/campaigns/12"),
@@ -282,6 +285,86 @@ test("catalog bound reached blocks proposals, malformed/nonmonotone/foreign page
   );
   assert.equal(b.errors.IN_MARKET.code, "discovery_catalog_proof_invalid");
   assert.ok(!JSON.stringify(b).includes("1111111111"));
+});
+test("targeted globally launched filter finds candidate after unfiltered ordering bound, without absence claim", async () => {
+  const calls = [];
+  const result = await runTargetingDiscovery(
+    input(async (query) => {
+      calls.push(query);
+      const cursor =
+        /taxonomy_type = 'IN_MARKET' AND user_interest\.user_interest_id > ([0-9]+)/u.exec(
+          query,
+        );
+      if (cursor)
+        return Array.from({ length: 101 }, (_, i) => {
+          const row = interest(String(Number(cursor[1]) + i + 1));
+          row.userInterest.launchedToAll = false;
+          return row;
+        });
+      if (query === discoveryInterestQuery("IN_MARKET", "0", true))
+        return [interest("90001")];
+      return baseReader(query);
+    }),
+  );
+  assert.equal(result.I.IN_MARKET.result, "BLOCKED");
+  assert.equal(result.I.IN_MARKET.limit_reached, true);
+  assert.equal(result.I.IN_MARKET.eligibility_diagnostics.launched_false, 500);
+  assert.equal(result.I.GLOBAL_IN_MARKET.result, "PREPARED_NOT_LIVE");
+  assert.equal(
+    result.I.GLOBAL_IN_MARKET.candidate.preview_request.arguments.items[0]
+      .audience.id,
+    "90001",
+  );
+  assert.equal(
+    result.I.GLOBAL_IN_MARKET.eligibility_diagnostics.launched_true,
+    1,
+  );
+  assert.equal(result.I.GLOBAL_IN_MARKET.launched_filter, true);
+  assert.equal(result.I.GLOBAL_AFFINITY.observed_count, 0);
+  assert.equal(result.I.GLOBAL_AFFINITY.no_global_absence_claim, true);
+  assert.ok(calls.includes(discoveryInterestQuery("AFFINITY", "0", true)));
+  assert.equal(result.real_provider_write_calls, 0);
+});
+test("globally launched predicate is strict and count diagnostics never echo provider availability", async () => {
+  const row = interest("10");
+  row.userInterest.launchedToAll = false;
+  row.userInterest.availabilities = [
+    {
+      channel: {
+        availabilityMode: "CHANNEL_TYPE",
+        advertisingChannelType: "SEARCH",
+      },
+      locale: [
+        {
+          availabilityMode: "LAUNCHED_TO_ALL",
+          ignoredMessage: "private-diagnostic-marker",
+        },
+      ],
+    },
+  ];
+  const result = await runTargetingDiscovery(
+    input(async (query) => {
+      if (query === discoveryInterestQuery("IN_MARKET")) return [row];
+      if (query === discoveryInterestQuery("IN_MARKET", "0", true))
+        return [row];
+      return baseReader(query);
+    }),
+  );
+  assert.equal(
+    result.errors.GLOBAL_IN_MARKET.code,
+    "discovery_catalog_proof_invalid",
+  );
+  assert.equal(result.I.GLOBAL_IN_MARKET, undefined);
+  assert.equal(
+    result.I.IN_MARKET.eligibility_diagnostics.availability_records,
+    1,
+  );
+  assert.equal(
+    result.I.IN_MARKET.eligibility_diagnostics
+      .search_channel_global_locale_rows,
+    1,
+  );
+  assert.ok(!JSON.stringify(result).includes("private-diagnostic-marker"));
 });
 test("J proven city parent query and existing provider center only; missing inventory never guessed", async () => {
   const before = criteria(),
