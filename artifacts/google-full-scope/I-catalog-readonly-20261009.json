@@ -1,0 +1,12 @@
+{
+  "acceptance_test": "I",
+  "status": "BLOCKED_NO_ELIGIBLE_CATALOG",
+  "test_customer_id": "8590146099",
+  "candidate_count": 0,
+  "candidates": [],
+  "note": "Read-only catalog proof is not criterion eligibility or add/remove LIVE PASS; validate_only and human approval remain required.",
+  "provider_read_call_count": 1,
+  "validate_only_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "timestamp": "2026-10-09T13:52:49.547Z"
+}

@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "result": "PARTIAL_WAITING_HUMAN_N_APPROVAL",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "engineering_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+  "baseline_head": "94edb8c3c082bbd8951bf166e8797e83f3b8a5dc",
+  "stage01_release_candidate_unchanged": "bb5b8d16979a41720129243927a6c9f56e091083",
+  "original_tz": {
+    "source": "ТЗ запись в Google Ads для HolyMedia MCP.docx",
+    "sha256": "51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0",
+    "paragraphs_read": 336,
+    "unchanged": true,
+    "matrix": "artifacts/google-full-scope/requirements-matrix-20261009.json",
+    "completion_claim": false
+  },
+  "key": {
+    "id": "34cd413a-8aff-4677-9439-abf2a9fb473a",
+    "expires_at": "2026-10-10T12:51:17.677Z",
+    "stock_admin_http": true,
+    "created_once": true,
+    "encrypted_disposable_vault_only": true,
+    "scopes": ["adforge:mcp:read", "adforge:mcp:write"],
+    "same_owner_workspace": true,
+    "static_account_count": 1,
+    "customer": "8590146099",
+    "no_second_key_authorized": true
+  },
+  "acceptance": {
+    "stage01": "HISTORICAL_LIVE_PASS",
+    "G": {
+      "mock": "PASS",
+      "live": "BLOCKED_NO_PROVEN_AUTO_KEYWORD_EXPLICIT_CPC",
+      "automatic_strategy_not_changed": true
+    },
+    "H": {
+      "mock": "PASS",
+      "live": "PENDING",
+      "current_fixture_budget_micros": "2000000",
+      "explicitly_shared": false,
+      "planned_after_micros": "3200000",
+      "shared_impact_live": "UNPROVEN_NO_SHARED_FIXTURE"
+    },
+    "I": {
+      "mock": "PASS",
+      "live": "BLOCKED_ELIGIBILITY_UNPROVEN",
+      "globally_launched_search_catalog_candidates": 0,
+      "bounded_sample_absence_is_not_global_absence": true
+    },
+    "J": {
+      "mock": "PASS",
+      "live": "BLOCKED_DISTRICT_PARENT_AND_RADIUS_CENTER_UNPROVEN",
+      "city_resolved_count": 1
+    },
+    "K": {
+      "acceptance_test": "K",
+      "result": "PASS",
+      "test_customer_id": "8590146099",
+      "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+      "runtime": "stock_private_HTTP_MCP_exact_immutable_image",
+      "invalid_headline_length": 31,
+      "rejection": {
+        "code": "google_brief_invalid",
+        "source": "HOLYMEDIA",
+        "field_path": "brief.items[0].rsa.headlines[0].text"
+      },
+      "provider_read_call_count": 0,
+      "validate_only_call_count": 0,
+      "real_provider_write_call_count": 0,
+      "preview_created": false,
+      "production_changed": false,
+      "main_changed": false,
+      "timestamp": "2026-10-09T13:52:58.216Z"
+    },
+    "L": {
+      "mock": "PASS",
+      "live": "PENDING_JIT_PREVIEW_AND_HUMAN_APPROVAL",
+      "new_rsa_not_created": true
+    },
+    "N": {
+      "mock": "PASS",
+      "live": "PREVIEW_VALIDATE_ONLY_PASS_NOT_COMMITTED",
+      "preview_id": "ff5169fe-86ca-467f-9448-8c481619ad0c",
+      "expires_at": "2026-10-09T14:23:01.301Z",
+      "operation": "ad_group_cpc",
+      "before_micros": "100000",
+      "after_micros": "110000",
+      "currency": "USD",
+      "persisted_immutable": true,
+      "provider_unchanged": true,
+      "approval_by_harness": false,
+      "committed": false,
+      "checkpoint": "stage234-20261009T135400Z-n4",
+      "encrypted_context": "protected-preview-context.json",
+      "next_after_user_approval": "Read confirmedAt/session/audit/expiry/consumed/immutable/stale and TEST proof; exactly one authorized stock commit without retry. If VERIFIED prepare stock preview_rollback_commit and require a separate human rollback approval. Do not invent inherited keyword CPC."
+    }
+  },
+  "pmax": {
+    "code_mock": "PASS_SUPPORTED_NON_RETAIL_PROFILE",
+    "live": "BLOCKED_REAL_PREREQUISITES",
+    "eligible_images_proven": 0,
+    "usable_existing_goals_proven": 0,
+    "inventory_boundaries": "Bounded READ inventory, not proof of account-global absence.",
+    "new_assets_or_goals_created": false
+  },
+  "clone": {
+    "extension_mock": "PASS",
+    "live": "PENDING",
+    "remaining_required_profile_gap": "Unsupported audience/custom-device and other complex source profiles still rejected. Standard provider-managed device postcondition package is being implemented separately, not integrated into active N source.",
+    "independent_branch": "codex/google-ads-clone-default-devices"
+  },
+  "cross_client": {
+    "Q": "BLOCKED_NO_REAL_CHATGPT_CLIENT_CONNECTION",
+    "R": "BLOCKED_NO_REAL_SECOND_CLIENT_CONNECTION",
+    "S": "HISTORICAL_SERVER_BROWSER_CONSENT_PASS; CURRENT_N_PENDING_HUMAN; CLIENT_SPECIFIC_GATE_PENDING",
+    "approval_gateway_is_not_mcp_endpoint": true
+  },
+  "provider_calls_this_cycle": {
+    "read": 147,
+    "validate_only": 1,
+    "real_write": 0,
+    "oauth_refresh": 1,
+    "semantic_mutations": [],
+    "attempts": [
+      {
+        "id": "20261009T132300Z-rdy",
+        "read": 7,
+        "validate": 0,
+        "write": 0
+      },
+      {
+        "id": "20261009T132900Z-rd2",
+        "read": 34,
+        "validate": 0,
+        "write": 0
+      },
+      {
+        "id": "20261009T134200Z-n3",
+        "read": 12,
+        "validate": 0,
+        "write": 0,
+        "result": "BLOCKED_BEFORE_MCP_BAD_HARNESS_BASELINE"
+      },
+      {
+        "id": "20261009T134600Z-dia",
+        "read": 34,
+        "validate": 0,
+        "write": 0
+      },
+      {
+        "id": "20261009T135000Z-dev",
+        "read": 34,
+        "validate": 0,
+        "write": 0
+      },
+      {
+        "id": "20261009T135400Z-n4",
+        "read": 26,
+        "validate": 1,
+        "write": 0
+      }
+    ],
+    "historical_calls_excluded": true
+  },
+  "fixture_final": {
+    "campaigns": {
+      "24324170853": "PAUSED",
+      "24339483523": "PAUSED"
+    },
+    "groups_paused": 3,
+    "rsa_paused": 3,
+    "original_keywords_enabled": 20,
+    "residual_phrase_11479221": "PAUSED",
+    "group_cpc_micros": "100000",
+    "shared_set_12261567996": {
+      "members_exact": 3,
+      "active_attachments": 0
+    },
+    "unexpected_provider_changes": 0
+  },
+  "quality": {
+    "linux_ci_run": 37939528371,
+    "linux_job": 113850044644,
+    "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+    "conclusion": "success",
+    "node_tests": 121,
+    "api_tests": 1300,
+    "other_vitest_tests": 63,
+    "total_js_tests": 1484,
+    "skipped": 0,
+    "python_regressions": 28,
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma_migration_rehearsal": "PASS",
+    "standard_secret_scan": "PASS",
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "risk_assessment": "artifacts/google-full-scope/moderate-security-risk-assessment-20261009.json",
+    "local_windows_integration_skips": 26
+  },
+  "runtime": {
+    "immutable_image_digest": "sha256:77f70b71f61953626d18c8e66f1315c3db1df8bc6848371a312866134580e9bd",
+    "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+    "acceptance_api_health": 200,
+    "acceptance_api_ready": 200,
+    "approval_port": 4402,
+    "loopback_only": true,
+    "public_write": false,
+    "confirmed_write": false,
+    "real_write_transport_denied": true
+  },
+  "evidence": [
+    "artifacts/google-full-scope/test-key-issuance-20261009.json",
+    "artifacts/google-full-scope/fresh-readiness-20261009.json",
+    "artifacts/google-full-scope/N-default-device-diagnosis-20261009.json",
+    "artifacts/google-full-scope/N-preview-final-20261009.json",
+    "artifacts/google-full-scope/K-private-mcp-live-20261009.json"
+  ],
+  "production_changed": false,
+  "main_changed": false,
+  "stage01_history_unchanged": true,
+  "timestamp": "2026-10-09T13:53:02.495Z",
+  "next_action": "Human approval N only; secret-bearing approval URL stays in encrypted VPS context and intended human report, never evidence.",
+  "rollback_requires_new_approval": true,
+  "original_tz_complete": false
+}

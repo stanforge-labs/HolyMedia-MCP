@@ -1,0 +1,106 @@
+{
+  "acceptance_test": "N_PREVIEW_ONLY",
+  "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+  "image_digest": "sha256:77f70b71f61953626d18c8e66f1315c3db1df8bc6848371a312866134580e9bd",
+  "test_customer_id": "8590146099",
+  "mcc_id": "4378327049",
+  "campaign_id": "24324170853",
+  "ad_group_id": "206587491811",
+  "semantic_payload": {
+    "provider": "GOOGLE_ADS",
+    "account_id": "8590146099",
+    "items": [
+      {
+        "field": "ad_group_cpc",
+        "campaign_id": "24324170853",
+        "ad_group_id": "206587491811",
+        "change": {
+          "mode": "absolute",
+          "amount": "0.11",
+          "currency": "USD"
+        }
+      }
+    ]
+  },
+  "exact_validate_only_payload": {
+    "operations": [
+      {
+        "update": {
+          "resourceName": "customers/8590146099/adGroups/206587491811",
+          "cpcBidMicros": "110000"
+        },
+        "updateMask": "cpc_bid_micros"
+      }
+    ],
+    "validateOnly": true,
+    "partialFailure": true
+  },
+  "expected_after": {
+    "resourceName": "customers/8590146099/adGroups/206587491811",
+    "status": "PAUSED",
+    "id": "206587491811",
+    "name": "Acceptance Group",
+    "cpcBidMicros": "110000",
+    "targetCpaMicros": "0"
+  },
+  "before_after_unchanged": true,
+  "preview_id": "ff5169fe-86ca-467f-9448-8c481619ad0c",
+  "preview_expires_at": "2026-10-09T14:23:01.301Z",
+  "provider_validation": "passed",
+  "operation_count": 1,
+  "provider_read_call_count": 26,
+  "validate_only_call_count": 1,
+  "oauth_refresh_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "semantic_write_operations": [],
+  "approval_performed_by_harness": false,
+  "committed": false,
+  "production_changed": false,
+  "main_changed": false,
+  "result": "PREVIEW_PASS_NOT_COMMITTED",
+  "timestamp": "2026-10-09T13:53:02.495Z",
+  "next_action": "Review preview; separate human approval and separate explicit write authorization are required. Harness cannot commit.",
+  "audit": [
+    {
+      "type": "mcp_google_stage1_preview_created",
+      "timestamp": "2026-10-09T13:53:01.365Z"
+    }
+  ],
+  "persisted_preview_immutable": true,
+  "historical_evidence_unchanged": true,
+  "approval_url_ready": true,
+  "provider_group_before": {
+    "resourceName": "customers/8590146099/adGroups/206587491811",
+    "status": "PAUSED",
+    "id": "206587491811",
+    "name": "Acceptance Group",
+    "cpcBidMicros": "100000",
+    "targetCpaMicros": "0"
+  },
+  "provider_group_after_preview": {
+    "resourceName": "customers/8590146099/adGroups/206587491811",
+    "status": "PAUSED",
+    "id": "206587491811",
+    "name": "Acceptance Group",
+    "cpcBidMicros": "100000",
+    "targetCpaMicros": "0"
+  },
+  "campaign_before": {
+    "resourceName": "customers/8590146099/campaigns/24324170853",
+    "status": "PAUSED",
+    "biddingStrategyType": "MANUAL_CPC",
+    "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+    "id": "24324170853",
+    "campaignBudget": "customers/8590146099/campaignBudgets/15934365976"
+  },
+  "budget_before": {
+    "resourceName": "customers/8590146099/campaignBudgets/15934365976",
+    "deliveryMethod": "STANDARD",
+    "amountMicros": "2000000",
+    "explicitlyShared": false
+  },
+  "total_positive_keyword_count": 21,
+  "original_keyword_count": 20,
+  "residual_phrase_keyword_count": 1,
+  "complete_remote_evidence": "/opt/holymedia-google-acceptance/state/stage234-20261009T135400Z-n4/evidence.json"
+}

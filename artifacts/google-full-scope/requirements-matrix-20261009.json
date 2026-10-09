@@ -2,7 +2,7 @@
   "schema_version": 1,
   "audit_date": "2026-10-09",
   "audited_branch": "codex/google-ads-write-full-scope-final",
-  "audited_head": "86a073d3809a8842c21ef7f84d89c358a0200ab8",
+  "audited_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
   "current_evidence": {
     "historical_evidence_preserved": true,
     "disposable_key": "artifacts/google-full-scope/test-key-issuance-20261009.json",
@@ -11,7 +11,11 @@
     "stage3_scenarios": "docs/google-ads-targeting-live-readiness.md",
     "new_clone_live": "PENDING",
     "stage234_real_commits": "PENDING_HUMAN_APPROVAL",
-    "cross_client_QRS": "BLOCKED_CLIENTS_NOT_CONNECTED"
+    "cross_client_QRS": "BLOCKED_CLIENTS_NOT_CONNECTED",
+    "final_checkpoint": "artifacts/google-full-scope/final-acceptance-checkpoint-20261009.json",
+    "fresh_read_only": "artifacts/google-full-scope/fresh-readiness-20261009.json",
+    "stock_private_K": "artifacts/google-full-scope/K-private-mcp-live-20261009.json",
+    "N_preview": "artifacts/google-full-scope/N-preview-final-20261009.json"
   },
   "source": {
     "artifact": "artifacts/google-full-scope/original-tz-source-20261009.json",
@@ -344,7 +348,10 @@
       "provider_objects": ["CampaignCriterion"],
       "classification": "DONE+LIVEPENDING",
       "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
-      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts", "apps/api/src/providers/google-ads-stage0-clone.test.ts"],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage0-clone.test.ts"
+      ],
       "live_status": "NOT_RUN_NEW_PROFILE",
       "remaining_limits": []
     },

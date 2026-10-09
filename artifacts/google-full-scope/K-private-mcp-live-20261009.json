@@ -1,0 +1,20 @@
+{
+  "acceptance_test": "K",
+  "result": "PASS",
+  "test_customer_id": "8590146099",
+  "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+  "runtime": "stock_private_HTTP_MCP_exact_immutable_image",
+  "invalid_headline_length": 31,
+  "rejection": {
+    "code": "google_brief_invalid",
+    "source": "HOLYMEDIA",
+    "field_path": "brief.items[0].rsa.headlines[0].text"
+  },
+  "provider_read_call_count": 0,
+  "validate_only_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "preview_created": false,
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T13:52:58.216Z"
+}
