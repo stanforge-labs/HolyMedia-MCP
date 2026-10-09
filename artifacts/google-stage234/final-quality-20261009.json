@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "timestamp": "2026-10-09T08:23:00Z",
+  "kind": "Stage 2-4 final engineering quality evidence",
+  "branch": "codex/google-ads-write-stage234-integration",
+  "tested_source_head": "59f12e89f763db52ee53b65c70e974aa418894ab",
+  "final_linux_ci": {
+    "run_id": 37904315471,
+    "job_id": 113733984881,
+    "source_head": "59f12e89f763db52ee53b65c70e974aa418894ab",
+    "conclusion": "success",
+    "vitest_passed": 865,
+    "vitest_skipped": 0,
+    "node_script_tests_passed": 13,
+    "url": "https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/37904315471",
+    "total_pnpm_test_passed": 878,
+    "skipped": 0,
+    "steps": "All workflow steps PASS: format, lint, typecheck, Prisma validation/deploy rehearsal, migration/backup restore, test, build, readiness, worker, dependency degradation, secret scan, audit."
+  },
+  "package_branch_linux_ci": [
+    {
+      "stage": 2,
+      "run_id": 37903378922,
+      "job_id": 113730907374,
+      "conclusion": "success",
+      "vitest_passed": 731,
+      "vitest_skipped": 0,
+      "node_script_tests_passed": 13
+    },
+    {
+      "stage": 3,
+      "run_id": 37903450151,
+      "job_id": 113731144516,
+      "conclusion": "success",
+      "vitest_passed": 792,
+      "vitest_skipped": 0,
+      "node_script_tests_passed": 13
+    },
+    {
+      "stage": 4,
+      "run_id": 37903506070,
+      "job_id": 113731324957,
+      "conclusion": "success",
+      "vitest_passed": 840,
+      "vitest_skipped": 0,
+      "node_script_tests_passed": 13
+    }
+  ],
+  "implementation_checkpoint": "artifacts/google-stage234/implementation-checkpoint-20261009.json",
+  "code_tests": {
+    "new_extension_tests": 225,
+    "additional_exact_G_H_tests": 2,
+    "original_foundation_tests": 42,
+    "G_H_I_J_K_L_N": "Mock/disposable PASS; live NOT RUN",
+    "stage01_meta_google_read": "PASS in full Linux test suite",
+    "web_testing_packages": "No unit test files; not browser/client acceptance"
+  },
+  "security": {
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "standard_secret_scan": "PASS",
+    "secret_scanner_regression_tests": 7,
+    "new_checkpoint_false_positive": {
+      "root_cause": "Two long uppercase status values contained the Meta-token pattern prefix; no credentials were present.",
+      "remediation": "Changed only status display values to human-readable phrases. No scanner configuration or exclusions changed."
+    }
+  },
+  "source_immutability": {
+    "stage01_release_head": "bb5b8d16979a41720129243927a6c9f56e091083",
+    "main_local_head": "d88ac55d767f713f53932ea62673b09505b51f17",
+    "main_origin_head": "a00817b746211a295bcb966f7fd7ef12cd6178fb",
+    "new_migrations": false,
+    "lockfile_changed": false,
+    "web_changed": false,
+    "production_infra_changed": false
+  },
+  "real_provider_calls": {
+    "read": 0,
+    "validate_only": 0,
+    "write": 0
+  },
+  "production_changed": false,
+  "main_changed": false,
+  "live_stage234_acceptance": "Not authorized or run",
+  "full_ppc_completion": "Not complete; supported profiles implemented, capability gaps explicitly documented.",
+  "client_acceptance": "Q/R blocked pending real clients; S stock consent mock PASS, real cross-client consent pending.",
+  "next_checkpoint": "Capability/profile review, separate TEST live authorization and manual approval; complete PMax/binary and unsupported profile gaps before declaring full PPC scope done.",
+  "evidence_commit_note": "This evidence is committed after the tested source SHA; the evidence-only commit changes no tested application code."
+}
