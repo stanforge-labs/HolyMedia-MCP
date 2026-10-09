@@ -627,19 +627,173 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
       writeCode: "google_clone_unsupported_components",
     });
   });
-  it.each(["campaign", "template_only"])(
-    "source %s tracking overrides cannot be silently dropped by bounded clone",
+  it.each(["absent", "empty", "template_only"])(
+    "source %s suffix inherits frozen same-account settings without builder default UTM",
     async (level) => {
       const f = fixture();
-      if (level === "campaign" || level === "template_only")
-        f.campaign.finalUrlSuffix = undefined;
+      f.campaign.finalUrlSuffix = level === "empty" ? "" : undefined;
       if (level === "template_only")
         f.campaign.trackingUrlTemplate =
           "https://track.example.test/?u={lpurl}";
-      await expect(f.clone()).rejects.toMatchObject({
-        writeCode: "google_clone_tracking_unsupported",
+      Object.assign(f.customer, {
+        finalUrlSuffix: "utm_source=account",
+        trackingUrlTemplate: "https://account.example.test/?u={lpurl}",
       });
-      expect(f.build).not.toHaveBeenCalled();
+      const original = canonical({ c: f.campaign, customer: f.customer }),
+        plan = await f.clone(),
+        campaign = plan.operations.find((o) => o.kind === "campaign")!,
+        before = canonical(plan.checks);
+      expect(campaign.fields).not.toHaveProperty("finalUrlSuffix");
+      expect(campaign.expected.finalUrlSuffix).toBe("");
+      expect(row(plan.summary.utm).finalUrlSuffix).toBe("");
+      expect(row(plan.intent.brief.effective_tracking).finalUrlSuffix).toBe("");
+      expect(
+        row(plan.summary.clone_campaign_tracking_inheritance),
+      ).toMatchObject({
+        raw_source_suffix: level === "empty" ? "EMPTY" : "ABSENT",
+        source_customer_resource: prefix,
+        account_suffix: "utm_source=account",
+      });
+      if (level === "template_only")
+        expect(campaign.fields.trackingUrlTemplate).toBe(
+          f.campaign.trackingUrlTemplate,
+        );
+      else {
+        expect(campaign.fields).not.toHaveProperty("trackingUrlTemplate");
+        expect(campaign.expected.trackingUrlTemplate).toBe("");
+      }
+      const created = mockCreated(plan),
+        index = plan.operations.indexOf(campaign),
+        actual = row(
+          created.actual.get(created.results[index]!.resource_name!)!.campaign,
+        );
+      delete actual.finalUrlSuffix;
+      if (level !== "template_only") delete actual.trackingUrlTemplate;
+      const verified = await verifyStage0Mutation(
+        plan,
+        created.results,
+        created.read,
+      );
+      expect(verified.status).toBe("VERIFIED");
+      expect(verified.actual[index]).not.toHaveProperty("finalUrlSuffix");
+      expect(canonical({ c: f.campaign, customer: f.customer })).toBe(original);
+      Object.assign(f.customer, {
+        finalUrlSuffix: "utm_source=externally_changed",
+      });
+      expect(canonical(await rereadStage0Checks(plan, f.read))).not.toBe(
+        before,
+      );
+      expect(canonical(plan.checks)).toBe(before);
+      actual.finalUrlSuffix = "utm_source=unexpected_default";
+      expect(
+        (await verifyStage0Mutation(plan, created.results, created.read))
+          .status,
+      ).toBe("UNVERIFIED");
+    },
+  );
+  it("normal new-brief default UTM remains unchanged; clone raw omission is not a public clear input", async () => {
+    const f = fixture();
+    delete f.campaign.finalUrlSuffix;
+    const clone = await f.clone(),
+      brief = f.build.mock.calls[0]![0],
+      standard = await buildStage0Plan(account, brief, f.read, async () => [
+        f.geo,
+      ]);
+    const standardCampaign = standard.operations.find(
+      (o) => o.kind === "campaign",
+    )!;
+    expect(standardCampaign.fields.finalUrlSuffix).toBe(
+      "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}",
+    );
+    expect(standard.summary).not.toHaveProperty(
+      "clone_campaign_tracking_inheritance",
+    );
+    expect(
+      clone.operations.find((o) => o.kind === "campaign")!.fields,
+    ).not.toHaveProperty("finalUrlSuffix");
+    await expect(
+      buildStage0Plan(
+        account,
+        { ...brief, utm: { final_url_suffix: "" } },
+        f.read,
+        async () => [f.geo],
+      ),
+    ).rejects.toBeInstanceOf(Error);
+  });
+  it.each([
+    "missing_source",
+    "foreign_source",
+    "nonempty_source",
+    "missing_customer",
+    "foreign_customer",
+    "selector_missing",
+    "clone_hint_missing",
+  ])(
+    "missing-empty normalization cannot bypass %s independent proof",
+    async (fault) => {
+      const f = fixture();
+      delete f.campaign.finalUrlSuffix;
+      const plan = await f.clone(),
+        made = mockCreated(plan),
+        c = plan.operations.find((o) => o.kind === "campaign")!,
+        index = plan.operations.indexOf(c),
+        actual = row(
+          made.actual.get(made.results[index]!.resource_name!)!.campaign,
+        );
+      delete actual.finalUrlSuffix;
+      delete actual.trackingUrlTemplate;
+      const source = plan.checks.find((check) =>
+          check.query.includes(
+            "FROM campaign WHERE campaign.id = 1 AND campaign.status != REMOVED",
+          ),
+        )!,
+        customer = plan.checks.find((check) =>
+          check.query.includes("customer.tracking_url_template"),
+        )!;
+      if (fault === "missing_source") source.rows = [];
+      if (fault === "foreign_source")
+        row(source.rows[0]!.campaign).resourceName =
+          "customers/1111111111/campaigns/1";
+      if (fault === "nonempty_source")
+        row(source.rows[0]!.campaign).finalUrlSuffix = "utm_source=source";
+      if (fault === "missing_customer") customer.rows = [];
+      if (fault === "foreign_customer")
+        row(customer.rows[0]!.customer).resourceName = "customers/1111111111";
+      if (fault === "selector_missing")
+        customer.query = customer.query.replace(
+          ", customer.tracking_url_template",
+          "",
+        );
+      if (fault === "clone_hint_missing")
+        delete plan.summary.clone_source_campaign_id;
+      expect(
+        (await verifyStage0Mutation(plan, made.results, made.read)).status,
+      ).toBe("UNVERIFIED");
+    },
+  );
+  it.each(["null_suffix", "wrong_suffix", "null_template", "wrong_template"])(
+    "provider raw %s is never normalized as an omitted empty string",
+    async (fault) => {
+      const f = fixture();
+      delete f.campaign.finalUrlSuffix;
+      const plan = await f.clone(),
+        made = mockCreated(plan),
+        index = plan.operations.findIndex((o) => o.kind === "campaign"),
+        actual = row(
+          made.actual.get(made.results[index]!.resource_name!)!.campaign,
+        );
+      actual.finalUrlSuffix = undefined;
+      actual.trackingUrlTemplate = undefined;
+      if (fault === "null_suffix") actual.finalUrlSuffix = null;
+      if (fault === "wrong_suffix")
+        actual.finalUrlSuffix = "utm_source=unexpected";
+      if (fault === "null_template") actual.trackingUrlTemplate = null;
+      if (fault === "wrong_template")
+        actual.trackingUrlTemplate =
+          "https://unexpected.example.test/?u={lpurl}";
+      expect(
+        (await verifyStage0Mutation(plan, made.results, made.read)).status,
+      ).toBe("UNVERIFIED");
     },
   );
   it("preserves typed campaign/group/positive-keyword/RSA tracking hierarchy and URL encoding, mock verification only", async () => {

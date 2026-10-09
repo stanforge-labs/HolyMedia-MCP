@@ -66,9 +66,24 @@ Local tracking profile: HTTPS template containing `{lpurl}`, closed placeholder
 syntax, suffix `key=value` without leading `?`, no credentials/control characters,
 one desktop/mobile URL per positive keyword/RSA. Templates not covered by that
 profile are explicitly rejected, not declared unsupported by Google. Existing
-campaign UTM validation still bounds campaign placeholder support. A source
-without an explicit campaign final URL suffix remains rejected: the normal
-new-campaign default UTM must not overwrite existing inheritance.
+campaign UTM validation still bounds campaign placeholder support.
+
+Absent/empty source campaign suffix and template now preserve same-account
+inheritance. The clone alone removes the normal brief's generated suffix from
+its internal create payload; those request leaves are omitted, not filled with
+invented UTM and not sent as a public clear/update operation. Its expected raw
+provider state is semantic empty. Raw source absence versus empty and frozen
+customer tracking are explicit in the preview summary. A source's own nonempty
+template remains its own override even while its suffix is inherited.
+
+Google protobuf JSON may omit empty string defaults. The narrow comparison-only
+normalization requires the genuine same-account source campaign and customer
+tracking snapshots, selected raw fields, exact newly-created PAUSED target
+identity, an omitted request leaf and an expected empty tracking string. Missing
+proof, a foreign owner, a nonempty source, provider null or unexpected provider
+tracking never normalize to success. Raw reread evidence remains unmodified.
+Normal campaign-from-brief default UTM and its closed public input schema are
+unchanged; this is not a new global clear, flag or arbitrary provider-payload API.
 
 Negative-keyword tracking, app URL / URL collections and text-asset tracking or
 mobile overrides are explicit profile gaps, selected/frozen and rejected before
@@ -93,6 +108,9 @@ temporary-to-real CampaignSharedSet identities, provider verification, foreign
 references, duplicates, source snapshot changes, unsupported components and the
 final operation limit, exact level-preserving tracking, parameter ordering/defaults,
 URL encoding, unsafe tracking and every tracking field as a stale dependency.
+Inheritance regressions cover raw absent/empty suffix, frozen customer settings,
+template-only campaign overrides, unchanged standard brief defaults, missing or
+foreign independent proof and genuinely wrong/null provider post-state.
 These are code/mock evidence, not new LIVE acceptance.
 No real Google READ, validate-only or mutation was performed for this package.
 
@@ -106,3 +124,5 @@ Tracking primary sources: [v24 AdGroup](https://github.com/googleapis/googleapis
 [v24 Ad](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/ad.proto),
 [v24 Asset](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/asset.proto),
 [upgraded URL limits](https://developers.google.com/google-ads/api/docs/ads/upgraded-urls/fields).
+[serving URL inheritance](https://developers.google.com/google-ads/api/docs/ads/upgraded-urls/serving-url-rules),
+[v24 optional campaign tracking fields](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign.proto).

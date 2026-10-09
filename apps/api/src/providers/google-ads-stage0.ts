@@ -1254,6 +1254,75 @@ function contains(actual: unknown, expected: unknown): boolean {
     (typeof expected === "number" && String(expected) === String(actual))
   );
 }
+function cloneInheritedTracking(
+  plan: Stage0Plan,
+  operation: Stage0Operation,
+  entity: JsonRow | null,
+  resource: string | null | undefined,
+): { comparison: JsonRow | null; verified: boolean } {
+  const fields = (["finalUrlSuffix", "trackingUrlTemplate"] as const).filter(
+    (field) =>
+      operation.expected[field] === "" && operation.fields[field] === undefined,
+  );
+  if (!fields.length) return { comparison: entity, verified: true };
+  const prefix = `customers/${plan.account_id}`,
+    id = String(plan.summary.clone_source_campaign_id ?? "");
+  const sourceQuerySuffix = `FROM campaign WHERE campaign.id = ${id} AND campaign.status != REMOVED`;
+  const source = plan.checks
+    .filter(
+      (check) =>
+        check.query.endsWith(sourceQuerySuffix) &&
+        check.query.includes("campaign.final_url_suffix") &&
+        check.query.includes("campaign.tracking_url_template"),
+    )
+    .flatMap((check) => check.rows.map((r) => row(r.campaign)));
+  const customer = plan.checks
+    .filter(
+      (check) =>
+        check.query ===
+        customerQuery.replace(
+          " FROM customer",
+          ", customer.tracking_url_template, customer.final_url_suffix FROM customer",
+        ),
+    )
+    .flatMap((check) => check.rows.map((r) => row(r.customer)));
+  const verified = Boolean(
+    operation.kind === "campaign" &&
+    operation.method === "create" &&
+    operation.fields.status === "PAUSED" &&
+    operation.expected.resourceName === operation.resource_name &&
+    plan.intent.action === "campaign_create" &&
+    plan.intent.brief.account_id === plan.account_id &&
+    /^[0-9]{1,20}$/.test(id) &&
+    source.length === 1 &&
+    source[0]!.resourceName === `${prefix}/campaigns/${id}` &&
+    source[0]!.advertisingChannelType === "SEARCH" &&
+    source[0]!.status !== "REMOVED" &&
+    customer.length === 1 &&
+    customer[0]!.resourceName === prefix &&
+    String(customer[0]!.id) === plan.account_id &&
+    ["finalUrlSuffix", "trackingUrlTemplate"].every(
+      (field) =>
+        customer[0]![field] === undefined ||
+        typeof customer[0]![field] === "string",
+    ) &&
+    typeof operation.resource_name === "string" &&
+    new RegExp(`^${prefix}/campaigns/-[1-9][0-9]*$`).test(
+      operation.resource_name,
+    ) &&
+    typeof resource === "string" &&
+    new RegExp(`^${prefix}/campaigns/[1-9][0-9]*$`).test(resource) &&
+    entity?.resourceName === resource &&
+    fields.every(
+      (field) => source[0]![field] === undefined || source[0]![field] === "",
+    ),
+  );
+  const comparison = entity ? { ...entity } : null;
+  if (verified && comparison)
+    for (const field of fields)
+      if (comparison[field] === undefined) comparison[field] = "";
+  return { comparison, verified };
+}
 export async function verifyStage0Mutation(
   plan: Stage0Plan,
   results: Stage1MutationResult[],
@@ -1340,11 +1409,16 @@ export async function verifyStage0Mutation(
       delete expected.containsEuPoliticalAdvertising;
       expected.biddingStrategyType = plan.summary.strategy;
     }
+    const tracking =
+      op.kind === "campaign"
+        ? cloneInheritedTracking(plan, op, entity, result?.resource_name)
+        : { comparison: entity, verified: true };
     const verified = Boolean(
       result?.success &&
       entity &&
       budgetAssociationVerified &&
-      contains(entity, expected),
+      tracking.verified &&
+      contains(tracking.comparison, expected),
     );
     actual.push(entity);
     items.push({
@@ -2144,6 +2218,19 @@ export async function buildClonePlan(
       "google_clone_reference_invalid",
       "Source customer/currency/owner не подтверждён.",
     );
+  if (
+    ["finalUrlSuffix", "trackingUrlTemplate"].some(
+      (field) =>
+        customer[field] !== undefined &&
+        (typeof customer[field] !== "string" ||
+          String(customer[field]).length > 2048 ||
+          /[\r\n]/u.test(String(customer[field]))),
+    )
+  )
+    error(
+      "google_clone_tracking_unsupported",
+      "Source customer tracking inheritance не подтверждён как безопасный raw string; clone остановлен.",
+    );
   const money = (micros: unknown) => {
     const n = sourceMicros(micros);
     return {
@@ -2724,11 +2811,6 @@ export async function buildClonePlan(
         : {}),
     },
   };
-  if (!campaign.finalUrlSuffix)
-    error(
-      "google_clone_tracking_unsupported",
-      "Source campaign не имеет explicit final URL suffix; inheritance нельзя заменить builder default UTM даже при existing template. Требуется отдельный inheritance clone profile.",
-    );
   const plan = await build(brief);
   const targetCampaigns = plan.operations.filter((o) => o.kind === "campaign");
   const targetCampaign = targetCampaigns[0];
@@ -2748,6 +2830,57 @@ export async function buildClonePlan(
       "Clone builder не вернул единственную новую PAUSED campaign выбранного account.",
     );
   const targetResource = targetCampaign!.resource_name!;
+  // The normal builder may share fields/expected by reference. Clone inheritance
+  // has distinct omitted request leaves vs semantic-empty provider expectations.
+  targetCampaign!.fields = { ...targetCampaign!.fields };
+  targetCampaign!.expected = { ...targetCampaign!.expected };
+  const inheritedTracking: string[] = [];
+  for (const field of ["finalUrlSuffix", "trackingUrlTemplate"] as const)
+    if (campaign[field] === undefined || campaign[field] === "") {
+      // Source-derived clone only: never replace inheritance with normal brief UTM defaults.
+      delete targetCampaign!.fields[field];
+      targetCampaign!.expected[field] = "";
+      inheritedTracking.push(field);
+    }
+  const exactTracking = {
+    finalUrlSuffix: campaign.finalUrlSuffix ?? "",
+    trackingUrlTemplate: campaign.trackingUrlTemplate ?? "",
+  };
+  plan.summary.utm = exactTracking;
+  plan.intent.brief.effective_tracking = exactTracking;
+  plan.intent.brief.utm = {
+    ...(campaign.finalUrlSuffix !== undefined
+      ? { final_url_suffix: campaign.finalUrlSuffix }
+      : {}),
+    ...(campaign.trackingUrlTemplate !== undefined
+      ? { tracking_url_template: campaign.trackingUrlTemplate }
+      : {}),
+  };
+  if (inheritedTracking.length) {
+    plan.summary.clone_campaign_tracking_inheritance = {
+      fields: inheritedTracking,
+      source_campaign_resource: campaign.resourceName,
+      source_customer_resource: customer.resourceName,
+      raw_source_suffix:
+        campaign.finalUrlSuffix === undefined
+          ? "ABSENT"
+          : campaign.finalUrlSuffix === ""
+            ? "EMPTY"
+            : "EXPLICIT",
+      account_suffix: customer.finalUrlSuffix ?? "",
+      account_template: customer.trackingUrlTemplate ?? "",
+      normalized_provider_empty_only: true,
+    };
+    const item = plan.items.find((i) =>
+      i.provider_operations.includes(plan.operations.indexOf(targetCampaign!)),
+    );
+    if (item) {
+      item.after = targetCampaign!.expected;
+      item.warnings.push(
+        "Clone сохраняет raw отсутствующий/пустой campaign tracking как inheritance того же account; default UTM нового brief не применяется. Account URL settings frozen для stale protection.",
+      );
+    }
+  }
   const applyTracking = (
     operation: Stage0Operation,
     fields: JsonRow,
