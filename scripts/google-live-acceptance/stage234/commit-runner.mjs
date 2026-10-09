@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL, URL } from "node:url";
+import {
+  readAcceptanceContext,
+  sealAcceptanceContext,
+} from "./context-vault.mjs";
 import process from "node:process";
 const { structuredClone, AbortSignal, setTimeout, console } = globalThis;
 // Resolve after guard installation; never capture the unguarded native fetch.
@@ -122,7 +126,9 @@ export async function runNContinuation() {
     const stat = lstatSync(root);
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.mode & 0o077)
       fail("stage234_commit_directory_permissions_invalid");
-    const context = protectedJson(join(root, "protected-preview-context.json"));
+    const context = await readAcceptanceContext(
+      join(root, "protected-preview-context.json"),
+    );
     createRequire("/workspace/apps/api/package.json")("reflect-metadata");
     const { loadConfig } =
       await import("/workspace/packages/config/dist/index.js");
@@ -469,11 +475,17 @@ export async function runNContinuation() {
       counts.filter((e) => e.type === "validate_only").length !== 1
     )
       fail("stage234_commit_call_accounting_invalid");
-    save("protected-n-rollback-context.json", {
-      preview: inverse,
-      service_token: context.service_token,
-      original_commit_id: result.commit_id,
-    });
+    save(
+      "protected-n-rollback-context.json",
+      sealAcceptanceContext(vault, {
+        preview: inverse,
+        service_token: context.service_token,
+        original_commit_id: result.commit_id,
+        key_id: bound.key.id,
+        fingerprint: bound.key.tokenDigest,
+        expires_at: bound.key.expiresAt.toISOString(),
+      }),
+    );
     save("n-rollback-preview-evidence.json", {
       ...report,
       result: "WAITING_FOR_MANUAL_ROLLBACK_APPROVAL",

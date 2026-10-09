@@ -4,6 +4,13 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import process from "node:process";
+const { URL, AbortSignal, setTimeout, console } = globalThis;
+const fetch = (...args) => globalThis.fetch(...args);
+import {
+  readAcceptanceContext,
+  sealAcceptanceContext,
+} from "./context-vault.mjs";
 import {
   target,
   originalKeywords,
@@ -257,7 +264,7 @@ export async function runLivePreview() {
     const contextFile = join(root, "fixture-context.json");
     if ((statSync(contextFile).mode & 0o077) !== 0)
       fail("stage234_protected_context_permissions_invalid");
-    const context = JSON.parse(readFileSync(contextFile, "utf8"));
+    const context = await readAcceptanceContext(contextFile);
     createRequire("/workspace/apps/api/package.json")("reflect-metadata");
     const { loadConfig } =
       await import("/workspace/packages/config/dist/index.js");
@@ -507,7 +514,9 @@ export async function runLivePreview() {
             approvalReady = true;
             break;
           }
-        } catch {}
+        } catch {
+          /* Local gateway health wait only. */
+        }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       if (!approvalReady) fail("stage234_stock_approval_gateway_not_ready");
@@ -692,10 +701,16 @@ export async function runLivePreview() {
     );
     if (validation.http_status < 200 || validation.http_status >= 300)
       fail("stage234_validate_only_http_failed");
-    save("protected-preview-context.json", {
-      preview,
-      service_token: context.service_token,
-    });
+    save(
+      "protected-preview-context.json",
+      sealAcceptanceContext(vault, {
+        preview,
+        service_token: context.service_token,
+        key_id: key.id,
+        fingerprint: key.tokenDigest,
+        expires_at: key.expiresAt.toISOString(),
+      }),
+    );
     evidence = {
       ...makeCheckpoint({
         preview,
@@ -740,7 +755,9 @@ export async function runLivePreview() {
         .split("\n")
         .filter(Boolean)
         .map(JSON.parse);
-    } catch {}
+    } catch {
+      /* Call log may not exist before a blocked preflight. */
+    }
     const result = {
       result: "BLOCKED",
       failure_stage: stage,
@@ -768,7 +785,9 @@ export async function runLivePreview() {
     if (db) {
       try {
         await db.client.$disconnect();
-      } catch {}
+      } catch {
+        /* Do not obscure the original safe failure. */
+      }
     }
   }
 }

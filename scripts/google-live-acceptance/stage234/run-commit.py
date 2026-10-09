@@ -22,7 +22,7 @@ ROOT = preview_supervisor.ROOT
 PROJECT = preview_supervisor.PROJECT
 NETWORK = preview_supervisor.NETWORK
 require = preview_supervisor.require
-FILES = {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs'}
+FILES = {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs', 'context-vault.mjs'}
 CLAIMS = {'n-supervisor-launch.claim', 'n-mcp_commit.claim', 'n-write.claim', 'n-mcp_rollback_preview.claim', 'n-validate_only.claim', 'n-authority.json', 'n-proof.json', 'n-commit-evidence.json', 'n-blocked-evidence.json', 'commit.runtime.env'}
 
 
@@ -35,11 +35,22 @@ def validate_options(options):
 
 def assert_authorization(options, context, evidence, now=None):
     validate_options(options)
-    p = context.get('preview') or {}
+    encrypted = context.get('purpose') == 'STAGE234_ACCEPTANCE_CONTEXT'
+    if encrypted:
+        # Public hints cannot authorize a write. Node decrypts with the stock
+        # vault and binds tokens, exact plan, DB approval and snapshot digest.
+        require(set(context) == {'version','purpose','ciphertext','encryptionVersion','public'} and context.get('version') == 1
+                and isinstance(context.get('ciphertext'), str) and context['ciphertext'].startswith('hm1.')
+                and isinstance(context.get('encryptionVersion'), int), 'stage234_commit_encrypted_envelope_invalid')
+        p = (context.get('public') or {}).get('preview') or {}
+    else:
+        p = context.get('preview') or {}
     require(p.get('preview_id') == options.authorize_exact_preview == evidence.get('preview_id'), 'stage234_commit_authorized_preview_mismatch')
     require(p.get('provider') == 'GOOGLE_ADS' and p.get('account_id') == '8590146099' and p.get('provider_validation') == 'passed'
-            and p.get('operation_count') == 1 and isinstance(p.get('preview_token'), str) and bool(p['preview_token'])
-            and isinstance(context.get('service_token'), str) and bool(context['service_token']), 'stage234_commit_protected_preview_invalid')
+            and p.get('operation_count') == 1, 'stage234_commit_protected_preview_invalid')
+    if not encrypted:
+        require(isinstance(p.get('preview_token'), str) and bool(p['preview_token']) and isinstance(context.get('service_token'), str)
+                and bool(context['service_token']), 'stage234_commit_protected_preview_invalid')
     require(evidence.get('source_head') == options.head and evidence.get('image_digest') == options.image.split('@')[1]
             and evidence.get('persisted_preview_immutable') is True and evidence.get('before_after_unchanged') is True
             and evidence.get('committed') is False and evidence.get('real_provider_write_call_count') == 0
@@ -50,7 +61,13 @@ def assert_authorization(options, context, evidence, now=None):
         require(expiry.tzinfo is not None and expiry > (now or datetime.now(timezone.utc)), 'stage234_commit_preview_expired')
     except (KeyError, TypeError, ValueError):
         raise RuntimeError('stage234_commit_preview_expiry_invalid') from None
-    items = p.get('items') or []
+    if encrypted:
+        require(evidence.get('semantic_payload') == {'provider':'GOOGLE_ADS','account_id':'8590146099','items':[{'campaign_id':'24324170853','ad_group_id':'206587491811','field':'ad_group_cpc','change':{'mode':'absolute','amount':'0.11','currency':'USD'}}]}, 'stage234_commit_preview_semantic_payload_invalid')
+        before = (evidence.get('provider_state_before') or {}).get('group', [{}])[0].get('adGroup') or {}
+        after = evidence.get('expected_after') or {}
+        items = [{'campaign_id':'24324170853','ad_group_id':'206587491811','before':before,'after':after}]
+    else:
+        items = p.get('items') or []
     require(len(items) == 1 and items[0].get('campaign_id') == '24324170853' and items[0].get('ad_group_id') == '206587491811', 'stage234_commit_preview_target_invalid')
     before, after = items[0].get('before') or {}, items[0].get('after') or {}
     require(before.get('resourceName') == 'customers/8590146099/adGroups/206587491811'

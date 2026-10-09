@@ -10,6 +10,7 @@ import {
 import { join } from "node:path";
 import process from "node:process";
 import { URL } from "node:url";
+import { readAcceptanceContext } from "./context-vault.mjs";
 const { Headers } = globalThis;
 import {
   target,
@@ -338,7 +339,9 @@ export function installCommitGuard({
   }
   globalThis.__holyMediaNCommitGuard = identity;
   globalThis.fetch = async (input, init = {}) => {
-    const context = protectedJson(join(root, "protected-preview-context.json"));
+    const context = await readAcceptanceContext(
+      join(root, "protected-preview-context.json"),
+    );
     let authority, proof;
     try {
       authority = protectedJson(join(root, "n-authority.json"));

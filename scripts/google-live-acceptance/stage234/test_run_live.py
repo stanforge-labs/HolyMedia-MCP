@@ -28,7 +28,7 @@ class LauncherTests(unittest.TestCase):
         with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'is_symlink', return_value=False), patch.object(Path, 'read_bytes', return_value=b'synthetic-guard-source'):
             manifest = runner.build_harness_manifest('a' * 40, Path('/synthetic'))
             self.assertEqual(set(manifest), {'head', 'files'})
-            self.assertEqual(set(manifest['files']), {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs'})
+            self.assertEqual(set(manifest['files']), {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs', 'context-vault.mjs'})
             self.assertTrue(all(value == hashlib.sha256(b'synthetic-guard-source').hexdigest() for value in manifest['files'].values()))
         with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'is_symlink', return_value=True):
             with self.assertRaises(RuntimeError): runner.build_harness_manifest('a' * 40, Path('/synthetic'))

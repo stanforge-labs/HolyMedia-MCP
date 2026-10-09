@@ -38,6 +38,20 @@ def context_evidence():
 
 
 class CommitSupervisorTests(unittest.TestCase):
+    def test_encrypted_context_uses_only_safe_hints_and_exact_evidence(self):
+        legacy, evidence = context_evidence()
+        p = legacy['preview']
+        evidence.update(semantic_payload={'provider':'GOOGLE_ADS','account_id':'8590146099','items':[{'campaign_id':'24324170853','ad_group_id':'206587491811','field':'ad_group_cpc','change':{'mode':'absolute','amount':'0.11','currency':'USD'}}]},
+                        provider_state_before={'group':[{'adGroup':p['items'][0]['before']}]}, expected_after=p['items'][0]['after'])
+        context={'version':1,'purpose':'STAGE234_ACCEPTANCE_CONTEXT','ciphertext':'hm1.synthetic.encrypted.only','encryptionVersion':1,
+                 'public':{'preview':{k:v for k,v in p.items() if k not in {'items','preview_token'}}}}
+        runner.assert_authorization(options(),context,evidence,NOW)
+        for mutate in [lambda c,e:c.update(service_token='synthetic'),lambda c,e:c.update(version=2),
+                       lambda c,e:e['expected_after'].update(cpcBidMicros='120000'),
+                       lambda c,e:e['semantic_payload']['items'][0]['change'].update(amount='0.12')]:
+            c,e=copy.deepcopy(context),copy.deepcopy(evidence);mutate(c,e)
+            with self.assertRaises(RuntimeError):runner.assert_authorization(options(),c,e,NOW)
+
     def test_explicit_uuid_required_even_check_only(self):
         runner.validate_options(options())
         for value in [None, '', 'yes', UUID.upper(), '0000']:

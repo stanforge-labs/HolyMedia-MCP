@@ -53,7 +53,7 @@ def safe_report(value):
 
 def build_harness_manifest(head, directory):
     require(re.fullmatch(r'[0-9a-f]{40}', head) is not None, 'stage234_source_head_invalid')
-    names = ['commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs']
+    names = ['commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs', 'context-vault.mjs']
     hashes = {}
     for name in names:
         file = directory / name
