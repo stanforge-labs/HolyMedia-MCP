@@ -105,7 +105,9 @@ Target delivery entities PAUSED; source snapshots входят в stale guard.
 
 Новый [bounded clone пакет](google-ads-write-clone-final.md) добавляет positive proximity,
 owned CALL/BUSINESS_NAME reuse и same-account shared negative lists с frozen membership.
-Whole clone preview отклоняется, а не молча урезается, при audience/device criteria,
+Три provider-managed neutral Search DEVICE criteria поддержаны через exact source
+proof и full target reread без DEVICE mutations; см. [default-device boundary](google-ads-clone-default-devices.md).
+Whole clone preview отклоняется, а не молча урезается, при audience/custom device criteria,
 negative proximity/ambiguous radius relocation, non-keyword/non-RSA groups/ads, multi-final URLs,
 custom/cross-account goals, unknown asset details и неподдерживаемых networks/bidding/geo modes.
 Полный clone coverage остаётся REQUIREDGAP, не «Google API не умеет»; новые пути mock-tested,

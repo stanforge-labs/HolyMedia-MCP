@@ -70,6 +70,35 @@ manifest now includes `context-vault.mjs`; public hints are not commit authority
 
 ## Local/mock verification
 
+## N restored and independent acceptance preparation (2026-10-10)
+
+N now has two distinct human-approved stock commits: forward CPC100000→110000,
+then the exact stock rollback CPC110000→100000. Both provider rereads and journals
+are VERIFIED. The inverse uses separate once-claims/state and never replays the
+forward runner. Evidence: `artifacts/google-full-scope/N-restored-pass-20261010.json`.
+The stock API remains source-pinned to c11f14c; new harness modules are separate,
+not product hotpatches. Production/main and historical evidence are unchanged.
+
+H warning-only diagnostic uses the actual stock Stage2 provider builder/validator,
+one exact Google validate_only and unchanged provider reread. Budget2USD→3.20USD
+is previewed semantically, warning>50% is proved, one nonshared consumer is observed.
+There is no persisted MCP preview, approval, commit or self-cancellation. This is
+not full MCP H LIVE acceptance and not shared-budget LIVE coverage. See
+`artifacts/google-full-scope/H-warning-only-20261010.json`.
+
+G/I/J discovery is fixed-template, bounded, TEST-only READ and makes no global
+absence claim. Actual API catalogs still do not prove an eligible automatic-bid
+fixture, Search audience, district-parent or proximity center. PMax still needs
+legitimate goal/media/brand prerequisites. See the separate eligibility evidence;
+its source-label correction is separately attested, never a historical rewrite.
+
+L uses a separate preview-only guarded API/gateway on localhost4403 and the actual
+production adapter regression proves exact queries, create payload and immutable
+plan. Only human browser approval can authorize a later commit; the preview runner
+cannot commit. Prepare tests, source manifest, session/API readiness and tunnel
+before the sole JIT RSA preview. Native Q/R instructions are in
+`docs/google-ads-private-client-onboarding-20261010.md`; approval ports are not MCP.
+
 `node --test scripts/google-live-acceptance/stage234/live.test.mjs`
 
 `python -m unittest discover -s scripts/google-live-acceptance/stage234 -p "test_*.py"`
