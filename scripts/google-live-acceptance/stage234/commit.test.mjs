@@ -15,6 +15,7 @@ import {
   digest,
   commitPayload,
   rollbackPayload,
+  installCommitGuard,
 } from "./commit-guard.mjs";
 import { queries } from "./live-guard.mjs";
 const now = Date.now(),
@@ -453,4 +454,35 @@ test("runner uses stock exact-image MCP/main, never approval or raw adapter writ
   assert.match(source, /flag: "wx"/);
   assert.match(source, /stage234_commit_provider_snapshot_stale/);
   assert.match(source, /const fetch = .*globalThis\.fetch/);
+});
+test("preload plus direct guard installation is idempotent, changed source identity is rejected", () => {
+  const native = globalThis.fetch,
+    previous = globalThis.__holyMediaNCommitGuard;
+  delete globalThis.__holyMediaNCommitGuard;
+  try {
+    const runtime = {
+      ...env,
+      STAGE234_RUN_DIR: "/acceptance-state/stage234-mock",
+    };
+    installCommitGuard({
+      env: runtime,
+      nativeFetch: async () => {
+        throw Error("mock transport must not run");
+      },
+    });
+    const guarded = globalThis.fetch;
+    installCommitGuard({ env: runtime });
+    assert.equal(globalThis.fetch, guarded);
+    assert.throws(
+      () =>
+        installCommitGuard({
+          env: { ...runtime, STAGE234_SOURCE_HEAD: "f".repeat(40) },
+        }),
+      /identity_changed/,
+    );
+  } finally {
+    globalThis.fetch = native;
+    if (previous) globalThis.__holyMediaNCommitGuard = previous;
+    else delete globalThis.__holyMediaNCommitGuard;
+  }
 });
