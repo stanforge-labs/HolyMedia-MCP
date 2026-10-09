@@ -43,7 +43,7 @@ jobs:
       PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
     services:
       postgres:
-        image: postgres:18-alpine
+        image: public.ecr.aws/docker/library/postgres:18-alpine
         env:
           POSTGRES_DB: holymedia_v2
           POSTGRES_USER: holymedia
@@ -56,7 +56,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       redis:
-        image: redis:7.4-alpine
+        image: public.ecr.aws/docker/library/redis:7.4-alpine
         ports:
           - 6379:6379
         options: >-
@@ -104,7 +104,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          postgres_container=$(docker ps --filter ancestor=postgres:18-alpine --format '{{.ID}}' | head -n 1)
+          postgres_container='${{ job.services.postgres.id }}'
           test -n "$postgres_container"
           docker exec "$postgres_container" psql -U holymedia -d holymedia_v2 -v ON_ERROR_STOP=1 -c 'CREATE DATABASE holymedia_v2_restore'
           docker exec "$postgres_container" pg_dump -U holymedia -d holymedia_v2_rehearsal --format=plain --clean --if-exists --no-owner --no-privileges > /tmp/holymedia-v2-rehearsal.sql
@@ -180,14 +180,14 @@ jobs:
           }
           wait_ready
 
-          postgres_id=$(docker ps --filter ancestor=postgres:18-alpine --format '{{.ID}}' | head -n 1)
+          postgres_id='${{ job.services.postgres.id }}'
           test -n "$postgres_id"
           docker stop "$postgres_id"
           assert_not_ready
           docker start "$postgres_id"
           wait_ready
 
-          redis_id=$(docker ps --filter ancestor=redis:7.4-alpine --format '{{.ID}}' | head -n 1)
+          redis_id='${{ job.services.redis.id }}'
           test -n "$redis_id"
           docker stop "$redis_id"
           assert_not_ready

@@ -36,6 +36,8 @@ jobs:
           context: .
           file: infra/Dockerfile.v2
           target: api-runtime
+          build-args: |
+            NODE_BASE_IMAGE=public.ecr.aws/docker/library/node:24-bookworm-slim
           platforms: linux/amd64
           push: true
           provenance: false
