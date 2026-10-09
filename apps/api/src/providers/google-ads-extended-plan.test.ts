@@ -68,6 +68,49 @@ function plan(): ExtendedPlan {
   };
 }
 describe("Google extension immutable plan primitives (mock reads only)", () => {
+  it("tracking clear normalizes only selected exact masked leaves on the independently owned entity", async () => {
+    for (const [kind, table, key] of [
+      ["customers", "customer", "customer"],
+      ["campaigns", "campaign", "campaign"],
+      ["adGroups", "ad_group", "adGroup"],
+    ] as const) {
+      const p = plan();
+      p.checks = [];
+      const resource = kind === "customers" ? prefix : `${prefix}/${kind}/1`;
+      const before = {
+        resourceName: resource,
+        ...(kind === "adGroups" ? { campaign: `${prefix}/campaigns/2` } : {}),
+      };
+      const op = p.operations[0]!;
+      Object.assign(op, {
+        kind,
+        resource_name: resource,
+        fields: { resourceName: resource, trackingUrlTemplate: "" },
+        expected: { ...before, trackingUrlTemplate: "" },
+        read_query: `SELECT ${table}.resource_name, ${table}.tracking_url_template FROM ${table}`,
+        response_key: key,
+        update_mask: "tracking_url_template",
+      });
+      const verify = (actual: unknown) =>
+        verifyExtendedMutation(
+          p,
+          [{ success: true, resource_name: resource, error: null }],
+          async () => [{ [key]: actual }],
+        );
+      expect((await verify(before)).status).toBe("VERIFIED");
+      expect(before).not.toHaveProperty("trackingUrlTemplate");
+      expect(
+        (
+          await verify({
+            ...before,
+            trackingUrlTemplate: "https://wrong.test/",
+          })
+        ).status,
+      ).toBe("NOT_VERIFIED");
+      op.read_query = `SELECT ${table}.resource_name FROM ${table}`;
+      expect((await verify(before)).status).toBe("NOT_VERIFIED");
+    }
+  });
   it("default PMax value bidding proves both scheme and omitted zero target without mutating provider evidence", async () => {
     const p = plan();
     p.checks = p.checks.slice(0, 1);

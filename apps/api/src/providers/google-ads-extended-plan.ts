@@ -692,6 +692,31 @@ export async function verifyExtendedMutation(
       const expected = extRow(replaceExtendedTemps(o.expected, refs));
       if (resource) expected.resourceName = resource;
       const comparisonEntity = entity ? structuredClone(entity) : null;
+      if (
+        comparisonEntity &&
+        ["customers", "campaigns", "adGroups"].includes(o.kind) &&
+        comparisonEntity.resourceName === resource &&
+        (!expected.campaign || comparisonEntity.campaign === expected.campaign)
+      ) {
+        const table =
+          o.kind === "customers"
+            ? "customer"
+            : o.kind === "campaigns"
+              ? "campaign"
+              : "ad_group";
+        for (const [field, mask] of [
+          ["trackingUrlTemplate", "tracking_url_template"],
+          ["finalUrlSuffix", "final_url_suffix"],
+        ])
+          if (
+            expected[field!] === "" &&
+            o.fields[field!] === "" &&
+            comparisonEntity[field!] === undefined &&
+            o.update_mask?.split(",").includes(mask!) &&
+            o.read_query.split(" FROM ")[0]?.includes(`${table}.${mask}`)
+          )
+            comparisonEntity[field!] = "";
+      }
       // Protobuf JSON omits selected default values. Normalize only documented
       // provider-managed defaults with an independent strategy-type proof.
       if (
