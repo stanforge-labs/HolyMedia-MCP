@@ -3,7 +3,7 @@ import { canonical } from "./google-ads-stage1.js";
 import { customerId, GoogleAdsWriteError, googleWriteFailure } from "./google-ads-write.js";
 
 export type ExtendedRow = Record<string, unknown>;
-export type ExtendedKind = "campaigns" | "adGroups" | "adGroupCriteria" | "campaignCriteria" | "adGroupAds" | "assets" | "campaignAssets" | "adGroupAssets" | "customerAssets" | "customAudiences" | "biddingStrategies" | "assetGroups" | "assetGroupAssets" | "assetGroupSignals";
+export type ExtendedKind = "customers" | "campaignBudgets" | "ads" | "campaigns" | "adGroups" | "adGroupCriteria" | "campaignCriteria" | "adGroupAds" | "assets" | "campaignAssets" | "adGroupAssets" | "customerAssets" | "customAudiences" | "biddingStrategies" | "assetGroups" | "assetGroupAssets" | "assetGroupSignals";
 export type ExtendedOperation = {
   kind: ExtendedKind;
   method: "create" | "update" | "remove";
@@ -64,7 +64,7 @@ export async function extContext(account: string, read: Stage1Reader) {
   extOwner(c.resourceName, account_id, "customers");
   return {account_id,checks,query,currency:String(c.currencyCode),timezone:String(c.timeZone)};
 }
-const kinds: ExtendedKind[] = ["campaigns","adGroups","adGroupCriteria","campaignCriteria","adGroupAds","assets","campaignAssets","adGroupAssets","customerAssets","customAudiences","biddingStrategies","assetGroups","assetGroupAssets","assetGroupSignals"];
+const kinds: ExtendedKind[] = ["customers","campaignBudgets","ads","campaigns","adGroups","adGroupCriteria","campaignCriteria","adGroupAds","assets","campaignAssets","adGroupAssets","customerAssets","customAudiences","biddingStrategies","assetGroups","assetGroupAssets","assetGroupSignals"];
 export function assertExtendedPlan(plan: ExtendedPlan, account: string) {
   if (![3,4,5].includes(plan.version) || plan.account_id !== customerId(account) || !Array.isArray(plan.operations) || plan.operations.length < 1 || plan.operations.length > 500 || !Array.isArray(plan.items) || typeof plan.atomic !== "boolean" || typeof plan.irreversible !== "boolean") extFail("google_extended_plan_invalid", "Некорректный immutable extension plan.");
   const seen = new Set<string>();
@@ -85,7 +85,7 @@ export function assertExtendedPlan(plan: ExtendedPlan, account: string) {
 }
 export async function rereadExtendedChecks(plan: ExtendedPlan, read: Stage1Reader) { return Promise.all(plan.checks.map(async c => ({query:c.query,rows:await extRead(read,c.query)}))); }
 export function extendedProviderOperation(o: ExtendedOperation) {
-  const singular: Record<ExtendedKind,string> = {campaigns:"campaign",adGroups:"adGroup",adGroupCriteria:"adGroupCriterion",campaignCriteria:"campaignCriterion",adGroupAds:"adGroupAd",assets:"asset",campaignAssets:"campaignAsset",adGroupAssets:"adGroupAsset",customerAssets:"customerAsset",customAudiences:"customAudience",biddingStrategies:"biddingStrategy",assetGroups:"assetGroup",assetGroupAssets:"assetGroupAsset",assetGroupSignals:"assetGroupSignal"};
+  const singular: Record<ExtendedKind,string> = {customers:"customer",campaignBudgets:"campaignBudget",ads:"ad",campaigns:"campaign",adGroups:"adGroup",adGroupCriteria:"adGroupCriterion",campaignCriteria:"campaignCriterion",adGroupAds:"adGroupAd",assets:"asset",campaignAssets:"campaignAsset",adGroupAssets:"adGroupAsset",customerAssets:"customerAsset",customAudiences:"customAudience",biddingStrategies:"biddingStrategy",assetGroups:"assetGroup",assetGroupAssets:"assetGroupAsset",assetGroupSignals:"assetGroupSignal"};
   return {[`${singular[o.kind]}Operation`]: o.method === "remove" ? {remove:o.resource_name} : {[o.method]:o.fields,...(o.method === "update" ? {updateMask:o.update_mask} : {})}};
 }
 function replace(value: unknown, refs: Map<string,string>): unknown {
@@ -116,7 +116,7 @@ export async function verifyExtendedMutation(plan: ExtendedPlan, results: Stage1
     const resource=results[i]?.resource_name ?? o.resource_name;
     try {
       const q=String(replace(o.read_query,refs)), rows=await extRead(read,q);
-      const found=rows.map(r=>extRow(r[o.response_key])).filter(r=>r.resourceName===resource);
+      const found=rows.map(r=>extRow(o.response_key.split(".").reduce<unknown>((v,k)=>extRow(v)[k],r))).filter(r=>r.resourceName===resource);
       if(found.length===1) {entity=found[0]!;extOwner(entity.resourceName,plan.account_id,o.kind);}
       const expected=extRow(replace(o.expected,refs));
       if(resource) expected.resourceName=resource;
