@@ -25,6 +25,15 @@ export const stage4Actions = [
   "pmax_audience_signal_add",
   "pmax_asset_attach",
   "pmax_asset_detach",
+  "pmax_asset_replace",
+  "pmax_campaign_asset_replace",
+  "pmax_campaign_asset_detach",
+  "pmax_signal_remove",
+  "pmax_negative_add",
+  "pmax_negative_remove",
+  "pmax_brand_exclude",
+  "pmax_brand_remove",
+  "image_asset_create",
   "pmax_create",
 ] as const;
 const string = (maxLength = 255): BriefSchema => ({
@@ -51,6 +60,103 @@ const bool: BriefSchema = {
 };
 const rsa =
   campaignBriefSchema.properties!.ad_groups!.items!.properties!.rsa!.items!;
+const list = (
+  items: BriefSchema,
+  minItems: number,
+  maxItems: number,
+): BriefSchema => ({
+  type: "array",
+  description: "Bounded explicit entries.",
+  items,
+  minItems,
+  maxItems,
+});
+export const inlineGoogleMediaSchema = object({
+  asset_id: id,
+  mime_type: en(["image/png", "image/jpeg"]),
+  data_base64: {
+    ...string(Math.ceil((1024 * 1024) / 3) * 4),
+    description:
+      "Local <=1 MiB inline actual PNG/JPEG bytes; aggregate <=2 MiB, never URL, data URI or filesystem path.",
+  },
+});
+const pmaxGroup = object(
+  {
+    name: string(128),
+    final_url: string(2048),
+    headlines: list(string(30), 3, 15),
+    long_headlines: list(string(90), 1, 5),
+    descriptions: list(string(90), 2, 5),
+    images: list(
+      object(
+        {
+          field_type: en(["MARKETING_IMAGE", "SQUARE_MARKETING_IMAGE"]),
+          media: inlineGoogleMediaSchema,
+        },
+        ["field_type", "media"],
+      ),
+      2,
+      40,
+    ),
+    audience_ids: list(id, 0, 20),
+    search_themes: list(string(80), 0, 50),
+    path1: string(15),
+    path2: string(15),
+  },
+  [
+    "name",
+    "final_url",
+    "headlines",
+    "long_headlines",
+    "descriptions",
+    "images",
+  ],
+);
+export const pmaxBriefSchema = object(
+  {
+    campaign_name: string(),
+    daily_budget: campaignBriefSchema.properties!.daily_budget!,
+    conversion_actions: list(id, 1, 50),
+    business_name: string(25),
+    logos: list(inlineGoogleMediaSchema, 1, 5),
+    asset_groups: list(pmaxGroup, 1, 10),
+    brand_guidelines_enabled: bool,
+    bidding_strategy: en(["MAXIMIZE_CONVERSIONS", "MAXIMIZE_CONVERSION_VALUE"]),
+    target_cpa: campaignBriefSchema.properties!.daily_budget!,
+    target_roas: {
+      type: "number",
+      description: "Positive ROAS ratio, e.g. 3.5 for 350%.",
+      minimum: 0.01,
+      maximum: 1000,
+    },
+    locations: list(
+      object({ geo_target_id: id, name: string(120), exclude: bool }, [
+        "geo_target_id",
+      ]),
+      1,
+      50,
+    ),
+    languages: list(id, 1, 20),
+    utm: campaignBriefSchema.properties!.utm!,
+    start_date: campaignBriefSchema.properties!.start_date!,
+    end_date: campaignBriefSchema.properties!.end_date!,
+    contains_eu_political_advertising: en([
+      "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING",
+      "CONTAINS_EU_POLITICAL_ADVERTISING",
+    ]),
+  },
+  [
+    "campaign_name",
+    "daily_budget",
+    "conversion_actions",
+    "business_name",
+    "logos",
+    "asset_groups",
+    "locations",
+    "languages",
+    "contains_eu_political_advertising",
+  ],
+);
 export const stage4RowSchema = object({
   campaign_id: id,
   ad_group_id: id,
@@ -77,6 +183,7 @@ export const stage4RowSchema = object({
     "CALL",
     "AD_IMAGE",
     "BUSINESS_LOGO",
+    "LOGO",
     "BUSINESS_NAME",
     "HEADLINE",
     "LONG_HEADLINE",
@@ -93,6 +200,12 @@ export const stage4RowSchema = object({
   path1: string(15),
   path2: string(15),
   search_theme: string(80),
+  brief: pmaxBriefSchema,
+  media: inlineGoogleMediaSchema,
+  text: string(90),
+  shared_set_id: id,
+  criterion_id: id,
+  match_type: en(["BROAD", "PHRASE", "EXACT"]),
 });
 export function stage4ToolSchema(name: string) {
   if (
