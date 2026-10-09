@@ -64,6 +64,66 @@ const state = (f: ReturnType<typeof setup>) =>
   object(f.resources.get(`${prefix}/adGroupCriteria/10~101`)?.adGroupCriterion);
 
 describe("Stage 2 foundation: stock controlled lifecycle, mock HTTP only", () => {
+  it("Acceptance G exact +10% CPC under auto strategy warns and preview never writes", async () => {
+    const f = setup();
+    for (const r of f.resources.values())
+      if (r.campaign)
+        object(r.campaign).biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+    const before = structuredClone(state(f));
+    const p = await preview(f, [
+      item("keyword_cpc", {
+        mode: "percent",
+        percent: "10",
+        currency: "KZT",
+      } as never),
+    ]);
+    expect(p.provider_validation).toBe("passed");
+    expect(object((p.items as MockRow[])[0]!.after).cpcBidMicros).toBe(
+      "165000000",
+    );
+    expect(JSON.stringify(p.items)).toContain("automated/portfolio");
+    expect(state(f)).toEqual(before);
+    expect(f.requests.filter((r) => r.body.validateOnly === true)).toHaveLength(
+      1,
+    );
+    expect(f.writes()).toBe(0);
+  });
+  it("Acceptance H exact +60% shared budget exposes both consumers without changing either", async () => {
+    const f = setup();
+    const budget = object(
+      f.resources.get(`${prefix}/campaignBudgets/20`)?.campaignBudget,
+    );
+    budget.explicitlyShared = true;
+    f.resources.set(`${prefix}/campaigns/2`, {
+      campaign: {
+        ...object(f.resources.get(`${prefix}/campaigns/1`)?.campaign),
+        id: "2",
+        resourceName: `${prefix}/campaigns/2`,
+        name: "SECOND SHARED CONSUMER",
+      },
+    });
+    const before = structuredClone([...f.resources]);
+    const p = await preview(f, [
+      item("campaign_daily_budget", {
+        mode: "percent",
+        percent: "60",
+        currency: "KZT",
+      } as never),
+    ]);
+    expect(p.provider_validation).toBe("passed");
+    const display = (p.items as MockRow[])[0]!;
+    expect(object(display.after).amountMicros).toBe("320000000");
+    expect(JSON.stringify(display.warnings)).toContain("50%");
+    expect(JSON.stringify(display.warnings)).toContain(
+      "SECOND SHARED CONSUMER",
+    );
+    expect(JSON.stringify(display.warnings)).toContain("1 TEST PPC");
+    expect([...f.resources]).toEqual(before);
+    expect(f.requests.filter((r) => r.body.validateOnly === true)).toHaveLength(
+      1,
+    );
+    expect(f.writes()).toBe(0);
+  });
   it("post-write budget association change is NOT VERIFIED even when amount matches", async () => {
     const f = setup(),
       p = await preview(f, [item("campaign_daily_budget", absolute("220"))]);
