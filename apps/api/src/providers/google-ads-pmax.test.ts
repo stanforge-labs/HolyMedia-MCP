@@ -831,70 +831,216 @@ describe("v24 non-retail PMax exact atomic provider plans (mock only)", () => {
       ),
     ).rejects.toThrow(/enabled brand guidelines/);
   });
-  it("atomic created graph post-read resolves actual temp resources and verifies exact complete rows", async () => {
-    const p = await buildPmaxCreatePlan(account, brief(), reader()),
-      resources = new Map<string, string>();
-    let id = 200;
-    for (const o of p.operations)
-      if (o.resource_name?.includes("/-") && o.method === "create")
-        resources.set(
-          o.resource_name,
-          o.resource_name.replace(/-\d+$/, String(++id)),
-        );
-    const createdCampaign = p.operations.find(
-        (o) => o.kind === "campaigns",
-      )!.resource_name!,
-      campaignID = resources.get(createdCampaign)!.split("/").at(-1)!;
-    for (const o of p.operations)
-      if (
-        ["campaignConversionGoals", "conversionGoalCampaignConfigs"].includes(
-          o.kind,
-        ) &&
-        o.resource_name
-      )
-        resources.set(
-          o.resource_name,
-          o.resource_name.replace(/\/-\d+(?=~|$)/, "/" + campaignID),
-        );
-    const actual = p.operations.map((o) => {
-      const resource = o.resource_name
-        ? replaceExtendedTemps(o.resource_name, resources)
-        : prefix + "/" + o.kind + "/" + ++id;
-      const expected = replaceExtendedTemps(
-        o.expected,
-        resources,
-      ) as ExtendedRow;
-      return {
-        operation: o,
-        entity: { ...expected, resourceName: resource },
-        query: replaceExtendedTemps(o.read_query, resources),
-      };
-    });
-    const re = vi.fn(async (q: string): Promise<ExtendedRow[]> => {
-      const entries = actual.filter((a) => a.query === q);
-      if (entries.length)
-        return entries.map((a) => ({ [a.operation.response_key]: a.entity }));
-      const check = p.checks.find((c) => c.query === q);
-      if (check) return structuredClone(check.rows);
-      throw new Error("Unknown mock reread");
-    });
-    const result = await verifyExtendedMutation(
-      p,
-      actual.map((a) => ({
-        success: true,
-        resource_name: String(a.entity.resourceName),
-        error: null,
-      })),
-      re,
-    );
-    expect(result.context_verified).toBe(true);
+  it("complete new group on existing PAUSED PMax creates only graph, preserves campaign/budget/goals/branding", async () => {
+    const input = {
+        action: "pmax_asset_group_create",
+        items: [{ campaign_id: "1", asset_group: brief().asset_groups[0] }],
+      },
+      p = await buildStage4Plan(account, input, reader());
+    expect(p.atomic).toBe(true);
     expect(
-      result.items[0]!.operations.filter((o) => !o.success).map((o) => ({
-        operation: o.operation,
-        resource_name: o.resource_name,
-        error: o.error,
-      })),
-    ).toEqual([]);
-    expect(result.status).toBe("VERIFIED");
+      p.operations.every((o) =>
+        [
+          "assets",
+          "assetGroups",
+          "assetGroupAssets",
+          "assetGroupSignals",
+        ].includes(o.kind),
+      ),
+    ).toBe(true);
+    expect(
+      p.operations.find((o) => o.kind === "assetGroups")!.fields,
+    ).toMatchObject({ campaign: campaign.resourceName, status: "PAUSED" });
+    expect(
+      p.operations.filter((o) => o.kind === "assetGroupAssets"),
+    ).toHaveLength(8);
+    expect(p.operations.some((o) => o.kind === "campaignAssets")).toBe(false);
+    expect(
+      p.checks.some((c) => c.query.includes("asset_group.campaign =")),
+    ).toBe(true);
+    expect(p.items[0]!.after).toMatchObject({ campaign_changed: false });
   });
+  it("capability label remains human-readable without token-shaped false positive or scanner exclusion", () => {
+    expect(
+      stage4CapabilityMatrix.pmax_asset_group_create_full_minimum_assets,
+    ).toContain("EXISTING PAUSED PMAX");
+    expect(
+      /EA[A-Za-z0-9_-]{30,}/.test(
+        stage4CapabilityMatrix.pmax_asset_group_create_full_minimum_assets,
+      ),
+    ).toBe(false);
+  });
+  it("existing group create validates full minimum and owner/PAUSED parent, duplicate name, actual branding", async () => {
+    const input = {
+      action: "pmax_asset_group_create",
+      items: [{ campaign_id: "1", asset_group: brief().asset_groups[0] }],
+    };
+    for (const candidate of [
+      { ...campaign, status: "ENABLED" },
+      { ...campaign, brandGuidelinesEnabled: undefined },
+      { ...campaign, resourceName: "customers/2/campaigns/1" },
+    ])
+      await expect(
+        buildStage4Plan(account, input, reader({ campaign: candidate })),
+      ).rejects.toThrow(/PAUSED PMax|parent/);
+    const duplicate = {
+      ...input,
+      items: [
+        {
+          campaign_id: "1",
+          asset_group: { ...brief().asset_groups[0], name: group.name },
+        },
+      ],
+    };
+    await expect(buildStage4Plan(account, duplicate, reader())).rejects.toThrow(
+      /name exists/,
+    );
+    await expect(
+      buildStage4Plan(
+        account,
+        { ...input, items: [...input.items, ...input.items] },
+        reader(),
+      ),
+    ).rejects.toThrow(/name exists/);
+    const invalid = {
+        ...input,
+        items: [
+          {
+            campaign_id: "1",
+            asset_group: { ...brief().asset_groups[0], images: [] },
+          },
+        ],
+      },
+      r = reader();
+    await expect(buildStage4Plan(account, invalid, r)).rejects.toThrow();
+    expect(r).not.toHaveBeenCalled();
+    await expect(
+      buildStage4Plan(account, input, reader({ brandLinks: [] })),
+    ).rejects.toThrow(/minimum/);
+  });
+  it("existing group brand-false requires explicit group logo/name, never mutates campaign branding", async () => {
+    const base = {
+        action: "pmax_asset_group_create",
+        items: [{ campaign_id: "1", asset_group: brief().asset_groups[0] }],
+      },
+      r = reader({ campaign: { ...campaign, brandGuidelinesEnabled: false } });
+    await expect(buildStage4Plan(account, base, r)).rejects.toThrow(
+      /business_name/,
+    );
+    const input = {
+        ...base,
+        items: [
+          {
+            ...base.items[0],
+            business_name: "New Group Business",
+            logos: [{ asset_id: "12" }],
+          },
+        ],
+      },
+      p = await buildStage4Plan(
+        account,
+        input,
+        reader({ campaign: { ...campaign, brandGuidelinesEnabled: false } }),
+      );
+    expect(
+      p.operations
+        .filter((o) => o.kind === "assetGroupAssets")
+        .map((o) => o.fields.fieldType),
+    ).toContain("LOGO");
+    expect(p.operations.some((o) => o.kind === "campaignAssets")).toBe(false);
+    await expect(buildStage4Plan(account, input, reader())).rejects.toThrow(
+      /override branding/,
+    );
+  });
+  it.each(["campaign", "existing-group"])(
+    "atomic %s graph post-read resolves actual temp resources and verifies exact complete rows",
+    async (mode) => {
+      const p =
+          mode === "campaign"
+            ? await buildPmaxCreatePlan(account, brief(), reader())
+            : await buildStage4Plan(
+                account,
+                {
+                  action: "pmax_asset_group_create",
+                  items: [
+                    { campaign_id: "1", asset_group: brief().asset_groups[0] },
+                  ],
+                },
+                reader(),
+              ),
+        resources = new Map<string, string>();
+      let id = 200;
+      for (const o of p.operations)
+        if (o.resource_name?.includes("/-") && o.method === "create")
+          resources.set(
+            o.resource_name,
+            o.resource_name.replace(/-\d+$/, String(++id)),
+          );
+      const createdCampaign = p.operations.find(
+          (o) => o.kind === "campaigns",
+        )?.resource_name,
+        campaignID = createdCampaign
+          ? resources.get(createdCampaign)!.split("/").at(-1)!
+          : "1";
+      for (const o of p.operations)
+        if (
+          ["campaignConversionGoals", "conversionGoalCampaignConfigs"].includes(
+            o.kind,
+          ) &&
+          o.resource_name
+        )
+          resources.set(
+            o.resource_name,
+            o.resource_name.replace(/\/-\d+(?=~|$)/, "/" + campaignID),
+          );
+      const actual = p.operations.map((o) => {
+        const resource = o.resource_name
+          ? replaceExtendedTemps(o.resource_name, resources)
+          : prefix + "/" + o.kind + "/" + ++id;
+        const expected = replaceExtendedTemps(
+          o.expected,
+          resources,
+        ) as ExtendedRow;
+        return {
+          operation: o,
+          entity: { ...expected, resourceName: resource },
+          query: replaceExtendedTemps(o.read_query, resources),
+        };
+      });
+      const re = vi.fn(async (q: string): Promise<ExtendedRow[]> => {
+        const entries = actual.filter((a) => a.query === q);
+        if (entries.length)
+          return entries.map((a) => ({ [a.operation.response_key]: a.entity }));
+        const check = p.checks.find((c) => c.query === q);
+        if (check)
+          return [
+            ...structuredClone(check.rows),
+            ...(q.includes("FROM asset_group WHERE asset_group.campaign")
+              ? actual
+                  .filter((a) => a.operation.kind === "assetGroups")
+                  .map((a) => ({ assetGroup: a.entity }))
+              : []),
+          ];
+        throw new Error("Unknown mock reread");
+      });
+      const result = await verifyExtendedMutation(
+        p,
+        actual.map((a) => ({
+          success: true,
+          resource_name: String(a.entity.resourceName),
+          error: null,
+        })),
+        re,
+      );
+      expect(result.context_verified).toBe(true);
+      expect(
+        result.items[0]!.operations.filter((o) => !o.success).map((o) => ({
+          operation: o.operation,
+          resource_name: o.resource_name,
+          error: o.error,
+        })),
+      ).toEqual([]);
+      expect(result.status).toBe("VERIFIED");
+    },
+  );
 });

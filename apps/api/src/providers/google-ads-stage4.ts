@@ -4,7 +4,11 @@ import {
   stage4Actions,
 } from "../mcp/mcp-google-stage4-schema.js";
 import { normalizeBrief, validateText } from "./google-ads-stage0.js";
-import { buildPmaxCreatePlan, buildPmaxEditPlan } from "./google-ads-pmax.js";
+import {
+  buildPmaxCreatePlan,
+  buildPmaxEditPlan,
+  buildPmaxAssetGroupPlan,
+} from "./google-ads-pmax.js";
 import { finalUrl, canonical, type Stage1Reader } from "./google-ads-stage1.js";
 import {
   extClosed,
@@ -112,6 +116,12 @@ export function parseStage4Intent(raw: unknown): Stage4Intent {
       "acknowledge_irreversible",
     ],
     pmax_create: ["brief"],
+    pmax_asset_group_create: [
+      "campaign_id",
+      "asset_group",
+      "business_name",
+      "logos",
+    ],
     pmax_asset_replace: [
       "campaign_id",
       "asset_group_id",
@@ -357,6 +367,8 @@ export async function buildStage4Plan(
   read: Stage1Reader,
 ): Promise<ExtendedPlan> {
   const intent = parseStage4Intent(raw);
+  if (intent.action === "pmax_asset_group_create")
+    return buildPmaxAssetGroupPlan(account, intent, read);
   if (intent.action === "pmax_create") {
     if (intent.items.length !== 1)
       extFail(
@@ -1328,7 +1340,7 @@ export const stage4CapabilityMatrix = {
   pmax_existing_asset_group_update: "IMPLEMENTED",
   pmax_existing_search_theme_audience_signal_add: "IMPLEMENTED",
   pmax_asset_group_create_full_minimum_assets:
-    "IMPLEMENTED_INSIDE_ATOMIC_CREATE_BRIEF",
+    "IMPLEMENTED: ATOMIC BRIEF AND EXISTING PAUSED PMAX PARENT",
   pmax_brand_exclusions_negatives:
     "IMPLEMENTED_EXISTING_BRANDS_AND_V24_NEGATIVE_CRITERIA_PROVIDER_ELIGIBILITY_REQUIRED",
   pmax_image_text_attachment:
