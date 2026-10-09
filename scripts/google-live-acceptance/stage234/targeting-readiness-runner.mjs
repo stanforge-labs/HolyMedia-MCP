@@ -453,6 +453,8 @@ function criteria(rows, key) {
       "type",
       "status",
       "negative",
+      "bidModifier",
+      "device",
       "userList",
       "userInterest",
       "extendedDemographic",
