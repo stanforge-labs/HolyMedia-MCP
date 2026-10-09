@@ -2,7 +2,7 @@
   "schema_version": 1,
   "audit_date": "2026-10-09",
   "audited_branch": "codex/google-ads-write-full-scope-final",
-  "audited_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+  "audited_head": "d623a8bd12f27fdf35e4e7808511068d0b834d3a",
   "current_evidence": {
     "historical_evidence_preserved": true,
     "disposable_key": "artifacts/google-full-scope/test-key-issuance-20261009.json",
@@ -12,7 +12,7 @@
     "new_clone_live": "PENDING",
     "stage234_real_commits": "PENDING_HUMAN_APPROVAL",
     "cross_client_QRS": "BLOCKED_CLIENTS_NOT_CONNECTED",
-    "final_checkpoint": "artifacts/google-full-scope/final-acceptance-checkpoint-20261009.json",
+    "final_checkpoint": "artifacts/google-full-scope/final-acceptance-continuation-20261009.json",
     "fresh_read_only": "artifacts/google-full-scope/fresh-readiness-20261009.json",
     "stock_private_K": "artifacts/google-full-scope/K-private-mcp-live-20261009.json",
     "N_preview": "artifacts/google-full-scope/N-preview-final-20261009.json"
@@ -457,7 +457,8 @@
       "remaining_limits": [
         "Implemented bounded Search MANUAL_CPC/MAXIMIZE_CONVERSIONS clone.",
         "Positive proximity, same-account frozen shared negative lists and CALL/BUSINESS_NAME reuse are implemented/mock-tested.",
-        "Whole preview still rejects audience/device criteria, negative proximity or ambiguous radius relocation, non-keyword/non-RSA resources, multi-final URLs, custom/cross-account goals, unknown assets and unsupported networks/bidding/geo modes.",
+        "Provider-managed canonical three neutral DEVICE defaults now require source proof, explicit preview postcondition and full actual target reread; no synthetic DEVICE operations.",
+        "Whole preview still rejects audience/custom device criteria, nonempty ad-group modifier inventories, non-neutral geo/schedule modifiers, negative proximity or ambiguous radius relocation, non-keyword/non-RSA resources, multi-final URLs, custom/cross-account goals, unknown assets and unsupported networks/bidding/geo modes.",
         "These are local coverage gaps, not Google API impossibility. No silently dropped component."
       ]
     },

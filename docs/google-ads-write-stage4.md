@@ -113,4 +113,4 @@ Validation reuses Stage 0 RSA/schema/wide-character/asset text/date/tracking and
 - [v24 CampaignConversionGoal](https://raw.githubusercontent.com/googleapis/googleapis/master/google/ads/googleads/v24/resources/campaign_conversion_goal.proto)
 - [v24 CustomConversionGoal](https://raw.githubusercontent.com/googleapis/googleapis/master/google/ads/googleads/v24/resources/custom_conversion_goal.proto)
 
-Live K/L/Stage 4 acceptance, actual Google policy eligibility, Q/R client acceptance and production release are pending separate authorization and review. This package does not enable any write flag or deploy anything.
+K passed through stock private HTTP MCP on source `99ce4f0` with exact headline field rejection and zero Google calls/preview creation: `artifacts/google-full-scope/K-private-mcp-live-20261009.json`. It was not repeated during N continuation. This is not native Q/R client evidence. L/other Stage 4 live acceptance, actual Google policy eligibility, Q/R client acceptance and production release remain pending separate authorization and review. This package does not enable any write flag or deploy anything.

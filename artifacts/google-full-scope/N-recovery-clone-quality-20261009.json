@@ -1,0 +1,37 @@
+{
+  "source_head": "d623a8bd12f27fdf35e4e7808511068d0b834d3a",
+  "linux_ci": {
+    "run_id": 37946006936,
+    "job_id": 113872303632,
+    "conclusion": "success",
+    "node_tests": 125,
+    "api_tests": 1325,
+    "other_vitest_tests": 63,
+    "total_js_tests": 1513,
+    "skipped": 0,
+    "python": 28,
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma_migration_rehearsal": "PASS",
+    "api_worker_dependency_smokes": "PASS",
+    "standard_secret_scan": "PASS"
+  },
+  "security": {
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "risk_assessment": "artifacts/google-full-scope/moderate-security-risk-assessment-20261009.json"
+  },
+  "local_windows": {
+    "tests": "PASS",
+    "db_redis_dependent_skips": 26,
+    "python": 28,
+    "targeted_commit_readiness": 16,
+    "combined_clone_stage01": 196
+  },
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T14:43:17.817Z"
+}

@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "previous_checkpoint": "artifacts/google-full-scope/final-acceptance-checkpoint-20261009.json",
+  "result": "PARTIAL_N_COMMIT_NOT_EXECUTED",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "tested_code_head": "d623a8bd12f27fdf35e4e7808511068d0b834d3a",
+  "running_acceptance_source": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+  "runtime_unchanged": true,
+  "failed_preview": "ff5169fe-86ca-467f-9448-8c481619ad0c",
+  "old_preview_expired": true,
+  "old_attempt_no_retry": true,
+  "N": {
+    "approval": "PERSISTED_VALID_AT_PREFLIGHT",
+    "commit": "NOT_SENT_API_READINESS_TIMEOUT",
+    "verification": "FRESH_READ_ORIGINAL_CPC100000_AND_UNCHANGED_FIXTURE",
+    "rollback": "NOT_CREATED_NOT_NEEDED_NO_MUTATION",
+    "live": "BLOCKED",
+    "recovery_fix": "Bounded45s health-only wait, no child/provider/MCP retries, exact approval recheck after ready and immutable helper manifest.",
+    "lower_level_original_failure": "UNPROVEN; original child stderr discarded; isolated probes healthy and did not reproduce timeout.",
+    "next": "A new JIT N preview with new human approval is required; do not reuse failed preview/claims. Keep K passed; no new key."
+  },
+  "acceptance": {
+    "stage01": "HISTORICAL_LIVE_PASS",
+    "G": "MOCK_PASS; LIVE_BLOCKED_AUTO_OBJECT_AND_EXPLICIT_CPC_UNPROVEN",
+    "H": "MOCK_PASS; LIVE_PENDING_N_RECOVERY; NONSHARED_FIXTURE_NO_LIVE_SHARED_IMPACT",
+    "I": "MOCK_PASS; LIVE_BLOCKED_ELIGIBILITY_UNPROVEN",
+    "J": "MOCK_PASS; LIVE_BLOCKED_DISTRICT_PARENT_AND_RADIUS_CENTER_UNPROVEN",
+    "K": "STOCK_PRIVATE_MCP_PASS_PREVIOUS_NOT_REPEATED",
+    "L": "MOCK_PASS; LIVE_PENDING_SEPARATE_APPROVAL"
+  },
+  "readiness_after_failure": {
+    "result": "PASS_READ_ONLY",
+    "source": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+    "image": "sha256:77f70b71f61953626d18c8e66f1315c3db1df8bc6848371a312866134580e9bd",
+    "fixture_unchanged": true,
+    "counts": {
+      "read": 34,
+      "oauth_refresh": 1,
+      "failed_http": 0,
+      "validate_only": 0,
+      "write": 0
+    },
+    "shared_set_attachments": 0,
+    "campaigns_paused": 2,
+    "groups_paused": 3,
+    "rsa_paused": 3,
+    "original_keywords_enabled": 20,
+    "residual_phrase_paused": true,
+    "ad_group_cpc_micros": "100000",
+    "timestamp": "2026-10-09T14:38:03.975Z"
+  },
+  "PMax": {
+    "code_mock": "PASS_SUPPORTED_NON_RETAIL",
+    "live": "BLOCKED_REAL_MEDIA_AND_GOAL_PREREQUISITES",
+    "goals_proven": 0,
+    "eligible_images_proven": 0,
+    "bounded_sample_only": true,
+    "proposal": "Use legitimate same-account existing ENABLED primary conversion action and actual eligible owned JPEG/PNG landscape/square/logo; each creation/setup if necessary needs separate controlled approval. Never create dummyIDs or conversiongoals just to satisfy a mock."
+  },
+  "clone": {
+    "packet_commits": ["0fd21a2", "2369222"],
+    "supported_default_devices": "SOURCE_AND_TARGET_PROVEN_PROVIDER_MANAGED_DEFAULTS; ZERO_SYNTHETIC_DEVICE_WRITES",
+    "mock_tests": 196,
+    "live": "PENDING",
+    "remaining_limits": [
+      "Custom device/geo/schedule bid modifiers and nonempty adGroupBidModifier inventory conservatively rejected.",
+      "Audience/non-RSA/nonSearch/multi-URL/custom goals and other unsupported source components are explicit profile gaps, not silently omitted or declared API impossible."
+    ]
+  },
+  "cross_client": {
+    "Q": "BLOCKED_ACTUAL_CHATGPT_NOT_CONNECTED",
+    "R": "BLOCKED_ACTUAL_SECOND_CLIENT_NOT_CONNECTED",
+    "S": "HISTORICAL_SERVER_APPROVAL_PASS; N_APPROVAL_PERSISTED; REAL_CLIENT_CONSENT_GATE_PENDING",
+    "instruction": "Connect a real private TEST-only MCP transport using local/native OAuth credentials; localhost4402 is approval-only, not an MCP endpoint. Q requires an approved reachable isolated OAuth/MCP endpoint; no production/public routing is changed by this task. Do not paste credentials into chat.",
+    "mock_is_not_live": true
+  },
+  "calls_this_continuation": {
+    "read": 46,
+    "validate_only": 0,
+    "real_write": 0,
+    "oauth_refresh": 1,
+    "mcp_commit": 0,
+    "startup_diagnostics_provider_calls": 0
+  },
+  "current_cycle_totals": {
+    "read": 193,
+    "validate_only": 1,
+    "real_write": 0,
+    "oauth_refresh": 2,
+    "historical_stage01_excluded": true
+  },
+  "quality_evidence": "artifacts/google-full-scope/N-recovery-clone-quality-20261009.json",
+  "N_evidence": "artifacts/google-full-scope/N-continuation-blocked-20261009.json",
+  "key": {
+    "reissued": false,
+    "existing_id": "34cd413a-8aff-4677-9439-abf2a9fb473a",
+    "expires_at": "2026-10-10T12:51:17.677Z",
+    "only_customer": "8590146099",
+    "encrypted_disposable_vault": true
+  },
+  "next_approval_url": null,
+  "no_new_preview_created": true,
+  "production_changed": false,
+  "main_changed": false,
+  "stage01_release_candidate_unchanged": "bb5b8d16979a41720129243927a6c9f56e091083",
+  "original_tz_complete": false,
+  "timestamp": "2026-10-09T14:44:37Z"
+}
