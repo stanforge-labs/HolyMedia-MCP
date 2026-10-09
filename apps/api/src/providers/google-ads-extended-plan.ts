@@ -6,6 +6,7 @@ import type {
 } from "./google-ads-stage1.js";
 import { canonical } from "./google-ads-stage1.js";
 import { googleAdsApiError } from "./google-ads.error.js";
+import { stage2CpcVerificationEntity } from "./google-ads-stage2.js";
 import {
   assertGoogleWriteAccount,
   customerId,
@@ -691,7 +692,7 @@ export async function verifyExtendedMutation(
       }
       const expected = extRow(replaceExtendedTemps(o.expected, refs));
       if (resource) expected.resourceName = resource;
-      const comparisonEntity = entity ? structuredClone(entity) : null;
+      let comparisonEntity = entity ? structuredClone(entity) : null;
       if (
         comparisonEntity &&
         ["customers", "campaigns", "adGroups"].includes(o.kind) &&
@@ -803,6 +804,30 @@ export async function verifyExtendedMutation(
         ["adGroupCriteria", "campaignCriteria"].includes(o.kind)
       )
         comparisonEntity.negative = false;
+      // Only the version-5 CPC profile may reconcile an omitted cleared override.
+      // Its independently selected provider source/effective bid must prove exact
+      // inheritance; no global default normalization or raw snapshot rewriting.
+      if (
+        comparisonEntity &&
+        plan.version === 5 &&
+        o.kind === "adGroupCriteria" &&
+        o.method === "update" &&
+        o.update_mask === "cpc_bid_micros" &&
+        typeof expected.effectiveCpcBidSource === "string" &&
+        [
+          "cpc_bid_micros",
+          "effective_cpc_bid_micros",
+          "effective_cpc_bid_source",
+        ].every((field) =>
+          o.read_query
+            .split(" FROM ")[0]
+            ?.includes(`ad_group_criterion.${field}`),
+        )
+      )
+        comparisonEntity = stage2CpcVerificationEntity(
+          comparisonEntity,
+          expected,
+        );
       verified =
         contextVerified &&
         results[i]?.success === true &&

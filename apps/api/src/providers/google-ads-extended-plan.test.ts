@@ -68,6 +68,69 @@ function plan(): ExtendedPlan {
   };
 }
 describe("Google extension immutable plan primitives (mock reads only)", () => {
+  it("version5 inherited CPC verification requires exact selected source/effective bid and preserves raw evidence", async () => {
+    const p = plan();
+    p.version = 5;
+    p.checks = [];
+    const op = p.operations[0]!,
+      resource = `${prefix}/adGroupCriteria/2~1`,
+      query =
+        "SELECT ad_group_criterion.resource_name, ad_group_criterion.status, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.cpc_bid_micros, ad_group_criterion.effective_cpc_bid_micros, ad_group_criterion.effective_cpc_bid_source FROM ad_group_criterion";
+    const actual = {
+      resourceName: resource,
+      status: "ENABLED",
+      keyword: { text: "synthetic test", matchType: "EXACT" },
+      effectiveCpcBidSource: "AD_GROUP",
+      effectiveCpcBidMicros: "2000000",
+    };
+    Object.assign(op, {
+      kind: "adGroupCriteria",
+      resource_name: resource,
+      fields: { resourceName: resource },
+      before: {
+        ...actual,
+        cpcBidMicros: "3000000",
+        effectiveCpcBidSource: "AD_GROUP_CRITERION",
+        effectiveCpcBidMicros: "3000000",
+      },
+      expected: { ...actual, cpcBidMicros: "0" },
+      read_query: query,
+      response_key: "adGroupCriterion",
+      update_mask: "cpc_bid_micros",
+    });
+    const verify = (entity: unknown) =>
+      verifyExtendedMutation(
+        p,
+        [{ success: true, resource_name: resource, error: null }],
+        async () => [{ adGroupCriterion: entity }],
+      );
+    const result = await verify(actual);
+    expect(result.status).toBe("VERIFIED");
+    expect(result.actual[0]).not.toHaveProperty("cpcBidMicros");
+    expect(actual).not.toHaveProperty("cpcBidMicros");
+    expect((await verify({ ...actual, cpcBidMicros: "0" })).status).toBe(
+      "VERIFIED",
+    );
+    for (const wrong of [
+      { ...actual, cpcBidMicros: "1" },
+      { ...actual, effectiveCpcBidSource: "AD_GROUP_CRITERION" },
+      { ...actual, effectiveCpcBidSource: "UNKNOWN" },
+      { ...actual, effectiveCpcBidMicros: "2000001" },
+      { ...actual, status: "PAUSED" },
+      { ...actual, keyword: { text: "changed", matchType: "EXACT" } },
+      { ...actual, resourceName: "customers/9999999999/adGroupCriteria/2~1" },
+    ])
+      expect((await verify(wrong)).status).toBe("NOT_VERIFIED");
+    p.version = 4;
+    expect((await verify(actual)).status).toBe("NOT_VERIFIED");
+    p.version = 5;
+    op.update_mask = "status";
+    expect((await verify(actual)).status).toBe("NOT_VERIFIED");
+    op.update_mask = "cpc_bid_micros";
+    op.read_query =
+      "SELECT ad_group_criterion.resource_name, ad_group_criterion.cpc_bid_micros FROM ad_group_criterion";
+    expect((await verify(actual)).status).toBe("NOT_VERIFIED");
+  });
   it("tracking clear normalizes only selected exact masked leaves on the independently owned entity", async () => {
     for (const [kind, table, key] of [
       ["customers", "customer", "customer"],
