@@ -8,6 +8,10 @@ import process from "node:process";
 const { AbortSignal, structuredClone, console } = globalThis;
 import { readAcceptanceContext } from "./context-vault.mjs";
 import {
+  isDiscoveryQuery,
+  runTargetingDiscovery,
+} from "./targeting-discovery.mjs";
+import {
   classifyReadOnlyRequest,
   PREFLIGHT_QUERIES,
 } from "./read-only-guard.mjs";
@@ -177,7 +181,11 @@ export function safeReadinessError(e) {
       : "Error",
   };
 }
-export function classifyReadinessRequest(input, init = {}) {
+export function classifyReadinessRequest(
+  input,
+  init = {},
+  discoveryQueries = new Set(),
+) {
   let url;
   try {
     url = new URL(
@@ -213,6 +221,14 @@ export function classifyReadinessRequest(input, init = {}) {
   } catch {
     fail("readiness_non_read_blocked");
   }
+  if (discoveryQueries.has(body.query) && isDiscoveryQuery(body.query)) {
+    if (Object.keys(body).length !== 1 || Object.keys(body)[0] !== "query")
+      fail("readiness_non_read_blocked");
+    return classifyTargetingRead(input, {
+      ...init,
+      body: JSON.stringify({ query: queries.customer }),
+    });
+  }
   if (Object.values(extraQueries).includes(body.query)) {
     if (
       url.pathname !==
@@ -224,9 +240,13 @@ export function classifyReadinessRequest(input, init = {}) {
   }
   return classifyTargetingRead(input, init);
 }
-export function installReadinessGuard(nativeFetch, counts) {
+export function installReadinessGuard(
+  nativeFetch,
+  counts,
+  discoveryQueries = new Set(),
+) {
   return async (input, init = {}) => {
-    const kind = classifyReadinessRequest(input, init);
+    const kind = classifyReadinessRequest(input, init, discoveryQueries);
     if (
       (kind === "oauth_refresh" && counts.oauth_refresh >= 1) ||
       (kind === "read" && counts.read >= 80)
@@ -646,7 +666,8 @@ export async function runTargetingReadiness({
     },
     nativeFetch = globalThis.fetch,
     errors = {},
-    inventories = {};
+    inventories = {},
+    discoveryQueries = new Set();
   let db,
     stock,
     stage = "runtime_preflight",
@@ -659,7 +680,11 @@ export async function runTargetingReadiness({
     directoryChecked = true;
     stock = await load();
     assertReadinessRuntime(env, stock.config);
-    globalThis.fetch = installReadinessGuard(nativeFetch, counts);
+    globalThis.fetch = installReadinessGuard(
+      nativeFetch,
+      counts,
+      discoveryQueries,
+    );
     const vault = new stock.Vault(),
       context = await readContext("/acceptance-state/fixture-context.json", {
         vault,
@@ -787,6 +812,27 @@ export async function runTargetingReadiness({
       } catch (e) {
         errors[name] = safeReadinessError(e);
       }
+    let discovery;
+    if (env.STAGE234_DISCOVERY === "true") {
+      stage = "bounded_targeting_discovery";
+      discovery = await runTargetingDiscovery({
+        read: async (query) => {
+          if (!isDiscoveryQuery(query)) fail("readiness_query_unknown");
+          discoveryQueries.add(query);
+          return adapter.searchStream(
+            credentials.accessToken,
+            target.customer,
+            target.mcc,
+            query,
+          );
+        },
+        fixture: first,
+        existingAudiences: criteria(before.groupAudiences, "adGroupCriterion"),
+        campaignCriteria: before.campaignCriteria,
+        source: env.STAGE234_SOURCE_HEAD,
+        now: now(),
+      });
+    }
     stage = "fixture_after";
     const afterProof = await proof(),
       after = await snapshot();
@@ -814,6 +860,7 @@ export async function runTargetingReadiness({
       unchanged: true,
       now: now(),
     });
+    if (discovery) evidence.discovery = discovery;
   } catch (e) {
     evidence = {
       kind: "stage234_targeting_readiness_fixed_READ_only",

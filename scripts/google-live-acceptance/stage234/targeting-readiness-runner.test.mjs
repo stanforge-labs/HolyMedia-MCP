@@ -352,6 +352,7 @@ async function mockedRun({
   refresh = false,
   badDirectory = false,
   campaignCriteria = [],
+  discovery = false,
 } = {}) {
   const a = authority(),
     rows = fixtureRows(),
@@ -440,7 +441,7 @@ async function mockedRun({
   };
   try {
     const result = await runTargetingReadiness({
-      env,
+      env: discovery ? { ...env, STAGE234_DISCOVERY: "true" } : env,
       load: async () => ({
         config: config(),
         Vault,
@@ -482,6 +483,20 @@ test("READ runner emits one sanitized evidence, readiness blockers independent o
   assert.ok(!JSON.stringify(r.saved).includes("mock-hidden-marker"));
   assert.ok(!JSON.stringify(r.saved).includes("do-not-emit-provider-payload"));
   assert.equal(r.vaultUpdates, 0);
+});
+test("opt-in discovery adds only guarded READs, independent blockers and same fixture proof", async () => {
+  const r = await mockedRun({ discovery: true });
+  assert.equal(r.result.result, "PASS_READ_ONLY");
+  assert.equal(r.saved[0].value.fixture_unchanged, true);
+  assert.equal(r.saved[0].value.discovery.result, "READ_ONLY_DISCOVERY");
+  assert.equal(r.saved[0].value.discovery.G.result, "BLOCKED");
+  assert.equal(r.saved[0].value.discovery.I.IN_MARKET.result, "BLOCKED");
+  assert.equal(r.saved[0].value.discovery.I.AFFINITY.result, "BLOCKED");
+  assert.equal(r.result.provider_reads, r.calls.length);
+  assert.equal(r.result.validate_only, 0);
+  assert.equal(r.result.real_writes, 0);
+  assert.equal(r.vaultUpdates, 0);
+  assert.ok(!JSON.stringify(r.saved).includes("mock-provider-marker"));
 });
 test("fresh customer proof prevents any inventory query; fixture drift blocks without writes", async () => {
   const foreign = await mockedRun({ foreign: true });
