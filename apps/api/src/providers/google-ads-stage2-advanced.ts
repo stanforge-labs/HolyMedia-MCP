@@ -390,7 +390,7 @@ export function parseStage2AdvancedIntent(raw: unknown): Stage2AdvancedIntent {
   if (r.action === "stage2_bulk_inverse") {
     extClosed(raw, ["action", "items"], ["action", "items"]);
     const p = parseStage2Intent({
-      action: "bid_budget_update",
+      action: inverseFoundationAction(r.items),
       items: r.items,
     });
     return { action: "stage2_bulk_inverse", items: p.items };
@@ -1355,7 +1355,7 @@ async function buildBulk(
   let selected: Stage2Item[];
   if (intent.action === "stage2_bulk_inverse")
     selected = parseStage2Intent({
-      action: "bid_budget_update",
+      action: inverseFoundationAction(intent.items),
       items: intent.items,
     }).items;
   else {
@@ -1501,7 +1501,13 @@ async function buildBulk(
   }
   const base = await buildStage2Plan(
     account,
-    { action: "bid_budget_update", items: selected },
+    {
+      action:
+        intent.action === "stage2_bulk_inverse"
+          ? inverseFoundationAction(selected)
+          : "bid_budget_update",
+      items: selected,
+    },
     read,
   );
   const plan: ExtendedPlan = {
@@ -1536,12 +1542,20 @@ async function buildBulk(
       ).items,
     };
   } catch {
-    /* No inverse for inherited/zero prior overrides. */
+    /* No inverse when a prior inherited/zero source/parent is not proven. */
   }
   assertExtendedPlan(plan, account);
   return plan;
 }
 const prefixFor = (account: string) => `customers/${account}`;
+function inverseFoundationAction(
+  items: unknown,
+): "bid_budget_update" | "bid_budget_inherited_rollback" {
+  return Array.isArray(items) &&
+    items.some((i) => extRow(extRow(i).change).mode === "inherit")
+    ? "bid_budget_inherited_rollback"
+    : "bid_budget_update";
+}
 function cpaMatches(
   metrics: ExtendedRow,
   operator: string,
