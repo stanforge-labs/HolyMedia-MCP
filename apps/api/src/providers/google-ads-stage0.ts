@@ -138,7 +138,43 @@ const customerQuery =
 const actionsQuery =
   "SELECT conversion_action.resource_name, conversion_action.id, conversion_action.name, conversion_action.status, conversion_action.primary_for_goal, conversion_action.category, conversion_action.origin, conversion_action.owner_customer FROM conversion_action";
 const goalsQuery =
-  "SELECT customer_conversion_goal.category, customer_conversion_goal.origin, customer_conversion_goal.biddable FROM customer_conversion_goal";
+  "SELECT customer_conversion_goal.resource_name, customer_conversion_goal.category, customer_conversion_goal.origin, customer_conversion_goal.biddable FROM customer_conversion_goal";
+export function stage0CampaignGoalResource(
+  account: string,
+  campaign: string,
+  goal: JsonRow,
+): string {
+  const prefix = `customers/${customerId(account)}`;
+  const match =
+    typeof goal.resourceName === "string"
+      ? /^customers\/([0-9]{1,20})\/customerConversionGoals\/([1-9][0-9]{0,9})~([1-9][0-9]{0,9})$/.exec(
+          goal.resourceName,
+        )
+      : null;
+  if (!match)
+    return error(
+      "google_conversion_goal_invalid",
+      "Canonical customer conversion goal resource отсутствует/невалиден; enum IDs не угадываются.",
+    );
+  if (
+    `customers/${match[1]}` !== prefix ||
+    BigInt(match[2]!) > 2147483647n ||
+    BigInt(match[3]!) > 2147483647n ||
+    !new RegExp(`^${prefix}/campaigns/-?[1-9][0-9]{0,19}$`).test(campaign) ||
+    [goal.category, goal.origin].some(
+      (v) =>
+        typeof v !== "string" ||
+        !/^[A-Z][A-Z0-9_]{1,63}$/.test(v) ||
+        ["UNKNOWN", "UNSPECIFIED"].includes(v),
+    )
+  )
+    error(
+      "google_conversion_goal_invalid",
+      "Canonical customer conversion goal resource/owner/category/origin не подтверждён; enum IDs не угадываются.",
+    );
+  // v24 uses the provider's numeric category~origin suffix, not JSON enum names.
+  return `${prefix}/campaignConversionGoals/${campaign.split("/").at(-1)}~${match[2]}~${match[3]}`;
+}
 export function stage0Query(kind: Stage0Operation["kind"], where: string) {
   const [table, , , fields] = resources[kind];
   return `SELECT ${fields} FROM ${table} WHERE ${where}`;
@@ -601,6 +637,36 @@ export async function buildStage0Plan(
       "Cross-account conversion goals нельзя создавать в одном атомарном customer mutation; требуется отдельное расширение.",
     );
   let customRequired = false;
+  if (selected.length) {
+    const resourceNames = new Set<string>(),
+      semanticKeys = new Set<string>();
+    for (const goal of goalRows) {
+      stage0CampaignGoalResource(account_id, `${prefix}/campaigns/-2`, goal);
+      const resourceName = String(goal.resourceName),
+        semanticKey = `${goal.category}~${goal.origin}`;
+      if (resourceNames.has(resourceName) || semanticKeys.has(semanticKey))
+        error(
+          "google_conversion_goal_invalid",
+          "Duplicate/ambiguous canonical conversion goals; ничего не создаётся.",
+        );
+      resourceNames.add(resourceName);
+      semanticKeys.add(semanticKey);
+      const confirmed = await query(
+          `${goalsQuery} WHERE customer_conversion_goal.resource_name = ${quote(resourceName)}`,
+        ),
+        value = row(confirmed[0]?.customerConversionGoal);
+      if (
+        confirmed.length !== 1 ||
+        value.resourceName !== resourceName ||
+        value.category !== goal.category ||
+        value.origin !== goal.origin
+      )
+        error(
+          "google_conversion_goal_invalid",
+          "Canonical conversion goal reference не совпадает с provider category/origin; ничего не создаётся.",
+        );
+    }
+  }
   for (const action of selected) {
     if (
       !goalRows.some(
@@ -786,21 +852,26 @@ export async function buildStage0Plan(
       });
     }
   if (selected.length)
-    for (const goal of goalRows)
-      add(
-        "campaignConversionGoal",
-        {
-          resourceName: `${prefix}/campaignConversionGoals/${campaignName.split("/").at(-1)}~${goal.category}~${goal.origin}`,
-          biddable:
-            !customRequired &&
-            selected.some(
-              (a) => a.category === goal.category && a.origin === goal.origin,
-            ),
-        },
-        "update",
-        "biddable",
-        null,
-      );
+    for (const goal of goalRows) {
+      const fields = {
+        resourceName: stage0CampaignGoalResource(
+          account_id,
+          campaignName,
+          goal,
+        ),
+        biddable:
+          !customRequired &&
+          selected.some(
+            (a) => a.category === goal.category && a.origin === goal.origin,
+          ),
+      };
+      add("campaignConversionGoal", fields, "update", "biddable", null, {
+        ...fields,
+        campaign: campaignName,
+        category: goal.category,
+        origin: goal.origin,
+      });
+    }
   if (customRequired) {
     const custom = temp("customConversionGoals");
     add("customConversionGoal", {
