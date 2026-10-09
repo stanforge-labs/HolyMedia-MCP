@@ -22,7 +22,7 @@ ROOT = preview_supervisor.ROOT
 PROJECT = preview_supervisor.PROJECT
 NETWORK = preview_supervisor.NETWORK
 require = preview_supervisor.require
-FILES = {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs', 'context-vault.mjs', 'wait-local-ready.mjs'}
+FILES = {'commit-guard.mjs', 'commit-runner.mjs', 'live-guard.mjs', 'live-runner.mjs', 'context-vault.mjs', 'wait-local-ready.mjs', 'startup-diagnostics.mjs'}
 CLAIMS = {'n-supervisor-launch.claim', 'n-mcp_commit.claim', 'n-write.claim', 'n-mcp_rollback_preview.claim', 'n-validate_only.claim', 'n-authority.json', 'n-proof.json', 'n-commit-evidence.json', 'n-blocked-evidence.json', 'commit.runtime.env'}
 
 

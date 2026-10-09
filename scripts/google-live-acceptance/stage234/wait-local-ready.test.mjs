@@ -77,3 +77,18 @@ test("failed child is not retried and stock persisted approval still runs after 
   );
   assert.match(source, /stage234_commit_stock_api_not_ready/);
 });
+test("missing readiness route is never treated as healthy or permission to commit", async () => {
+  let time = 0;
+  assert.equal(
+    await waitLocalReady({
+      server,
+      now: () => time,
+      sleep: async (ms) => {
+        time += ms;
+      },
+      fetch: async () => ({ status: 404 }),
+    }),
+    false,
+  );
+  assert.equal(time, LOCAL_STARTUP_BUDGET_MS);
+});

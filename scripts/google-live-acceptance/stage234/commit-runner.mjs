@@ -15,6 +15,7 @@ const fetch = (...args) => globalThis.fetch(...args);
 import { queries, sanitized, safeError } from "./live-guard.mjs";
 import { assertFixture, assertPausedDeliveryFixtures } from "./live-runner.mjs";
 import { waitLocalReady } from "./wait-local-ready.mjs";
+import { startupDiagnostics } from "./startup-diagnostics.mjs";
 import {
   target,
   canonical,
@@ -98,7 +99,8 @@ export async function runNContinuation() {
   let db,
     server,
     stage = "approval_db_preflight",
-    closeDatabase;
+    closeDatabase,
+    startupEvidence;
   const report = {
     acceptance_test: "N_COMMIT_ROLLBACK_PREVIEW",
     source_head: env.STAGE234_SOURCE_HEAD,
@@ -315,11 +317,13 @@ export async function runNContinuation() {
       ],
       {
         cwd: "/workspace",
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
         env: { ...env, STAGE234_COMMIT_GUARD_PRELOAD: "1", LOG_LEVEL: "error" },
       },
     );
+    startupEvidence = startupDiagnostics(server);
     const ready = await waitLocalReady({ fetch, server });
+    report.startup = startupEvidence();
     if (!ready) fail("stage234_commit_stock_api_not_ready");
     // Fresh DB approval immediately precedes the one immutable HTTP commit.
     bound = await approveProof();
@@ -507,6 +511,7 @@ export async function runNContinuation() {
         ...report,
         failure_stage: stage,
         code: safeError(error),
+        startup: startupEvidence?.() ?? null,
         provider_read_call_count: counts.filter((e) =>
           ["read", "read_mcc"].includes(e.type),
         ).length,
