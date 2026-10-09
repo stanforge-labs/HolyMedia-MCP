@@ -158,6 +158,15 @@ export const pmaxBriefSchema = object(
     "contains_eu_political_advertising",
   ],
 );
+const trackingClearSchema: BriefSchema & { uniqueItems: true } = {
+  type: "array",
+  description:
+    "Explicitly clear only selected tracking URL fields; cannot also set the same field.",
+  minItems: 1,
+  maxItems: 2,
+  uniqueItems: true,
+  items: en(["tracking_url_template", "final_url_suffix"]),
+};
 export const stage4RowSchema = object({
   campaign_id: id,
   ad_group_id: id,
@@ -197,6 +206,7 @@ export const stage4RowSchema = object({
   networks: object({ search_partners: bool, display_expansion: bool }),
   final_url_suffix: string(2048),
   tracking_url_template: string(2048),
+  clear_fields: trackingClearSchema,
   final_url: string(2048),
   path1: string(15),
   path2: string(15),

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extendedFixture } from "./google-extended-test.fixture.js";
+import { parseStage4Intent } from "../providers/google-ads-stage4.js";
+import { stage4ToolSchema } from "./mcp-google-stage4-schema.js";
 import {
   customer,
   object,
@@ -128,28 +130,55 @@ describe("P39 tracking rollback: stock services, mocked HTTP only", () => {
       expect(target.trackingUrlTemplate).toBe(oldTemplate);
     },
   );
-  it.each([undefined, ""])(
-    "missing/empty BEFORE explicitly refuses guessed clear inverse (%s)",
-    async (old) => {
-      const { f, target, preview } = setup();
-      target.finalUrlSuffix = old;
-      const p = await preview({ final_url_suffix: newSuffix });
+  it.each(["account", "campaign", "ad_group"] as const)(
+    "%s missing/empty BEFORE restores explicit provider clear with separate approval",
+    async (level) => {
+      const { f, target, preview } = setup(level);
+      delete target.finalUrlSuffix;
+      target.trackingUrlTemplate = "";
+      const p = await preview();
       const plan = object(f.previewsRows[0]!.requestedState);
-      expect(plan.inverse_intent).toBeUndefined();
-      const item = object((plan.items as unknown[])[0]);
-      expect(object(item.rollback)).toMatchObject({
-        supported: false,
-        source: "HOLYMEDIA",
-        code: "google_tracking_rollback_clear_unsupported",
-      });
-      expect(JSON.stringify(p)).toContain(
-        "google_tracking_rollback_clear_unsupported",
+      const inverseRow = object(
+        (object(plan.inverse_intent).items as unknown[])[0],
       );
+      expect(inverseRow.clear_fields).toEqual([
+        "final_url_suffix",
+        "tracking_url_template",
+      ]);
+      expect(inverseRow.final_url_suffix).toBeUndefined();
+      expect(inverseRow.tracking_url_template).toBeUndefined();
+      const immutableNeighbors = {
+        name: target.name,
+        status: target.status,
+        resourceName: target.resourceName,
+        campaign: target.campaign,
+      };
       await f.approve(p);
       const r = object(await commit(f, p));
       expect(r.status).toBe("VERIFIED");
-      await expect(rollback(f, r.commit_id)).rejects.toThrow();
+      const inv = await rollback(f, r.commit_id);
+      expect(JSON.stringify(inv)).toContain("CLEAR tracking");
+      const op = object(
+        (object(f.previewsRows[1]!.requestedState).operations as unknown[])[0],
+      );
+      expect(op.update_mask).toBe("final_url_suffix,tracking_url_template");
+      expect(object(op.fields)).toMatchObject({
+        finalUrlSuffix: "",
+        trackingUrlTemplate: "",
+      });
+      await expect(commit(f, inv)).rejects.toThrow();
       expect(f.counts().write).toBe(1);
+      await f.approve(inv);
+      expect(object(await commit(f, inv)).status).toBe("VERIFIED");
+      expect(target.finalUrlSuffix).toBe("");
+      expect(target.trackingUrlTemplate).toBe("");
+      expect({
+        name: target.name,
+        status: target.status,
+        resourceName: target.resourceName,
+        campaign: target.campaign,
+      }).toEqual(immutableNeighbors);
+      expect(f.counts().write).toBe(2);
     },
   );
   it("invalid captured BEFORE does not promise unusable inverse", async () => {
@@ -175,10 +204,10 @@ describe("P39 tracking rollback: stock services, mocked HTTP only", () => {
     expect(target.finalUrlSuffix).toBe(oldSuffix);
     expect(target.trackingUrlTemplate).toBeUndefined();
   });
-  it("mixed supported/empty BEFORE batch never advertises unsafe partial inverse", async () => {
+  it("mixed supported/invalid BEFORE batch never advertises unsafe partial inverse", async () => {
     const { f } = setup();
     const group = object(f.resources.get(`${prefix}/adGroups/10`)?.adGroup);
-    group.finalUrlSuffix = "";
+    group.finalUrlSuffix = "not a valid suffix";
     await f.call("google_ads_ads_assets_preview", {
       action: "tracking_update",
       items: [
@@ -196,8 +225,65 @@ describe("P39 tracking rollback: stock services, mocked HTTP only", () => {
     const items = plan.items as unknown[];
     expect(object(object(items[0]).rollback).supported).toBe(true);
     expect(object(object(items[1]).rollback).code).toBe(
-      "google_tracking_rollback_clear_unsupported",
+      "google_tracking_rollback_previous_invalid",
     );
+    expect(f.counts().write).toBe(0);
+  });
+  it("sets one tracking neighbor and clears the other with truthful inverse", async () => {
+    const { f, target, preview } = setup();
+    const p = await preview({
+      final_url_suffix: newSuffix,
+      clear_fields: ["tracking_url_template"],
+    });
+    await f.approve(p);
+    const r = object(await commit(f, p));
+    expect(r.status).toBe("VERIFIED");
+    expect(target.finalUrlSuffix).toBe(newSuffix);
+    expect(target.trackingUrlTemplate).toBe("");
+    const inv = await rollback(f, r.commit_id);
+    await f.approve(inv);
+    expect(object(await commit(f, inv)).status).toBe("VERIFIED");
+    expect(target.finalUrlSuffix).toBe(oldSuffix);
+    expect(target.trackingUrlTemplate).toBe(oldTemplate);
+  });
+  it("clear schema is closed, bounded and unique, runtime rejects set/clear conflicts before reads", async () => {
+    const schema = stage4ToolSchema("google_ads_ads_assets_preview")!;
+    expect(
+      schema.properties!.items!.items!.properties!.clear_fields,
+    ).toMatchObject({ minItems: 1, maxItems: 2, uniqueItems: true });
+    const { f, preview } = setup();
+    for (const changes of [
+      { final_url_suffix: newSuffix, clear_fields: ["final_url_suffix"] },
+      { clear_fields: ["final_url_suffix", "final_url_suffix"] },
+      { clear_fields: [] },
+      { clear_fields: ["name"] },
+      { final_url_suffix: "" },
+    ])
+      await expect(preview(changes)).rejects.toThrow();
+    expect(f.counts()).toEqual({ read: 0, validate_only: 0, write: 0 });
+    expect(() =>
+      parseStage4Intent({
+        action: "campaign_update",
+        items: [{ campaign_id: "1", clear_fields: ["tracking_url_template"] }],
+      }),
+    ).toThrow();
+  });
+  it("approved clear preview is stale after a changed provider tracking snapshot", async () => {
+    const { f, target, preview } = setup();
+    const p = await preview({ clear_fields: ["tracking_url_template"] });
+    await f.approve(p);
+    target.trackingUrlTemplate = newTemplate;
+    await expect(commit(f, p)).rejects.toThrow(/stale/i);
+    expect(target.trackingUrlTemplate).toBe(newTemplate);
+    expect(f.counts().write).toBe(0);
+  });
+  it("clear does not bypass foreign account resource proof", async () => {
+    const { f, target, preview } = setup();
+    target.resourceName = "customers/9999999999/campaigns/1";
+    await expect(
+      preview({ clear_fields: ["final_url_suffix"] }),
+    ).rejects.toThrow();
+    expect(f.counts().validate_only).toBe(0);
     expect(f.counts().write).toBe(0);
   });
   it("stale approved forward rejects before mutation and audits", async () => {

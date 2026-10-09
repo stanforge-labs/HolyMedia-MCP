@@ -90,6 +90,7 @@ export function parseStage4Intent(raw: unknown): Stage4Intent {
       "ad_group_id",
       "final_url_suffix",
       "tracking_url_template",
+      "clear_fields",
     ],
     asset_group_update: [
       "campaign_id",
@@ -174,6 +175,17 @@ export function parseStage4Intent(raw: unknown): Stage4Intent {
   const items = intent.items.map((v) => {
     const r = extClosed(v, allowed[String(intent.action)]!);
     validateBriefSchema(r, stage4RowSchema, "items");
+    if (intent.action === "tracking_update" && r.clear_fields !== undefined) {
+      const clears = r.clear_fields as string[];
+      if (
+        new Set(clears).size !== clears.length ||
+        clears.some((field) => r[field] !== undefined)
+      )
+        extFail(
+          "google_tracking_clear_invalid",
+          "clear_fields должны быть уникальны; нельзя одновременно set и clear одного tracking поля.",
+        );
+    }
     return structuredClone(r);
   });
   for (const item of items)
@@ -893,9 +905,11 @@ export async function buildStage4Plan(
             "Используйте штатный preview_resume_campaign с launch checklist. Campaign activation нельзя обходить через Stage 4 generic update.",
           );
         if (intent.action === "tracking_update") {
+          const clears = (row.clear_fields as string[] | undefined) ?? [];
           if (
             row.final_url_suffix === undefined &&
-            row.tracking_url_template === undefined
+            row.tracking_url_template === undefined &&
+            !clears.length
           )
             extFail(
               "google_stage4_input_invalid",
@@ -920,6 +934,18 @@ export async function buildStage4Plan(
             fields.trackingUrlTemplate = tracking.trackingUrlTemplate;
             masks.push("tracking_url_template");
           }
+          for (const field of clears) {
+            fields[
+              field === "final_url_suffix"
+                ? "finalUrlSuffix"
+                : "trackingUrlTemplate"
+            ] = "";
+            masks.push(field);
+          }
+          if (clears.length)
+            item.warnings.push(
+              `Явное CLEAR tracking: ${clears.join(", ")}. Пустое значение удаляет локальный override; возможно наследование настроек родителя.`,
+            );
         } else {
           for (const property of ["name", "status"])
             if (row[property] !== undefined) {
@@ -1011,28 +1037,41 @@ export async function buildStage4Plan(
           );
         if (intent.action === "tracking_update") {
           const previous: ExtendedRow = { ...row };
+          delete previous.clear_fields;
+          delete previous.final_url_suffix;
+          delete previous.tracking_url_template;
           const mapping = {
             final_url_suffix: "finalUrlSuffix",
             tracking_url_template: "trackingUrlTemplate",
           } as const;
-          const missing = masks.some((mask) => {
+          const oldClears: string[] = [];
+          const invalid = masks.some((mask) => {
             const old = before[mapping[mask as keyof typeof mapping]];
-            if (typeof old !== "string" || !old.length) return true;
+            if (old === undefined || old === "") {
+              oldClears.push(mask);
+              return false;
+            }
+            if (typeof old !== "string") return true;
             previous[mask] = old;
             return false;
           });
-          let reason = missing
-            ? "google_tracking_rollback_clear_unsupported"
+          if (oldClears.length) previous.clear_fields = oldClears;
+          let reason = invalid
+            ? "google_tracking_rollback_previous_invalid"
             : "";
           if (!reason) {
             try {
               // Only the captured changed fields are inverse input. Validation
               // never writes its default UTM into an untouched neighboring field.
-              reusableValidation(ctx.account_id, ctx.currency, {
-                utm: Object.fromEntries(
-                  masks.map((mask) => [mask, previous[mask]]),
-                ),
-              });
+              const oldValues = Object.fromEntries(
+                masks
+                  .filter((mask) => previous[mask] !== undefined)
+                  .map((mask) => [mask, previous[mask]]),
+              );
+              if (Object.keys(oldValues).length)
+                reusableValidation(ctx.account_id, ctx.currency, {
+                  utm: oldValues,
+                });
             } catch {
               reason = "google_tracking_rollback_previous_invalid";
             }
@@ -1043,9 +1082,8 @@ export async function buildStage4Plan(
               rollback: { supported: true, source: "HOLYMEDIA", fields: masks },
             });
           } else {
-            const message = missing
-              ? "Tracking rollback к missing/empty BEFORE требует отдельно проверенный clear contract; пустое значение не подменяется default UTM."
-              : "Tracking BEFORE не проходит поддерживаемую typed URL/UTM validation; автоматический inverse не обещан.";
+            const message =
+              "Tracking BEFORE не проходит поддерживаемую typed URL/UTM validation; автоматический inverse не обещан.";
             item.warnings.push(`${reason}: ${message}`);
             Object.assign(item, {
               rollback: {
