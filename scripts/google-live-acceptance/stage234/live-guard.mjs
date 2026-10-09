@@ -295,6 +295,7 @@ export function sanitized(value) {
       .filter(
         ([key]) =>
           key !== "state" &&
+          key !== "approval_url" &&
           !/(token|secret|password|cookie|authorization|encrypted|nonce|code_verifier|oauth_code)/i.test(
             key,
           ),

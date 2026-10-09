@@ -416,6 +416,7 @@ test("secret keys/raw error text omitted while evidence state preserved", () => 
       state: "synthetic",
       cookie: "synthetic",
       encryptedPayload: "synthetic",
+      approval_url: "http://localhost:4402/mcp/approve?token=synthetic",
     }),
     { provider_state_before: { status: "PAUSED", nested: {} } },
   );
