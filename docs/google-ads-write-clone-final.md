@@ -32,8 +32,11 @@ the preview explicitly warns about that shared impact.
 
 There is no silent omission of unsupported targeting or ads. Audience/custom device
 criteria, non-RSA ads, non-Search channels, custom goals and unsupported bidding
-parameters are rejected. Enhanced manual CPC and Maximize Conversions with a
-non-zero target CPA are outside this basic clone profile. These are local profile
+parameters are rejected. Enhanced manual CPC and portfolio bidding remain outside
+this inline clone profile. Inline Maximize Conversions preserves a non-zero
+provider-derived target CPA exactly, with authoritative billable-unit proof and
+explicit post-state verification; no targets or conversion history are invented.
+These are local profile
 limits, not claims that Google API lacks those capabilities.
 
 The exact three provider-managed neutral Search devices are now supported through
@@ -41,6 +44,11 @@ an explicit source proof and mandatory full target reread, with zero device
 mutations; see [default-device boundary](google-ads-clone-default-devices.md).
 Custom campaign/device/geo/schedule or ad-group adjustments are not silently
 normalized away.
+
+Group/keyword/ad tracking overrides, custom URL parameters and mobile URLs are
+explicit profile gaps. They are selected/frozen and rejected instead of silently
+dropped. A source without an explicit campaign final URL suffix is also rejected:
+the normal new-campaign default UTM must not overwrite existing inheritance.
 
 Negative radii and address-only proximity cannot be cloned by this coordinate
 profile. `new_locations` with existing radii is rejected: without an explicit

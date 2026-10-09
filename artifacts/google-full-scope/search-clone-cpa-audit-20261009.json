@@ -1,0 +1,53 @@
+{
+  "task": "required_search_clone_targeted_audit",
+  "date": "2026-10-09",
+  "branch": "codex/google-ads-search-clone-cpa-final",
+  "baseline": "b259bfd503e5298fa23978a517acbe96fc884b88",
+  "original_requirement_paragraphs": [104, 105, 106],
+  "overall_clone_classification": "REQUIREDGAP",
+  "targeted_addition": {
+    "profile": "owned inline MAXIMIZE_CONVERSIONS nonzero target CPA",
+    "classification": "DONE+TESTED",
+    "live_status": "PENDING",
+    "same_account_currency": true,
+    "authoritative_billable_unit": true,
+    "exact_provider_micros_preserved": true,
+    "provider_reread_wrong_value_rejected": true,
+    "existing_goal_and_portfolio_guards_preserved": true,
+    "all_delivery_entities_paused": true
+  },
+  "guarded_required_gap": {
+    "scope": "child tracking overrides/custom URL parameters/mobile URLs and campaign suffix inheritance",
+    "classification": "REQUIREDGAP",
+    "silent_drop_prevented": true,
+    "error_code": "google_clone_tracking_unsupported",
+    "api_unsupported_claim": false
+  },
+  "device_defaults": {
+    "existing_strict_source_and_target_proof": "UNCHANGED",
+    "device_mutations": 0
+  },
+  "verification": {
+    "targeted_stage0_stage1_clone_pass": 205,
+    "targeted_failed": 0,
+    "full_api_pass": 1313,
+    "full_api_skipped": 21,
+    "full_api_failed": 0,
+    "skipped_reason": "DB-dependent tests require disposable database; not claimed PASS",
+    "api_typecheck": "PASS",
+    "api_lint": "PASS",
+    "api_build": "PASS",
+    "stock_format_check": "PASS",
+    "standard_secret_scan": "PASS"
+  },
+  "this_task_provider_read_calls": 0,
+  "this_task_validate_only_calls": 0,
+  "this_task_real_provider_write_calls": 0,
+  "live_preview_created": false,
+  "runtime_changed": false,
+  "production_changed": false,
+  "main_changed": false,
+  "historical_evidence_changed": false,
+  "push_requested": false,
+  "evidence_document": "docs/google-ads-search-clone-cpa-audit.md"
+}

@@ -20,6 +20,7 @@ function fixture() {
     id: account,
     currencyCode: "USD",
     timeZone: "Asia/Almaty",
+    conversionTrackingSetting: { googleAdsConversionCustomer: prefix },
   };
   const campaign: JsonRow = {
     resourceName: `${prefix}/campaigns/1`,
@@ -125,6 +126,8 @@ function fixture() {
       device: { type },
     });
   const lists: JsonRow[] = [],
+    conversionGoals: JsonRow[] = [],
+    conversionActions: JsonRow[] = [],
     links: JsonRow[] = [],
     members: JsonRow[] = [],
     assetLinks: JsonRow[] = [],
@@ -133,13 +136,23 @@ function fixture() {
     let result: JsonRow[] = [];
     if (q.includes("FROM campaign_budget"))
       result = [{ campaignBudget: budget }];
-    else if (
-      q.includes("FROM customer_conversion_goal") ||
-      q.includes("FROM conversion_action") ||
-      q.includes("FROM campaign_conversion_goal") ||
-      q.includes("FROM conversion_goal_campaign_config")
-    )
-      result = [];
+    else if (q.includes("FROM customer_conversion_goal"))
+      result = conversionGoals.map((customerConversionGoal) => ({
+        customerConversionGoal,
+      }));
+    else if (q.includes("FROM campaign_conversion_goal"))
+      result = conversionGoals.map((goal) => ({
+        campaignConversionGoal: {
+          ...goal,
+          campaign: campaign.resourceName,
+          resourceName: `${prefix}/campaignConversionGoals/1~13~2`,
+        },
+      }));
+    else if (q.includes("FROM conversion_action"))
+      result = conversionActions.map((conversionAction) => ({
+        conversionAction,
+      }));
+    else if (q.includes("FROM conversion_goal_campaign_config")) result = [];
     else if (q.includes("FROM customer")) result = [{ customer }];
     else if (q.includes("FROM currency_constant"))
       result = [
@@ -278,6 +291,24 @@ function fixture() {
       },
     );
   };
+  const addConversion = () => {
+    conversionGoals.push({
+      resourceName: `${prefix}/customerConversionGoals/13~2`,
+      category: "SUBMIT_LEAD_FORM",
+      origin: "WEBSITE",
+      biddable: true,
+    });
+    conversionActions.push({
+      resourceName: `${prefix}/conversionActions/500`,
+      id: "500",
+      name: "TEST lead",
+      status: "ENABLED",
+      primaryForGoal: true,
+      category: "SUBMIT_LEAD_FORM",
+      origin: "WEBSITE",
+      ownerCustomer: prefix,
+    });
+  };
   return {
     customer,
     campaign,
@@ -299,6 +330,7 @@ function fixture() {
     addRadius,
     addShared,
     addAssets,
+    addConversion,
   };
 }
 function mockCreated(plan: Stage0Plan) {
@@ -327,10 +359,17 @@ function mockCreated(plan: Stage0Plan) {
       asset: "assets",
       campaignAsset: "campaignAssets",
       campaignSharedSet: "campaignSharedSets",
+      campaignConversionGoal: "campaignConversionGoals",
+      customConversionGoal: "customConversionGoals",
+      conversionGoalCampaignConfig: "conversionGoalCampaignConfigs",
     };
     let name = `${prefix}/${kind[op.kind]}/${1000 + index}`;
     if (op.kind === "campaignSharedSet")
       name = `${prefix}/campaignSharedSets/${String(fields.campaign).split("/").at(-1)}~${String(fields.sharedSet).split("/").at(-1)}`;
+    if (op.kind === "campaignConversionGoal")
+      name = `${prefix}/campaignConversionGoals/${String(expected.campaign).split("/").at(-1)}~13~2`;
+    if (op.kind === "conversionGoalCampaignConfig")
+      name = `${prefix}/conversionGoalCampaignConfigs/${String(expected.campaign).split("/").at(-1)}`;
     if (op.resource_name) references.set(op.resource_name, name);
     const entity: JsonRow = { ...fields, ...expected, resourceName: name };
     if (op.kind === "campaign")
@@ -525,6 +564,99 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
       expect(
         f.read.mock.calls.every(([q]) => !q.includes("customers/1234567890")),
       ).toBe(true);
+    },
+  );
+  it("inline Maximize Conversions preserves exact validated target CPA and provider reread proves it", async () => {
+    const f = fixture();
+    f.addConversion();
+    f.campaign.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+    f.campaign.maximizeConversions = { targetCpaMicros: "1250000" };
+    const p = await f.clone(),
+      op = p.operations.find((o) => o.kind === "campaign")!;
+    expect(op.fields.maximizeConversions).toEqual({
+      targetCpaMicros: "1250000",
+    });
+    expect(op.expected.maximizeConversions).toEqual(
+      op.fields.maximizeConversions,
+    );
+    expect(op.fields.status).toBe("PAUSED");
+    expect(p.summary.bidding_parameters).toMatchObject({
+      currency: "USD",
+      targetCpaMicros: "1250000",
+      billable_unit_micros: "10000",
+    });
+    expect(p.items[op.row]!.after).toMatchObject({
+      maximizeConversions: { targetCpaMicros: "1250000" },
+    });
+    const created = mockCreated(p);
+    expect(
+      (await verifyStage0Mutation(p, created.results, created.read)).status,
+    ).toBe("VERIFIED");
+    row(
+      created.actual.get(created.results[op.row]!.resource_name!)!.campaign,
+    ).maximizeConversions = { targetCpaMicros: "1000000" };
+    expect(
+      (await verifyStage0Mutation(p, created.results, created.read)).status,
+    ).toBe("UNVERIFIED");
+    f.campaign.maximizeConversions = { targetCpaMicros: "1500000" };
+    expect(canonical(await rereadStage0Checks(p, f.read))).not.toBe(
+      canonical(p.checks),
+    );
+  });
+  it("inline CPA does not bypass real goals, account unit, portfolio or malformed source guards", async () => {
+    const f = fixture();
+    f.campaign.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+    f.campaign.maximizeConversions = { targetCpaMicros: "1250000" };
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode: "google_conversion_missing",
+    });
+    f.addConversion();
+    for (const micros of ["1", "10001"]) {
+      f.campaign.maximizeConversions = { targetCpaMicros: micros };
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_target_cpa_invalid",
+      });
+    }
+    f.campaign.maximizeConversions = { targetCpaMicros: "9223372036854775808" };
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode: "google_clone_reference_invalid",
+    });
+    f.campaign.maximizeConversions = { targetCpaMicros: "1250000" };
+    f.campaign.biddingStrategy = `${prefix}/biddingStrategies/7`;
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode: "google_clone_unsupported_components",
+    });
+  });
+  it.each([
+    "group",
+    "keyword",
+    "ad",
+    "mobile",
+    "custom",
+    "campaign",
+    "template_only",
+  ])(
+    "source %s tracking overrides cannot be silently dropped by bounded clone",
+    async (level) => {
+      const f = fixture();
+      if (level === "group") f.group.finalUrlSuffix = "utm_source=group";
+      if (level === "keyword")
+        f.keys[0]!.trackingUrlTemplate =
+          "https://track.example.test/?u={lpurl}";
+      if (level === "ad") row(f.ads[0]!.ad).finalUrlSuffix = "utm_source=ad";
+      if (level === "mobile")
+        row(f.ads[0]!.ad).finalMobileUrls = ["https://mobile.example.test/"];
+      if (level === "custom")
+        f.group.urlCustomParameters = [{ key: "channel", value: "source" }];
+      if (level === "campaign" || level === "template_only")
+        f.campaign.finalUrlSuffix = undefined;
+      if (level === "template_only")
+        f.campaign.trackingUrlTemplate =
+          "https://track.example.test/?u={lpurl}";
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_tracking_unsupported",
+      });
+      expect(f.build).not.toHaveBeenCalled();
     },
   );
   it.each([

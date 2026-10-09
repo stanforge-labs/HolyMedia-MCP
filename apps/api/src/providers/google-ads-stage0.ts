@@ -85,7 +85,7 @@ const resources = {
     "campaign",
     "campaign",
     "campaigns",
-    "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.campaign_budget, campaign.bidding_strategy_type, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type, campaign.start_date_time, campaign.end_date_time, campaign.final_url_suffix, campaign.tracking_url_template",
+    "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.campaign_budget, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type, campaign.start_date_time, campaign.end_date_time, campaign.final_url_suffix, campaign.tracking_url_template",
   ],
   campaignCriterion: [
     "campaign_criterion",
@@ -1333,7 +1333,8 @@ export async function verifyStage0Mutation(
     }
     if (op.kind === "campaign") {
       delete expected.manualCpc;
-      delete expected.maximizeConversions;
+      if (Object.keys(row(expected.maximizeConversions)).length === 0)
+        delete expected.maximizeConversions;
       delete expected.containsEuPoliticalAdvertising;
       expected.biddingStrategyType = plan.summary.strategy;
     }
@@ -1967,12 +1968,18 @@ export async function buildClonePlan(
         "google_clone_reference_invalid",
         "Source money micros не подтверждены; clone остановлен.",
       );
-    return BigInt(text);
+    const n = BigInt(text);
+    if (n > 9_223_372_036_854_775_807n)
+      error(
+        "google_clone_reference_invalid",
+        "Source micros выходят за Google int64; clone остановлен.",
+      );
+    return n;
   };
   const campaigns = await fetchKind(
       "campaign",
       `campaign.id = ${id} AND campaign.status != REMOVED`,
-      "campaign.maximize_conversions.target_cpa_micros, campaign.manual_cpc.enhanced_cpc_enabled",
+      "campaign.bidding_strategy, campaign.manual_cpc.enhanced_cpc_enabled",
     ),
     campaign = campaigns[0];
   if (
@@ -1994,13 +2001,18 @@ export async function buildClonePlan(
       "google_clone_unsupported_components",
       "Clone поддерживает только Search MANUAL_CPC/MAXIMIZE_CONVERSIONS.",
     );
+  const sourceTargetCpa = sourceMicros(
+    row(campaign.maximizeConversions).targetCpaMicros,
+  );
   if (
     row(campaign.manualCpc).enhancedCpcEnabled === true ||
-    sourceMicros(row(campaign.maximizeConversions).targetCpaMicros) !== 0n
+    (campaign.biddingStrategyType !== "MAXIMIZE_CONVERSIONS" &&
+      sourceTargetCpa !== 0n) ||
+    (campaign.biddingStrategy !== undefined && campaign.biddingStrategy !== "")
   )
     error(
       "google_clone_unsupported_components",
-      "Source bidding parameters выходят за basic MANUAL_CPC/MAXIMIZE_CONVERSIONS clone; параметры не опущены.",
+      "Source portfolio/contradictory/enhanced bidding parameters выходят за inline MANUAL_CPC/MAXIMIZE_CONVERSIONS clone; параметры не опущены.",
     );
   owned(campaign.campaignBudget, "campaignBudgets");
   const budgets = await fetchKind(
@@ -2235,9 +2247,22 @@ export async function buildClonePlan(
   const groups = await fetchKind(
       "adGroup",
       `campaign.id = ${id} AND ad_group.status != REMOVED`,
+      "ad_group.tracking_url_template, ad_group.final_url_suffix, ad_group.url_custom_parameters",
     ),
     adGroups: JsonRow[] = [];
   for (const g of groups) {
+    const unsupportedTracking = (entity: JsonRow) =>
+      [
+        "trackingUrlTemplate",
+        "finalUrlSuffix",
+        "urlCustomParameters",
+        "finalMobileUrls",
+      ].some(
+        (k) =>
+          entity[k] !== undefined &&
+          entity[k] !== "" &&
+          !(Array.isArray(entity[k]) && (entity[k] as unknown[]).length === 0),
+      );
     owned(g.resourceName, "adGroups");
     if (
       g.campaign !== campaign.resourceName ||
@@ -2277,10 +2302,21 @@ export async function buildClonePlan(
     const keys = await fetchKind(
         "adGroupCriterion",
         `ad_group.id = ${g.id} AND ad_group_criterion.status != REMOVED`,
+        "ad_group_criterion.tracking_url_template, ad_group_criterion.final_url_suffix, ad_group_criterion.url_custom_parameters, ad_group_criterion.final_mobile_urls",
       ),
       ads = await fetchKind(
         "adGroupAd",
         `ad_group.id = ${g.id} AND ad_group_ad.status != REMOVED`,
+        "ad_group_ad.ad.tracking_url_template, ad_group_ad.ad.final_url_suffix, ad_group_ad.ad.url_custom_parameters, ad_group_ad.ad.final_mobile_urls",
+      );
+    if (
+      unsupportedTracking(g) ||
+      keys.some(unsupportedTracking) ||
+      ads.some((a) => unsupportedTracking(row(a.ad)))
+    )
+      error(
+        "google_clone_tracking_unsupported",
+        "Source group/keyword/ad tracking/mobile URL overrides требуют отдельного clone profile; значения не опущены молча.",
       );
     for (const k of keys) {
       owned(k.resourceName, "adGroupCriteria");
@@ -2568,6 +2604,11 @@ export async function buildClonePlan(
         : {}),
     },
   };
+  if (!campaign.finalUrlSuffix)
+    error(
+      "google_clone_tracking_unsupported",
+      "Source campaign не имеет explicit final URL suffix; inheritance нельзя заменить builder default UTM даже при existing template. Требуется отдельный inheritance clone profile.",
+    );
   const plan = await build(brief);
   const targetCampaigns = plan.operations.filter((o) => o.kind === "campaign");
   const targetCampaign = targetCampaigns[0];
@@ -2587,6 +2628,32 @@ export async function buildClonePlan(
       "Clone builder не вернул единственную новую PAUSED campaign выбранного account.",
     );
   const targetResource = targetCampaign!.resource_name!;
+  if (sourceTargetCpa > 0n) {
+    const unit = sourceMicros(row(plan.summary.budget).billable_unit_micros);
+    if (unit === 0n || sourceTargetCpa < unit || sourceTargetCpa % unit !== 0n)
+      error(
+        "google_clone_target_cpa_invalid",
+        "Source target CPA не совместим с authoritative account billable unit; value не округляется/не теряется при clone.",
+      );
+    const parameters = { targetCpaMicros: String(sourceTargetCpa) };
+    targetCampaign!.fields.maximizeConversions = parameters;
+    targetCampaign!.expected.maximizeConversions = parameters;
+    const item = plan.items.find((i) =>
+      i.provider_operations.includes(plan.operations.indexOf(targetCampaign!)),
+    );
+    if (item) {
+      item.after = { ...row(item.after), maximizeConversions: parameters };
+      item.warnings.push(
+        "MAXIMIZE_CONVERSIONS target CPA сохранён точно из provider same-account micros; цели/budget/статусы не меняются ради стратегии.",
+      );
+    }
+    plan.summary.bidding_parameters = {
+      ...parameters,
+      currency,
+      billable_unit_micros: String(unit),
+      source: "provider-derived inline strategy",
+    };
+  }
   plan.provider_managed_defaults = [
     { kind: "campaign_default_devices", campaign_resource: targetResource },
   ];
