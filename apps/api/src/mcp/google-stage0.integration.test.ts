@@ -684,7 +684,7 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
       )[0]!.status,
     ).toBe("PAUSED");
   });
-  it("Clone does not silently omit unsupported source device criteria", async () => {
+  it("Clone does not silently omit unsupported source audience criteria", async () => {
     const f = fixture(true),
       b = brief();
     b.assets = {
@@ -697,10 +697,10 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
       campaignCriterion: {
         resourceName: `${prefix}/campaignCriteria/${id}~900`,
         campaign: `${prefix}/campaigns/${id}`,
-        type: "DEVICE",
+        type: "USER_LIST",
         status: "ENABLED",
         negative: false,
-        device: { type: "MOBILE" },
+        userList: { userList: `${prefix}/userLists/900` },
       },
     });
     await expect(
@@ -711,6 +711,47 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
     ).rejects.toMatchObject({
       writeCode: "google_clone_unsupported_components",
     });
+  });
+  it("Stock controlled clone verifies real default devices and refuses missing target device outcome", async () => {
+    const f = fixture(true);
+    await f.commit(await f.call("create_campaign_from_brief", brief()));
+    const id = String(resource(f, "campaign")[0]!.id);
+    const p = await f.call("clone_campaign_preview", {
+      source_campaign_id: id,
+      new_name: "TEST missing target device",
+      new_dates: {},
+    });
+    const original = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const result = await original(url, init);
+        if (
+          url.endsWith("/googleAds:mutate") &&
+          JSON.parse(String(init?.body)).validateOnly === false
+        ) {
+          const cloned = resource(f, "campaign").find(
+            (c) => c.name === "TEST missing target device",
+          );
+          if (cloned)
+            f.resources.delete(`${prefix}/campaignCriteria/${cloned.id}~30000`);
+        }
+        return result;
+      }),
+    );
+    const result = await f.commit(p);
+    expect(result.status).toBe("UNVERIFIED");
+    expect(
+      resource(f, "campaign").find(
+        (c) => c.name === "TEST missing target device",
+      )!.status,
+    ).toBe("PAUSED");
+    expect(
+      f.requests.filter(
+        (r) =>
+          r.url.endsWith("/googleAds:mutate") && r.body.validateOnly === false,
+      ),
+    ).toHaveLength(2);
   });
   it("Lost mutate response and reread outage never claim verified success or retry", async () => {
     const f = fixture(true),
