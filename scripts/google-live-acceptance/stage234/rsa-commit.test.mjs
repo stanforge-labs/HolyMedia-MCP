@@ -391,6 +391,37 @@ test("L post-reread exactly ONE new PAUSED RSA and all old fixture state unchang
     adGroupAd: { resourceName: resource, status: "PAUSED", ad: { id } },
   });
   assert.equal(assertCreatedRsa(before, after).resource_name, resource);
+  const metadata = structuredClone(after);
+  for (const field of ["headlines", "descriptions"]) {
+    metadata.rsa[1].adGroupAd.ad.responsiveSearchAd[field] =
+      metadata.rsa[1].adGroupAd.ad.responsiveSearchAd[field].map((value) => ({
+        ...value,
+        pinnedField: "UNSPECIFIED",
+        assetPerformanceLabel: "PENDING",
+        policySummaryInfo: {
+          policyTopicEntries: [],
+          approvalStatus: "UNDER_REVIEW",
+        },
+      }));
+  }
+  metadata.rsa[1].adGroupAd.ad.responsiveSearchAd.path1 = "";
+  metadata.rsa[1].adGroupAd.ad.responsiveSearchAd.path2 = "";
+  assert.equal(assertCreatedRsa(before, metadata).resource_name, resource);
+  for (const mutate of [
+    (s) =>
+      (s.rsa[1].adGroupAd.ad.responsiveSearchAd.headlines[0].pinnedField =
+        "HEADLINE_1"),
+    (s) => (s.rsa[1].adGroupAd.ad.responsiveSearchAd.path1 = "unexpected"),
+    (s) => (s.rsa[1].adGroupAd.ad.responsiveSearchAd.path2 = "unexpected"),
+    (s) =>
+      (s.rsa[1].adGroupAd.ad.responsiveSearchAd.headlines[0].text = "changed"),
+    (s) => (s.rsa[1].adGroupAd.ad.finalUrls = ["https://example.test/changed"]),
+    (s) => (s.rsa[0].adGroupAd.ad.assetPerformanceLabel = "PENDING"),
+  ]) {
+    const wrong = structuredClone(metadata);
+    mutate(wrong);
+    assert.throws(() => assertCreatedRsa(before, wrong));
+  }
   for (const mutate of [
     (s) => (s.rsa[1].adGroupAd.status = "ENABLED"),
     (s) => (s.rsa[0].adGroupAd.status = "ENABLED"),

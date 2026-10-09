@@ -26,6 +26,59 @@ import {
   installCommitGuard,
 } from "./rsa-commit-guard.mjs";
 
+// NEW ad only. Keep the full raw old inventory in the before/after comparison.
+export function createdRsaContent(ad) {
+  const rsa = ad?.responsiveSearchAd;
+  if (
+    !rsa ||
+    typeof rsa !== "object" ||
+    Array.isArray(rsa) ||
+    Object.keys(rsa).some(
+      (k) => !["headlines", "descriptions", "path1", "path2"].includes(k),
+    )
+  )
+    fail("stage234_l_created_rsa_content_invalid");
+  const textAssets = (values) => {
+    if (!Array.isArray(values)) fail("stage234_l_created_rsa_content_invalid");
+    return values.map((value) => {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        typeof value.text !== "string" ||
+        Object.keys(value).some(
+          (k) =>
+            ![
+              "text",
+              "pinnedField",
+              "assetPerformanceLabel",
+              "policySummaryInfo",
+            ].includes(k),
+        )
+      )
+        fail("stage234_l_created_rsa_content_invalid");
+      // Known read-only provider metadata is not part of the creation contract.
+      return {
+        text: value.text,
+        ...(value.pinnedField && value.pinnedField !== "UNSPECIFIED"
+          ? { pinnedField: value.pinnedField }
+          : {}),
+      };
+    });
+  };
+  return {
+    finalUrls: ad.finalUrls,
+    responsiveSearchAd: {
+      headlines: textAssets(rsa.headlines),
+      descriptions: textAssets(rsa.descriptions),
+      ...(rsa.path1 !== undefined && rsa.path1 !== ""
+        ? { path1: rsa.path1 }
+        : {}),
+      ...(rsa.path2 !== undefined && rsa.path2 !== ""
+        ? { path2: rsa.path2 }
+        : {}),
+    },
+  };
+}
 export function assertCreatedRsa(before, after) {
   const prior = new Set(before.rsa.map((r) => r.adGroupAd.resourceName));
   const additions = after.rsa.filter(
@@ -45,10 +98,7 @@ export function assertCreatedRsa(before, after) {
     String(row.campaign?.id) !== target.campaign ||
     String(row.adGroup?.id) !== target.group ||
     ad.type !== "RESPONSIVE_SEARCH_AD" ||
-    canonical({
-      finalUrls: ad.finalUrls,
-      responsiveSearchAd: ad.responsiveSearchAd,
-    }) !== canonical(createFields.ad)
+    canonical(createdRsaContent(ad)) !== canonical(createFields.ad)
   )
     fail("stage234_l_created_rsa_poststate_invalid");
   const normalized = structuredClone(after);
