@@ -1,0 +1,42 @@
+"""Pure launcher tests: no Docker, SSH, provider request or credential files."""
+import importlib.util
+from pathlib import Path
+import unittest
+
+spec = importlib.util.spec_from_file_location('stage234_run_live', Path(__file__).with_name('run-live.py'))
+runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+
+
+class LauncherTests(unittest.TestCase):
+    def test_immutable_digest_and_source_required(self):
+        runner.validate_options('a' * 40, 'ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:' + 'b' * 64, '20261009T120000Z-test')
+        for image in ['production', 'latest', 'ghcr.io/stanforge-labs/holymedia-mcp-v2:latest']:
+            with self.assertRaises(RuntimeError):
+                runner.validate_options('a' * 40, image, '20261009T120000Z-test')
+
+    def test_no_product_bind_or_foreign_network_ports(self):
+        args = runner.command('ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:' + 'b' * 64, 'a' * 40, '20261009T120000Z-test', Path('/opt/holymedia-google-acceptance/harness/stage234'), True)
+        text = ' '.join(args)
+        self.assertIn('holymedia-google-acceptance_default', text)
+        self.assertIn('127.0.0.1:4402:4001', text)
+        self.assertNotIn('/workspace/apps/api/dist:', text)
+        self.assertNotIn('--volumes-from', text)
+        self.assertNotIn('/etc/holymedia-v2', text)
+        self.assertIn('V2_CONFIRMED_WRITE_ENABLED=false', text)
+        self.assertIn('PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED=true', text)
+        self.assertIn('PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED=false', text)
+        self.assertIn('STAGE234_APPROVAL_GATEWAY=true', text)
+        self.assertIn(str(runner.ROOT / 'harness') + ':/acceptance:ro', text)
+
+    def test_docker_env_does_not_keep_compose_quotes(self):
+        self.assertEqual(runner.docker_env_values("A='one'\nB=\"two\"\nC=value$literal\n"), {'A': 'one', 'B': 'two', 'C': 'value$literal'})
+        with self.assertRaises(RuntimeError):
+            runner.docker_env_values('A=one\nA=two')
+
+    def test_report_drops_protected_context_and_approval_nonce(self):
+        self.assertEqual(runner.safe_report({'result': 'PASS', 'preview_id': 'safe', 'service_token': 'synthetic', 'approval_url': 'synthetic', 'real_writes': 0}), {'result': 'PASS', 'preview_id': 'safe', 'real_writes': 0})
+
+
+if __name__ == '__main__':
+    unittest.main()
