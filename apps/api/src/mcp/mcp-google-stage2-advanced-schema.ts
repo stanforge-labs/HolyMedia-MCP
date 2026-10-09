@@ -58,6 +58,22 @@ const strategy = {
         enum: ["ANYWHERE_ON_PAGE", "TOP_OF_PAGE", "ABSOLUTE_TOP_OF_PAGE"],
       };
     }
+    const optionalClears: Record<string, string[]> = {
+      MANUAL_CPC: [],
+      MAXIMIZE_CLICKS: ["cpc_ceiling"],
+      MAXIMIZE_CONVERSIONS: ["target_cpa", "cpc_floor", "cpc_ceiling"],
+      TARGET_CPA: ["cpc_floor", "cpc_ceiling"],
+      TARGET_ROAS: ["cpc_floor", "cpc_ceiling"],
+      TARGET_IMPRESSION_SHARE: [],
+    };
+    if (optionalClears[type]!.length)
+      fields.clear_fields = {
+        type: "array",
+        minItems: 1,
+        maxItems: 3,
+        uniqueItems: true,
+        items: { enum: optionalClears[type] },
+      };
     return {
       type: "object",
       additionalProperties: false,
@@ -103,6 +119,12 @@ const items = {
         campaign_id: id,
         criterion_id: id,
         criterion_type: { enum: ["DEVICE", "LOCATION", "AD_SCHEDULE"] },
+        multiplier: decimal,
+      }),
+      row("ad_group_device_modifier", {
+        campaign_id: id,
+        ad_group_id: id,
+        device: { enum: ["MOBILE", "DESKTOP", "TABLET"] },
         multiplier: decimal,
       }),
       row("modifier", {
@@ -155,16 +177,31 @@ export function stage2AdvancedToolSchema(
         minItems: 1,
         maxItems: 8,
         items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["metric", "operator", "value"],
-          properties: {
-            metric: {
-              enum: ["clicks", "impressions", "conversions", "cost_micros"],
+          oneOf: [
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["metric", "operator", "value"],
+              properties: {
+                metric: {
+                  enum: ["clicks", "impressions", "conversions", "cost_micros"],
+                },
+                operator: { enum: ["LT", "LTE", "GT", "GTE", "EQ"] },
+                value: decimal,
+              },
             },
-            operator: { enum: ["LT", "LTE", "GT", "GTE", "EQ"] },
-            value: decimal,
-          },
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["metric", "operator", "value", "currency"],
+              properties: {
+                metric: { const: "cpa" },
+                operator: { enum: ["LT", "LTE", "GT", "GTE", "EQ"] },
+                value: decimal,
+                currency,
+              },
+            },
+          ],
         },
       },
       change,

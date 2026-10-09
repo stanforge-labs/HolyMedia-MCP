@@ -45,17 +45,15 @@ Other fields: `ad_group_cpc`, `ad_group_target_cpa` (campaign/ad-group IDs, no c
 
 Generic `preview_change_campaign_budget` reuses the same Google builder with `items` restricted to `campaign_daily_budget`. Legacy Meta runtime arguments/semantics remain unchanged; its separate schema branch excludes explicit GOOGLE_ADS. Existing generic `preview_rollback_commit` and `commit_preview` are reused.
 
-## Package B — NOT IMPLEMENTED / not live accepted
+## Package B — supported advanced profile implemented / live pending
 
-Strategy editing/parameters, portfolio create/attach/detach, device/geo/schedule modifiers, bulk discovery by filters and live acceptance remain separate work. Do not enable this foundation in production or claim full Stage 2 DONE. Existing strategy is only read/validated, never modified.
+Current status (2026-10-09): [Stage 2 advanced profile](google-ads-write-stage2-completion.md) implements six Search strategies, supported optional parameter clears, same-account portfolio create/update/attach/detach, campaign device/geo/schedule modifiers, ad-group device overrides, OBSERVATION audience modifiers and bounded performance-filter discovery. The foundation above remains unchanged and is reused for money/bid/budget updates.
 
-Next implementation sequence:
+Ad-group device modifiers resolve absent, inherited CAMPAIGN and explicit AD_GROUP states before choosing CREATE or UPDATE. Smart-bidding combinations that ignore modifiers explicitly reject rather than falsely claiming an effective bid change. Bulk CPA filters use account-currency amounts, exact cost/conversion comparison and frozen inventory; no FX or late selection expansion. Optional strategy clears preserve neighboring settings and carry truthful typed inverse operations where possible.
 
-1. Typed standard/portfolio strategy inventory and channel/conversion eligibility. Full consumer-impact snapshot and strategy parameter validation before mutations. Explicit reject for portfolio incompatibilities; no implicit switch of shared budget or conversion goals.
-2. Reversible strategy updates/attachments with exact oneof masks, preserved before state, fresh validate-only, browser approval, immutable commit, full reread and per-row journal. Define unsupported inverses honestly.
-3. Device/geo/schedule modifiers with provider-specific ranges, compatible strategy matrix and identity snapshots. Do not pretend bid modifiers are effective under strategies that ignore them.
-4. Bulk filters resolve to a bounded immutable inventory BEFORE approval; reject >500, no truncation and no late expansion during commit. Counts and all affected objects visible to user.
-5. Separate TEST-only live plan per operation, explicit approval, reread and approved restoration. No production credentials or client-account writes.
+All extensions retain the existing controlled-write architecture, gates OFF by default, <=500 provider operations, ownership checks, stale checks, immutable payload, per-row HOLYMEDIA errors, approval and provider reread. Stage 0 stays atomic with partial_failure=false; independent Stage 1/2 operations use partial_failure=true.
+
+No Stage 2 live acceptance is claimed. The original Stage 2 required Search profile is mock-tested; non-Search, manager-owned cross-account portfolios, hotel modifiers and unlisted audience types remain outside the supported profile. Creation rollback does not silently delete a portfolio or local device override. See the advanced document for exact compatibility, regression evidence and remaining limitations.
 
 ## API v24 references
 
@@ -63,4 +61,4 @@ Next implementation sequence:
 - [Official CampaignBudget proto](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign_budget.proto): account-currency micros, period and shared-budget semantics.
 - [Google partial failure](https://developers.google.com/google-ads/api/docs/best-practices/partial-failures): per-operation outcomes; Stage 0 creation retains its separate atomic `partial_failure=false` exception.
 
-Stage 3–4 proposal remains in `docs/acceptance/google-ads-stage2-4-proposed-backlog.md`; its historical blocker list is a dated snapshot, not current acceptance status. The detailed original PPC Stage 3–4 document was not recovered. Only the current user-approved category/scope is authoritative; proposed privacy/media/PMax extensions require separate scope validation.
+The original PPC DOCX was recovered and read-only verified on 2026-10-09: `ТЗ запись в Google Ads для HolyMedia MCP.docx`, SHA256 `51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0`. Paragraphs 165–193 supply the Stage 2 requirements, including both device resource levels and CPA < 3 USD bulk selection. This source is specification data, not live-write authorization. `docs/acceptance/google-ads-stage2-4-proposed-backlog.md` and historical JSON evidence are dated snapshots, not the current acceptance matrix; they are preserved without rewriting history. Stage 3/4 capability reconciliation is documented in their separate packages.

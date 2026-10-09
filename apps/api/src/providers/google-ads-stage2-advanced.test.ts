@@ -75,6 +75,17 @@ function fixture() {
     deliveryMethod: "STANDARD",
     period: "DAILY",
   };
+  const g: Record<string, unknown> = {
+    id: "2",
+    resourceName: `${prefix}/adGroups/2`,
+    name: "TEST Group",
+    status: "PAUSED",
+    cpcBidMicros: "1000000",
+    targetCpaMicros: "1000000",
+    targetingSetting: {
+      targetRestrictions: [{ targetingDimension: "AUDIENCE", bidOnly: true }],
+    },
+  };
   const state = {
     c,
     b,
@@ -82,6 +93,8 @@ function fixture() {
     audience,
     keyword,
     budget,
+    g,
+    groupModifiers: [] as Record<string, unknown>[],
     goal: true,
     consumers: [
       {
@@ -148,7 +161,9 @@ function fixture() {
           ? [{ biddingStrategy: b }]
           : [];
     if (q.includes(" FROM campaign_criterion"))
-      return q.includes("criterion_id = 11")
+      return q.includes("criterion_id = 11") ||
+        (q.includes("campaign_criterion.device.type = MOBILE") &&
+          criterion.type === "DEVICE")
         ? [{ campaign: { id: "1" }, campaignCriterion: criterion }]
         : [];
     if (q.includes(" FROM keyword_view") || q.includes("metrics.clicks"))
@@ -173,18 +188,17 @@ function fixture() {
           : [];
     if (q.includes(" FROM campaign_budget"))
       return [{ campaignBudget: state.budget }];
+    if (q.includes(" FROM ad_group_bid_modifier"))
+      return state.groupModifiers.map((m) => ({
+        campaign: { id: "1" },
+        adGroup: { id: "2" },
+        adGroupBidModifier: m,
+      }));
     if (q.includes(" FROM ad_group"))
       return [
         {
           campaign: { id: "1" },
-          adGroup: {
-            id: "2",
-            resourceName: `${prefix}/adGroups/2`,
-            name: "TEST Group",
-            status: "PAUSED",
-            cpcBidMicros: "1000000",
-            targetCpaMicros: "1000000",
-          },
+          adGroup: g,
         },
       ];
     if (q.includes(" FROM campaign")) {
@@ -616,7 +630,7 @@ describe("Stage 2 advanced v24 plans: mocked readers only", () => {
   });
   it("rejects automatic-strategy modifiers instead of silently ignored changes", async () => {
     const f = fixture();
-    f.state.c.biddingStrategyType = "TARGET_CPA";
+    f.state.c.biddingStrategyType = "TARGET_ROAS";
     await expect(
       buildStage2AdvancedPlan(
         account,
@@ -828,7 +842,7 @@ describe("Stage 2 advanced v24 plans: mocked readers only", () => {
     ).toBe("600000");
     expect(p.inverse_intent).toBeDefined();
   });
-  it("new previously inherited strategy parameter does not advertise unsafe clear rollback", async () => {
+  it("new previously inherited strategy parameter advertises exact explicit clear rollback", async () => {
     const f = fixture();
     f.state.c.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
     delete f.state.c.manualCpc;
@@ -843,7 +857,16 @@ describe("Stage 2 advanced v24 plans: mocked readers only", () => {
       ),
       f.read,
     );
-    expect(p.inverse_intent).toBeUndefined();
+    expect(p.inverse_intent).toMatchObject({
+      items: [
+        {
+          strategy: {
+            type: "MAXIMIZE_CONVERSIONS",
+            clear_fields: ["target_cpa"],
+          },
+        },
+      ],
+    });
   });
   it("no-op standard strategy cannot consume preview approval for no change", async () => {
     const f = fixture();
@@ -866,6 +889,760 @@ describe("Stage 2 advanced v24 plans: mocked readers only", () => {
         f.read,
       ),
     ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+  });
+  it("explicit standard target CPA clear preserves unrelated strategy and campaign fields", async () => {
+    const f = fixture();
+    f.state.c.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+    delete f.state.c.manualCpc;
+    f.state.c.maximizeConversions = { targetCpaMicros: "1000000" };
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced(
+        campaignStrategy({
+          type: "MAXIMIZE_CONVERSIONS",
+          clear_fields: ["target_cpa"],
+        }),
+      ),
+      f.read,
+    );
+    expect(p.operations[0]!.fields).toEqual({
+      resourceName: f.state.c.resourceName,
+      maximizeConversions: { targetCpaMicros: "0" },
+    });
+    expect(p.operations[0]!.update_mask).toBe(
+      "maximize_conversions.target_cpa_micros",
+    );
+    expect(p.operations[0]!.expected.status).toBe("PAUSED");
+    expect(p.inverse_intent).toMatchObject({
+      items: [
+        {
+          strategy: {
+            type: "MAXIMIZE_CONVERSIONS",
+            target_cpa: money("1.000000"),
+          },
+        },
+      ],
+    });
+  });
+  it("explicit portfolio CPC ceiling clear preserves CPA and floor and offers precise inverse", async () => {
+    const f = fixture();
+    f.state.b.targetCpa = {
+      targetCpaMicros: "1000000",
+      cpcBidFloorMicros: "500000",
+      cpcBidCeilingMicros: "3000000",
+    };
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "portfolio_update",
+        strategy_id: "3",
+        strategy: {
+          type: "TARGET_CPA",
+          target_cpa: money(),
+          clear_fields: ["cpc_ceiling"],
+        },
+      }),
+      f.read,
+    );
+    expect(p.operations[0]!.update_mask).toBe(
+      "target_cpa.target_cpa_micros,target_cpa.cpc_bid_ceiling_micros",
+    );
+    expect(p.operations[0]!.expected.targetCpa).toEqual({
+      targetCpaMicros: "1000000",
+      cpcBidFloorMicros: "500000",
+      cpcBidCeilingMicros: "0",
+    });
+    expect(p.inverse_intent).toMatchObject({
+      items: [
+        {
+          strategy: {
+            cpc_ceiling: money("3.000000"),
+            cpc_floor: money("0.500000"),
+          },
+        },
+      ],
+    });
+  });
+  it("new standard CPC ceiling has a clear inverse instead of inherited fake amount", async () => {
+    const f = fixture();
+    f.state.c.biddingStrategyType = "TARGET_SPEND";
+    f.state.c.targetSpend = {};
+    delete f.state.c.manualCpc;
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced(
+        campaignStrategy({ type: "MAXIMIZE_CLICKS", cpc_ceiling: money("2") }),
+      ),
+      f.read,
+    );
+    expect(p.inverse_intent).toMatchObject({
+      items: [
+        {
+          strategy: { type: "MAXIMIZE_CLICKS", clear_fields: ["cpc_ceiling"] },
+        },
+      ],
+    });
+    f.state.c.targetSpend = { cpcBidCeilingMicros: "2000000" };
+    const inverse = await buildStage2AdvancedPlan(
+      account,
+      p.inverse_intent,
+      f.read,
+    );
+    expect(inverse.operations[0]!.fields.targetSpend).toEqual({
+      cpcBidCeilingMicros: "0",
+    });
+  });
+  it("cleared provider-default zero verifies only with exact scheme type proof", async () => {
+    const f = fixture();
+    f.state.c.biddingStrategyType = "TARGET_SPEND";
+    delete f.state.c.manualCpc;
+    f.state.c.targetSpend = { cpcBidCeilingMicros: "2000000" };
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced(
+        campaignStrategy({
+          type: "MAXIMIZE_CLICKS",
+          clear_fields: ["cpc_ceiling"],
+        }),
+      ),
+      f.read,
+    );
+    f.state.c.targetSpend = {};
+    const results = [
+      {
+        success: true,
+        resource_name: String(f.state.c.resourceName),
+        error: null,
+      },
+    ];
+    expect((await verifyExtendedMutation(p, results, f.read)).status).toBe(
+      "VERIFIED",
+    );
+    f.state.c.biddingStrategyType = "TARGET_CPA";
+    expect((await verifyExtendedMutation(p, results, f.read)).status).toBe(
+      "NOT_VERIFIED",
+    );
+  });
+  it("portfolio partial parameter update cannot exceed a preserved ceiling", async () => {
+    const f = fixture();
+    f.state.b.targetCpa = {
+      targetCpaMicros: "1000000",
+      cpcBidCeilingMicros: "1000000",
+    };
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "portfolio_update",
+          strategy_id: "3",
+          strategy: {
+            type: "TARGET_CPA",
+            target_cpa: money(),
+            cpc_floor: money("2"),
+          },
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+  });
+  it.each([
+    {
+      type: "MAXIMIZE_CLICKS",
+      clear_fields: ["cpc_ceiling"],
+      cpc_ceiling: money(),
+    },
+    { type: "TARGET_CPA", target_cpa: money(), clear_fields: ["target_cpa"] },
+    { type: "TARGET_ROAS", target_roas: "2", clear_fields: ["target_roas"] },
+    {
+      type: "MAXIMIZE_CONVERSIONS",
+      clear_fields: ["target_cpa", "target_cpa"],
+    },
+    { type: "MANUAL_CPC", clear_fields: ["enhanced_cpc_enabled"] },
+  ])("rejects unsupported or ambiguous explicit clear %j", (s) =>
+    expect(() =>
+      parseStage2AdvancedIntent(advanced(campaignStrategy(s))),
+    ).toThrow(),
+  );
+  it("create portfolio cannot silently drop clear_fields", async () => {
+    const f = fixture();
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "portfolio_create",
+          name: "TEST Clear",
+          strategy: { type: "MAXIMIZE_CLICKS", clear_fields: ["cpc_ceiling"] },
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+  });
+  it.each(["USER_LIST", "USER_INTEREST"])(
+    "audience %s bid adjustment rejects TARGETING or unknown mode",
+    async (type) => {
+      const f = fixture();
+      f.state.audience.type = type;
+      f.state.g.targetingSetting = {
+        targetRestrictions: [
+          { targetingDimension: "AUDIENCE", bidOnly: false },
+        ],
+      };
+      await expect(
+        buildStage2AdvancedPlan(
+          account,
+          advanced({
+            operation: "modifier",
+            campaign_id: "1",
+            ad_group_id: "2",
+            criterion_id: "12",
+            criterion_type: type,
+            multiplier: "1.2",
+          }),
+          f.read,
+        ),
+      ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+    },
+  );
+  it("audience OBSERVATION stays explicit and mode cannot be replaced by modifier", async () => {
+    const f = fixture();
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "modifier",
+        campaign_id: "1",
+        ad_group_id: "2",
+        criterion_id: "12",
+        criterion_type: "USER_LIST",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    expect(p.items[0]!.warnings.join(" ")).toContain("OBSERVATION");
+    expect(p.operations[0]!.fields.targetingSetting).toBeUndefined();
+    expect(
+      f.state.calls.some((q) =>
+        q.includes("user_interest.user_interest_category"),
+      ),
+    ).toBe(true);
+  });
+  it("ad group device creation is a single exact v24 operation with real parent proof", async () => {
+    const f = fixture();
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "ad_group_device_modifier",
+        campaign_id: "1",
+        ad_group_id: "2",
+        device: "MOBILE",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    expect(p.operations).toHaveLength(1);
+    expect(p.operations[0]!.kind).toBe("adGroupBidModifiers");
+    expect(p.operations[0]!.fields).toEqual({
+      adGroup: f.state.g.resourceName,
+      device: { type: "MOBILE" },
+      bidModifier: 1.2,
+    });
+    expect(extendedProviderOperation(p.operations[0]!)).toHaveProperty(
+      "adGroupBidModifierOperation.create",
+    );
+    expect(p.inverse_intent).toBeUndefined();
+    expect(p.operations[0]!.fields.status).toBeUndefined();
+  });
+  it.each(["0", "0.1", "10"])(
+    "ad group device multiplier %s implements legal -100/-90/+900 boundary",
+    async (multiplier) => {
+      const f = fixture();
+      const p = await buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "ad_group_device_modifier",
+          campaign_id: "1",
+          ad_group_id: "2",
+          device: "MOBILE",
+          multiplier,
+        }),
+        f.read,
+      );
+      expect(p.operations[0]!.fields.bidModifier).toBe(Number(multiplier));
+    },
+  );
+  it("existing group device update preserves identity, device and offers independent inverse", async () => {
+    const f = fixture();
+    f.state.groupModifiers = [
+      {
+        resourceName: `${prefix}/adGroupBidModifiers/2~30001`,
+        criterionId: "30001",
+        adGroup: f.state.g.resourceName,
+        device: { type: "MOBILE" },
+        bidModifierSource: "AD_GROUP",
+        bidModifier: 0.8,
+      },
+    ];
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "ad_group_device_modifier",
+        campaign_id: "1",
+        ad_group_id: "2",
+        device: "MOBILE",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    expect(p.operations[0]!.method).toBe("update");
+    expect(p.operations[0]!.update_mask).toBe("bid_modifier");
+    expect(p.operations[0]!.fields).toEqual({
+      resourceName: `${prefix}/adGroupBidModifiers/2~30001`,
+      bidModifier: 1.2,
+    });
+    expect(p.inverse_intent).toMatchObject({
+      items: [
+        {
+          operation: "ad_group_device_modifier",
+          device: "MOBILE",
+          multiplier: "0.8",
+        },
+      ],
+    });
+  });
+  it("inherited campaign device record creates a local override with frozen effective before", async () => {
+    const f = fixture();
+    f.state.groupModifiers = [
+      {
+        resourceName: `${prefix}/adGroupBidModifiers/2~30001`,
+        criterionId: "30001",
+        adGroup: f.state.g.resourceName,
+        device: { type: "MOBILE" },
+        bidModifierSource: "CAMPAIGN",
+        bidModifier: 0.8,
+      },
+    ];
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "ad_group_device_modifier",
+        campaign_id: "1",
+        ad_group_id: "2",
+        device: "MOBILE",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    const operation = p.operations[0]!;
+    expect(operation.method).toBe("create");
+    expect(operation.resource_name).toBeNull();
+    expect(operation.fields).toEqual({
+      adGroup: f.state.g.resourceName,
+      device: { type: "MOBILE" },
+      bidModifier: 1.2,
+    });
+    expect(operation.before).toMatchObject({
+      bidModifierSource: "CAMPAIGN",
+      bidModifier: 0.8,
+    });
+    expect(operation.expected.bidModifierSource).toBe("AD_GROUP");
+    expect(p.inverse_intent).toBeUndefined();
+    expect(p.items[0]!.warnings.join(" ")).toContain("inherits CAMPAIGN");
+    f.state.groupModifiers[0] = {
+      ...f.state.groupModifiers[0]!,
+      bidModifier: 0.7,
+    };
+    expect(canonical(await rereadExtendedChecks(p, f.read))).not.toBe(
+      canonical(p.checks),
+    );
+    f.state.groupModifiers[0] = {
+      resourceName: `${prefix}/adGroupBidModifiers/2~30001`,
+      criterionId: "30001",
+      adGroup: f.state.g.resourceName,
+      device: { type: "MOBILE" },
+      bidModifierSource: "AD_GROUP",
+      bidModifier: 1.2,
+    };
+    const results = [
+      {
+        operation: 0,
+        success: true,
+        resource_name: `${prefix}/adGroupBidModifiers/2~30001`,
+        error: null,
+      },
+    ];
+    expect((await verifyExtendedMutation(p, results, f.read)).status).toBe(
+      "VERIFIED",
+    );
+    f.state.groupModifiers[0] = {
+      ...f.state.groupModifiers[0],
+      bidModifierSource: "CAMPAIGN",
+    };
+    expect((await verifyExtendedMutation(p, results, f.read)).status).toBe(
+      "NOT_VERIFIED",
+    );
+  });
+  it("unknown device modifier source is explicitly rejected", async () => {
+    const f = fixture();
+    f.state.groupModifiers = [
+      {
+        resourceName: `${prefix}/adGroupBidModifiers/2~30001`,
+        criterionId: "30001",
+        adGroup: f.state.g.resourceName,
+        device: { type: "MOBILE" },
+        bidModifierSource: "UNKNOWN",
+        bidModifier: 1,
+      },
+    ];
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "ad_group_device_modifier",
+          campaign_id: "1",
+          ad_group_id: "2",
+          device: "MOBILE",
+          multiplier: "1.2",
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+  });
+  it("foreign group device resource fails the whole mixed batch", async () => {
+    const f = fixture();
+    f.state.groupModifiers = [
+      {
+        resourceName: `customers/1111111111/adGroupBidModifiers/2~30001`,
+        criterionId: "30001",
+        adGroup: f.state.g.resourceName,
+        device: { type: "MOBILE" },
+        bidModifierSource: "AD_GROUP",
+        bidModifier: 1,
+      },
+    ];
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced(campaignStrategy({ type: "MAXIMIZE_CLICKS" }), {
+          operation: "ad_group_device_modifier",
+          campaign_id: "1",
+          ad_group_id: "2",
+          device: "MOBILE",
+          multiplier: "1.2",
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_extended_ownership_invalid" });
+  });
+  it("group cannot override a campaign device opt-out invisibly", async () => {
+    const f = fixture();
+    f.state.criterion.bidModifier = 0;
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "ad_group_device_modifier",
+        campaign_id: "1",
+        ad_group_id: "2",
+        device: "MOBILE",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    expect(p.items[0]!.warnings.join(" ")).toContain("имеет приоритет");
+    expect(p.operations[0]!.fields.campaign).toBeUndefined();
+  });
+  it("MaximizeClicks supports existing device/geo/schedule modifiers rather than ignored SmartBidding", async () => {
+    const f = fixture();
+    f.state.c.biddingStrategyType = "TARGET_SPEND";
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "modifier",
+        campaign_id: "1",
+        criterion_id: "11",
+        criterion_type: "DEVICE",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    expect(p.operations[0]!.fields.bidModifier).toBe(1.2);
+  });
+  it("TargetCPA device modifier describes CPA target adjustment, not a keyword bid change", async () => {
+    const f = fixture();
+    f.state.c.biddingStrategyType = "TARGET_CPA";
+    const p = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "ad_group_device_modifier",
+        campaign_id: "1",
+        ad_group_id: "2",
+        device: "MOBILE",
+        multiplier: "1.2",
+      }),
+      f.read,
+    );
+    expect(p.items[0]!.warnings.join(" ")).toContain("CPA target");
+    expect(p.operations[0]!.fields.cpcBidMicros).toBeUndefined();
+  });
+  it.each(["TARGET_ROAS", "MAXIMIZE_CONVERSIONS", "TARGET_IMPRESSION_SHARE"])(
+    "%s device matrix allows explicit exclusion, rejects ineffective non-neutral multiplier",
+    async (type) => {
+      const f = fixture();
+      f.state.c.biddingStrategyType = type;
+      const p = await buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "ad_group_device_modifier",
+          campaign_id: "1",
+          ad_group_id: "2",
+          device: "MOBILE",
+          multiplier: "0",
+        }),
+        f.read,
+      );
+      expect(p.operations[0]!.fields.bidModifier).toBe(0);
+      await expect(
+        buildStage2AdvancedPlan(
+          account,
+          advanced({
+            operation: "ad_group_device_modifier",
+            campaign_id: "1",
+            ad_group_id: "2",
+            device: "MOBILE",
+            multiplier: "1.2",
+          }),
+          f.read,
+        ),
+      ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+    },
+  );
+  it.each(["0.01", "-1", "10.000001"])(
+    "ad group device unsupported multiplier %s rejected before read",
+    (multiplier) =>
+      expect(() =>
+        parseStage2AdvancedIntent(
+          advanced({
+            operation: "ad_group_device_modifier",
+            campaign_id: "1",
+            ad_group_id: "2",
+            device: "MOBILE",
+            multiplier,
+          }),
+        ),
+      ).toThrow(),
+  );
+  it("original CPA<3 USD filter picks exact existing keywords for foundation +10%", async () => {
+    const f = fixture();
+    extRow(f.state.bulkRows[0]!.metrics).conversions = "0.5";
+    extRow(f.state.bulkRows[0]!.metrics).costMicros = "1000000";
+    const p = await buildStage2AdvancedPlan(
+      account,
+      bulk({
+        filters: [
+          { metric: "cpa", operator: "LT", value: "3", currency: "USD" },
+        ],
+      }),
+      f.read,
+    );
+    expect(p.operations[0]!.fields.cpcBidMicros).toBe("1100000");
+    expect(p.items[0]!.warnings.join(" ")).toContain(
+      "cost_micros / conversions",
+    );
+    expect(f.state.calls.some((q) => q.includes("metrics.cpa"))).toBe(false);
+    expect(
+      p.checks.some(
+        (c) =>
+          c.query.includes("FROM keyword_view") &&
+          c.query.includes("conversions > 0"),
+      ),
+    ).toBe(true);
+  });
+  it("CPA strict boundary excludes CPA exactly 3 rather than rounded comparison", async () => {
+    const f = fixture();
+    extRow(f.state.bulkRows[0]!.metrics).conversions = "0.5";
+    extRow(f.state.bulkRows[0]!.metrics).costMicros = "1500000";
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        bulk({
+          filters: [
+            { metric: "cpa", operator: "LT", value: "3", currency: "USD" },
+          ],
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_bulk_empty" });
+    const p = await buildStage2AdvancedPlan(
+      account,
+      bulk({
+        filters: [
+          { metric: "cpa", operator: "LTE", value: "3", currency: "USD" },
+        ],
+      }),
+      f.read,
+    );
+    expect(p.operations).toHaveLength(1);
+  });
+  it("CPA excludes zero conversions rather than representing undefined CPA as zero", async () => {
+    const f = fixture();
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        bulk({
+          filters: [
+            { metric: "cpa", operator: "LT", value: "3", currency: "USD" },
+          ],
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_bulk_empty" });
+  });
+  it("CPA currency mismatch fails before performance discovery or mutation", async () => {
+    const f = fixture();
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        bulk({
+          filters: [
+            { metric: "cpa", operator: "LT", value: "3", currency: "KZT" },
+          ],
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_currency_mismatch" });
+    expect(f.state.calls.some((q) => q.includes("FROM keyword_view"))).toBe(
+      false,
+    );
+  });
+  it("CPA-excluded foreign row is still fatal ownership failure, not ignored data", async () => {
+    const f = fixture();
+    f.state.bulkRows[0]!.campaign = { id: "999" };
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        bulk({
+          filters: [
+            { metric: "cpa", operator: "LT", value: "3", currency: "USD" },
+          ],
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_extended_ownership_invalid" });
+  });
+  it("CPA comparison accepts fractional scientific attribution without floating rounding", async () => {
+    const f = fixture();
+    extRow(f.state.bulkRows[0]!.metrics).conversions = "5e-1";
+    extRow(f.state.bulkRows[0]!.metrics).costMicros = "1000000";
+    const p = await buildStage2AdvancedPlan(
+      account,
+      bulk({
+        filters: [
+          { metric: "cpa", operator: "LT", value: "3", currency: "USD" },
+        ],
+      }),
+      f.read,
+    );
+    expect(p.operations).toHaveLength(1);
+  });
+  it("CPA excludes negative adjusted conversions as undefined, never a cheap acquisition", async () => {
+    const f = fixture();
+    extRow(f.state.bulkRows[0]!.metrics).conversions = "-0.5";
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        bulk({
+          filters: [
+            { metric: "cpa", operator: "LT", value: "3", currency: "USD" },
+          ],
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_bulk_empty" });
+  });
+  it("already clear strategy leaf is no-op rather than a fake mutation", async () => {
+    const f = fixture();
+    f.state.c.biddingStrategyType = "TARGET_SPEND";
+    f.state.c.targetSpend = {};
+    delete f.state.c.manualCpc;
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced(
+          campaignStrategy({
+            type: "MAXIMIZE_CLICKS",
+            clear_fields: ["cpc_ceiling"],
+          }),
+        ),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_stage2_no_eligible_rows" });
+  });
+  it("duplicate group device selection is rejected before provider read", () =>
+    expect(() =>
+      parseStage2AdvancedIntent(
+        advanced(
+          {
+            operation: "ad_group_device_modifier",
+            campaign_id: "1",
+            ad_group_id: "2",
+            device: "MOBILE",
+            multiplier: "1.1",
+          },
+          {
+            operation: "ad_group_device_modifier",
+            campaign_id: "1",
+            ad_group_id: "2",
+            device: "MOBILE",
+            multiplier: "1.2",
+          },
+        ),
+      ),
+    ).toThrow());
+  it("foreign audience parent cannot be hidden behind a valid observation mode", async () => {
+    const f = fixture();
+    f.state.g.resourceName = `customers/1111111111/adGroups/2`;
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced({
+          operation: "modifier",
+          campaign_id: "1",
+          ad_group_id: "2",
+          criterion_id: "12",
+          criterion_type: "USER_LIST",
+          multiplier: "1.2",
+        }),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_extended_ownership_invalid" });
+  });
+  it("new typed device and CPA schemas retain closed object boundaries", () => {
+    const s = stage2AdvancedToolSchema("google_ads_strategy_modifier_preview")!;
+    expect(s.additionalProperties).toBe(false);
+    expect(
+      stage2AdvancedToolIntent("google_ads_strategy_modifier_preview", {
+        provider: "GOOGLE_ADS",
+        account_id: account,
+        items: [
+          {
+            operation: "ad_group_device_modifier",
+            campaign_id: "1",
+            ad_group_id: "2",
+            device: "MOBILE",
+            multiplier: "0",
+          },
+        ],
+      }),
+    ).toMatchObject({ action: "stage2_advanced" });
+    expect(() =>
+      stage2AdvancedToolIntent("google_ads_bulk_bid_budget_preview", {
+        provider: "GOOGLE_ADS",
+        account_id: account,
+        ...Object.fromEntries(
+          Object.entries(
+            bulk({ filters: [{ metric: "cpa", operator: "LT", value: "3" }] }),
+          ).filter(([k]) => k !== "action"),
+        ),
+      }),
+    ).toThrow();
   });
   it("negative modifier foreign parent fields never reach validate_only", async () => {
     const f = fixture();
