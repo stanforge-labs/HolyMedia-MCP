@@ -384,6 +384,8 @@ export function validateBriefSchema(
     throw new GoogleAdsWriteError(
       "google_brief_invalid",
       `Неверное поле ${path}: ${schema.description}`,
+      [],
+      path,
     );
   };
   if (schema.type === "object") {

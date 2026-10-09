@@ -82,7 +82,7 @@ describe("Stage 2–4 use stock human controlled lifecycle: mocked HTTP only", (
     expect(f.counts().write).toBe(2);
     expect(status(f)).toBe("PAUSED");
   });
-  it("J city/exclusion/radiusresolve atomiccreate throughactualcontrolledpath", async () => {
+  it("J independent city/exclusion/radius use partial failures through actual controlled path", async () => {
     const f = extendedFixture();
     f.resources.set("geoTargetConstants/101", {
       geoTargetConstant: {
@@ -122,7 +122,8 @@ describe("Stage 2–4 use stock human controlled lifecycle: mocked HTTP only", (
     });
     expect(p.status).toBe("preview");
     expect(p.operation_count).toBe(3);
-    expect(p.partial_failure).toBe(false);
+    expect(p.partial_failure).toBe(true);
+    expect(p.atomic).toBe(false);
     expect(f.counts().write).toBe(0);
     await f.approve(p);
     const r = object(await commit(f, p));

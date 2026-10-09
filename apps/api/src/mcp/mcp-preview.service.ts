@@ -7,6 +7,10 @@ import {
 import { parseStage2AdvancedIntent } from "../providers/google-ads-stage2-advanced.js";
 import { parseStage3Intent } from "../providers/google-ads-stage3.js";
 import { parseStage4Intent } from "../providers/google-ads-stage4.js";
+import { safeMediaSummary } from "../providers/google-ads-media.js";
+function safeGoogleView<T>(value: T): T {
+  return safeMediaSummary(value) as T;
+}
 import {
   assertStage2Gate,
   assertStage2Plan,
@@ -1401,7 +1405,7 @@ export class McpPreviewService {
       results.length === plan.operations.length &&
       results.every((x) => x.success);
     const items = plan.items.map((row) => ({
-      ...row,
+      ...safeGoogleView(row),
       google_validation: row.provider_operations.map(
         (i) =>
           results[i] ?? {
@@ -1499,7 +1503,7 @@ export class McpPreviewService {
             mutation_plan: plan.operations.map((o) => ({
               resource_name: o.resource_name,
               update_mask: o.update_mask,
-              fields: o.fields,
+              fields: safeGoogleView(o.fields),
               row: o.row,
             })),
           }
@@ -1627,7 +1631,7 @@ export class McpPreviewService {
       where: { id: preview.id },
       data: {
         commitStatus: verified.status,
-        providerResult: verified.items as Prisma.InputJsonValue,
+        providerResult: safeGoogleView(verified.items) as Prisma.InputJsonValue,
         verificationRead: verified.actual as unknown as Prisma.InputJsonValue,
       },
     });
@@ -1663,7 +1667,7 @@ export class McpPreviewService {
       provider: "GOOGLE_ADS",
       account_id: plan.account_id,
       operation_count: plan.operations.length,
-      items: verified.items,
+      items: safeGoogleView(verified.items),
       partial_failure:
         plan.version === 0
           ? false
@@ -1720,9 +1724,9 @@ export class McpPreviewService {
         providerOperation: index,
         result,
         googleErrorCode: error,
-        before: canonical(operation.before),
-        after: canonical(operation.expected),
-        actual: actual === undefined ? null : canonical(actual),
+        before: canonical(safeGoogleView(operation.before)),
+        after: canonical(safeGoogleView(operation.expected)),
+        actual: actual === undefined ? null : canonical(safeGoogleView(actual)),
       },
     });
   }
@@ -1902,9 +1906,9 @@ export class McpPreviewService {
         provider: row.provider,
         account_id: customerId(account.externalAccountId),
         operation: row.operation,
-        before: row.beforeState,
-        after: row.providerResult,
-        actual: row.verificationRead,
+        before: safeGoogleView(row.beforeState),
+        after: safeGoogleView(row.providerResult),
+        actual: safeGoogleView(row.verificationRead),
         result: row.commitStatus,
       })),
       next_cursor:
@@ -2160,12 +2164,12 @@ export class McpPreviewService {
         field: "operations",
         before: `${plan.items.length} items`,
         after: `${plan.operations.length} provider operations`,
-        stage1_items: plan.items,
+        stage1_items: safeGoogleView(plan.items),
         ...(plan.version >= 3
           ? {
               irreversible: (plan as ExtendedPlan).irreversible,
               atomic: (plan as ExtendedPlan).atomic,
-              exact_mutation_plan: plan.operations,
+              exact_mutation_plan: safeGoogleView(plan.operations),
             }
           : {}),
         expires_at: preview.expiresAt.toISOString(),
@@ -2874,6 +2878,16 @@ export class McpPreviewService {
         "This provider does not support campaign previews.",
       );
     return account;
+  }
+
+  public async assertGooglePreviewOwner(
+    principal: ServiceTokenPrincipal,
+    previewToken: string,
+  ) {
+    this.ensureRead(principal);
+    const preview = await this.find(principal, previewToken);
+    if (preview.provider !== "GOOGLE_ADS")
+      throw new PreviewError("confirmation_context_mismatch");
   }
 
   private async find(principal: ServiceTokenPrincipal, previewToken: string) {

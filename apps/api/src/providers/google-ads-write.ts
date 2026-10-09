@@ -80,6 +80,7 @@ export class GoogleAdsWriteError extends ProviderError {
     public readonly writeCode: string,
     message: string,
     public readonly failures: GoogleWriteFailure[] = [],
+    public readonly fieldPath?: string,
   ) {
     super(
       "invalid_request",

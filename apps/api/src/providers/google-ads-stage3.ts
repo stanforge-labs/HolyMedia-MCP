@@ -712,7 +712,7 @@ export async function buildStage3Plan(
     checks: ctx.checks,
     operations: [],
     items: [],
-    atomic: true,
+    atomic: false,
     irreversible: false,
   };
   const scheduled = new Map<string, ExtendedRow[]>(),
@@ -1734,6 +1734,15 @@ export async function buildStage3Plan(
     );
   if (completelyReversible && inverse.length)
     plan.inverse_intent = { action: "targeting", items: inverse.reverse() };
+  // Mode changes and dependent audience criteria must succeed together. Independent
+  // criteria retain the shared per-operation partial-failure contract.
+  plan.atomic = plan.operations.some(
+    (operation) =>
+      operation.update_mask
+        ?.split(",")
+        .includes("targeting_setting.target_restriction_operations") ||
+      operation.kind === "customAudiences",
+  );
   assertExtendedPlan(plan, ctx.account_id);
   return plan;
 }

@@ -1,4 +1,9 @@
 import { vi } from "vitest";
+import sharp from "sharp";
+import {
+  replaceExtendedTemps,
+  resolveExtendedResourceReference,
+} from "../providers/google-ads-extended-plan.js";
 import {
   fixture,
   object,
@@ -66,6 +71,7 @@ export function extendedFixture() {
   const entity: Record<string, string> = {
     campaigns: "campaign",
     adGroups: "adGroup",
+    adGroupBidModifiers: "adGroupBidModifier",
     campaignBudgets: "campaignBudget",
     adGroupCriteria: "adGroupCriterion",
     campaignCriteria: "campaignCriterion",
@@ -81,10 +87,14 @@ export function extendedFixture() {
     assetGroupAssets: "assetGroupAsset",
     assetGroupSignals: "assetGroupSignal",
     customers: "customer",
+    campaignConversionGoals: "campaignConversionGoal",
+    customConversionGoals: "customConversionGoal",
+    conversionGoalCampaignConfigs: "conversionGoalCampaignConfig",
   };
   const tables: Record<string, string> = {
     campaign: "campaign",
     ad_group: "adGroup",
+    ad_group_bid_modifier: "adGroupBidModifier",
     campaign_budget: "campaignBudget",
     ad_group_criterion: "adGroupCriterion",
     campaign_criterion: "campaignCriterion",
@@ -99,12 +109,17 @@ export function extendedFixture() {
     asset_group_asset: "assetGroupAsset",
     asset_group_signal: "assetGroupSignal",
     customer: "customer",
+    currency_constant: "currencyConstant",
     user_list: "userList",
     user_interest: "userInterest",
+    detailed_demographic: "detailedDemographic",
+    conversion_action: "conversionAction",
     geo_target_constant: "geoTargetConstant",
     language_constant: "languageConstant",
     campaign_conversion_goal: "campaignConversionGoal",
     customer_conversion_goal: "customerConversionGoal",
+    custom_conversion_goal: "customConversionGoal",
+    conversion_goal_campaign_config: "conversionGoalCampaignConfig",
   };
   const camel = (v: string) =>
     v.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
@@ -134,6 +149,29 @@ export function extendedFixture() {
         throw new Error("Unexpected provider URL: test network is closed");
       const body = JSON.parse(String(init?.body)) as MockRow;
       f.requests.push({ url, body, headers: init?.headers as MockRow });
+      if (url.endsWith("geoTargetConstants:suggest")) {
+        readCalls++;
+        const requested = String(
+          (object(body.locationNames).names as string[])[0],
+        ).toLocaleLowerCase();
+        return new Response(
+          JSON.stringify({
+            geoTargetConstantSuggestions: [...f.resources.values()]
+              .filter(
+                (r) =>
+                  r.geoTargetConstant &&
+                  (requested === "алматы"
+                    ? object(r.geoTargetConstant).id === "100"
+                    : requested === "астана"
+                      ? object(r.geoTargetConstant).id === "101"
+                      : String(
+                          object(r.geoTargetConstant).name,
+                        ).toLocaleLowerCase() === requested),
+              )
+              .map((r) => ({ geoTargetConstant: r.geoTargetConstant })),
+          }),
+        );
+      }
       if (url.endsWith("googleAds:searchStream")) {
         readCalls++;
         if (outage) throw new Error("Mock provider read unavailable");
@@ -223,6 +261,25 @@ export function extendedFixture() {
               }
             : {},
         );
+      const images = new Map<string, MockRow>();
+      for (const raw of ops) {
+        const op = object(raw.assetOperation);
+        const fields = object(op.create);
+        const data = object(fields.imageAsset).data;
+        if (typeof data === "string") {
+          const bytes = Buffer.from(data, "base64"),
+            metadata = await sharp(bytes).metadata();
+          images.set(data, {
+            fileSize: String(bytes.length),
+            mimeType: metadata.format === "png" ? "PNG" : "JPEG",
+            fullSize: {
+              widthPixels: metadata.width,
+              heightPixels: metadata.height,
+            },
+          });
+        }
+      }
+      const references = new Map<string, string>();
       const results = ops.map((raw, index) => {
         if (index === failIndex) return {};
         const singular = custom
@@ -230,9 +287,13 @@ export function extendedFixture() {
             : Object.keys(raw)[0]!.replace(/Operation$/, ""),
           op = custom ? raw : object(raw[`${singular}Operation`]);
         const kind = Object.keys(entity).find((k) => entity[k] === singular)!;
-        const fields = object(op.create ?? op.update),
+        const originalFields = object(op.create ?? op.update);
+        const fields = object(replaceExtendedTemps(originalFields, references)),
           create = op.create !== undefined;
-        let resource = String(op.remove ?? fields.resourceName ?? "");
+        let resource = resolveExtendedResourceReference(
+          String(op.remove ?? fields.resourceName ?? ""),
+          references,
+        );
         if (create) {
           const id = String(++seq);
           resource = `${prefix}/${kind}/${id}`;
@@ -245,13 +306,22 @@ export function extendedFixture() {
             resource = `${prefix}/${kind}/${p}~${id}`;
           }
           if (
-            ["campaignAssets", "adGroupAssets", "customerAssets"].includes(kind)
+            [
+              "campaignAssets",
+              "adGroupAssets",
+              "customerAssets",
+              "assetGroupAssets",
+            ].includes(kind)
           ) {
-            const p = String(fields.campaign ?? fields.adGroup ?? prefix)
+            const p = String(
+              fields.campaign ?? fields.adGroup ?? fields.assetGroup ?? prefix,
+            )
               .split("/")
               .at(-1);
             resource = `${prefix}/${kind}/${p}~${String(fields.asset).split("/").at(-1)}~${fields.fieldType}`;
           }
+          if (originalFields.resourceName)
+            references.set(String(originalFields.resourceName), resource);
         }
         let stored = f.resources.get(resource);
         if (kind === "ads")
@@ -266,11 +336,15 @@ export function extendedFixture() {
           if (value.status !== undefined) value.status = "REMOVED";
           else f.resources.delete(resource);
         } else if (create) {
-          const v = {
+          const v: MockRow = {
             ...structuredClone(fields),
             resourceName: resource,
             id: resource.split("/").at(-1),
           };
+          if (kind === "assets" && object(fields.imageAsset).data) {
+            v.type = "IMAGE";
+            v.imageAsset = images.get(String(object(fields.imageAsset).data));
+          }
           if (["adGroupCriteria", "campaignCriteria"].includes(kind)) {
             const types: Record<string, string> = {
               keyword: "KEYWORD",

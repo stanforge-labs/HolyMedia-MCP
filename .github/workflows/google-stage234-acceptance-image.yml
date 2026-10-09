@@ -1,0 +1,55 @@
+name: Google Stage234 isolated API image
+on:
+  push:
+    branches: [codex/google-ads-write-full-scope-final]
+permissions:
+  contents: read
+  packages: write
+env:
+  IMAGE: ghcr.io/stanforge-labs/holymedia-mcp-v2:google-stage234-acceptance-${{ github.sha }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reuse immutable tag; never replace a published acceptance image
+        id: existing
+        run: |
+          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            docker pull "$IMAGE"
+            test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")" = "${{ github.sha }}"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/build-push-action@v6
+        if: steps.existing.outputs.present != 'true'
+        id: image
+        with:
+          context: .
+          file: infra/Dockerfile.v2
+          target: api-runtime
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.holymedia.acceptance-only=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify non-root API-only image and Linux media runtime
+        run: |
+          reference="$IMAGE@${{ steps.existing.outputs.digest || steps.image.outputs.digest }}"
+          docker pull "$reference"
+          test "$(docker image inspect --format '{{.Config.User}}' "$reference")" = node
+          docker run --rm --entrypoint sh "$reference" -ec 'test -f apps/api/dist/main.js; test ! -d apps/web; test ! -d apps/worker; test ! -d .git; test ! -e .env; cd apps/api; node --input-type=module -e '"'"'import sharp from "sharp"; await sharp({ create: { width: 16, height: 16, channels: 3, background: "#ffffff" } }).png().toBuffer();'"'"''
+          echo "Acceptance-only image: $reference" >> "$GITHUB_STEP_SUMMARY"
+          echo "Never deploy to production; use only after exact source quality CI passes." >> "$GITHUB_STEP_SUMMARY"

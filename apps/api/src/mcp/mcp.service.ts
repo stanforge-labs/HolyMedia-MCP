@@ -32,6 +32,13 @@ import { ReportService } from "../reports/report.service.js";
 import { McpPreviewService } from "./mcp-preview.service.js";
 import { PreviewError } from "./mcp-preview.error.js";
 import {
+  GOOGLE_WRITE_GENERIC_TOOLS,
+  GOOGLE_WRITE_PROFILE_TOOLS,
+  googleWriteGenericIntent,
+  googleWriteGenericSchema,
+  googleWriteToolProfile,
+} from "./google-write-client-contract.js";
+import {
   META_ASSET_TOOLS,
   MetaAssetAuthorizationService,
 } from "./meta-asset-authorization.service.js";
@@ -538,13 +545,31 @@ export class McpService {
                 "get_launch_checklist",
                 "google_ads_audience_search",
               ].includes(name),
-              destructiveHint: name === "commit_preview",
+              destructiveHint: [
+                "commit_preview",
+                "preview_rollback_commit",
+                "preview_delete_or_archive_object",
+              ].includes(name),
               openWorldHint: true,
               idempotentHint: false,
             },
           }
         : {}),
-      inputSchema: stage2AdvancedToolSchema(name) ??
+      inputSchema: (googleWriteGenericSchema(name)
+        ? {
+            oneOf: [
+              googleWriteGenericSchema(name),
+              {
+                ...previewToolSchema(name),
+                not: {
+                  required: ["provider"],
+                  properties: { provider: { const: "GOOGLE_ADS" } },
+                },
+              },
+            ],
+          }
+        : undefined) ??
+        stage2AdvancedToolSchema(name) ??
         stage3ToolSchema(name) ??
         (stage4ToolSchema(name) as Record<string, unknown> | undefined) ??
         (name === "preview_change_campaign_budget"
@@ -578,6 +603,53 @@ export class McpService {
     }));
   }
 
+  public googleWriteTools() {
+    return googleWriteToolProfile(this.tools()).map((tool) => {
+      const schema = tool.inputSchema as Record<string, unknown>;
+      // The private Google subset must not expose the disjoint legacy Meta branch.
+      const alternatives = schema.oneOf as
+        Record<string, unknown>[] | undefined;
+      return alternatives ? { ...tool, inputSchema: alternatives[0]! } : tool;
+    });
+  }
+
+  public async callGoogleWriteProfile(
+    principal: ServiceTokenPrincipal,
+    name: string,
+    rawArguments: unknown,
+  ) {
+    if (!GOOGLE_WRITE_PROFILE_TOOLS.includes(name))
+      throw new ProviderError(
+        "invalid_request",
+        "Инструмент недоступен в Google Ads profile.",
+      );
+    const args = objectValue(rawArguments);
+    if (args.provider !== undefined && args.provider !== "GOOGLE_ADS")
+      throw new ProviderError(
+        "invalid_request",
+        "Этот profile допускает только GOOGLE_ADS.",
+      );
+    const tool = this.googleWriteTools().find((entry) => entry.name === name)!;
+    const properties = (
+      tool.inputSchema as { properties?: Record<string, unknown> }
+    ).properties;
+    if (
+      (properties?.provider ||
+        (GOOGLE_WRITE_GENERIC_TOOLS as readonly string[]).includes(name)) &&
+      args.provider !== "GOOGLE_ADS"
+    )
+      throw new ProviderError(
+        "invalid_request",
+        "Укажите явный provider GOOGLE_ADS для этого инструмента.",
+      );
+    if (name === "commit_preview")
+      await this.previews.assertGooglePreviewOwner(
+        this.servicePrincipal(principal),
+        text(args.preview_token),
+      );
+    return this.call(principal, name, rawArguments);
+  }
+
   public async call(
     principal: ServiceTokenPrincipal,
     name: string,
@@ -590,6 +662,18 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (
+      args.provider === "GOOGLE_ADS" &&
+      (GOOGLE_WRITE_GENERIC_TOOLS as readonly string[]).includes(name)
+    ) {
+      const mapped = googleWriteGenericIntent(name, args)!;
+      return this.previews.createGoogleExtended(
+        this.servicePrincipal(principal),
+        mapped.account_id,
+        4,
+        mapped.intent,
+      );
+    }
     if (
       GOOGLE_STAGE2_ADVANCED_TOOLS.some((tool) => tool === name) ||
       GOOGLE_STAGE3_TOOLS.some((tool) => tool === name) ||

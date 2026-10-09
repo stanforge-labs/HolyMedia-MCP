@@ -13,6 +13,7 @@ import {
   extendedProviderOperation,
   extItem,
   replaceExtendedTemps,
+  resolveExtendedResourceReference,
   type ExtendedPlan,
 } from "./google-ads-extended-plan.js";
 const account = "1234567890",
@@ -67,6 +68,142 @@ function plan(): ExtendedPlan {
   };
 }
 describe("Google extension immutable plan primitives (mock reads only)", () => {
+  it("default PMax value bidding proves both scheme and omitted zero target without mutating provider evidence", async () => {
+    const p = plan();
+    p.checks = p.checks.slice(0, 1);
+    const operation = p.operations[0]!;
+    operation.expected = {
+      resourceName: operation.resource_name,
+      biddingStrategyType: "MAXIMIZE_CONVERSION_VALUE",
+      maximizeConversionValue: { targetRoas: 0 },
+    };
+    const actual = {
+      resourceName: operation.resource_name,
+      biddingStrategyType: "MAXIMIZE_CONVERSION_VALUE",
+    };
+    const verify = (row: unknown) =>
+      verifyExtendedMutation(
+        p,
+        [
+          {
+            success: true,
+            resource_name: operation.resource_name,
+            error: null,
+          },
+        ],
+        async (query) =>
+          query.includes("FROM customer")
+            ? p.checks[0]!.rows
+            : [{ campaign: row }],
+      );
+    expect((await verify(actual)).status).toBe("VERIFIED");
+    expect(actual).not.toHaveProperty("maximizeConversionValue");
+    expect(
+      (await verify({ ...actual, maximizeConversionValue: { targetRoas: 2 } }))
+        .status,
+    ).toBe("NOT_VERIFIED");
+    expect(
+      (await verify({ ...actual, biddingStrategyType: "TARGET_ROAS" })).status,
+    ).toBe("NOT_VERIFIED");
+  });
+  it("atomic goal update response is bound to its real created campaign, never arbitrary goal IDs", () => {
+    const p = plan(),
+      temp = `${prefix}/campaigns/-1`,
+      goal = `${prefix}/campaignConversionGoals/-1~13~2`;
+    p.atomic = true;
+    p.operations[0] = {
+      ...p.operations[0]!,
+      method: "create",
+      resource_name: temp,
+      fields: { resourceName: temp, status: "PAUSED" },
+      expected: { resourceName: temp, status: "PAUSED" },
+      update_mask: null,
+    };
+    p.operations.push({
+      ...p.operations[0]!,
+      kind: "campaignConversionGoals",
+      method: "update",
+      resource_name: goal,
+      fields: { resourceName: goal, biddable: false },
+      expected: {
+        campaign: temp,
+        category: "SUBMIT_LEAD_FORM",
+        origin: "WEBSITE",
+        biddable: false,
+      },
+      update_mask: "biddable",
+      response_key: "campaignConversionGoal",
+    });
+    const result = (campaignId: string) => ({
+      mutateOperationResponses: [
+        { campaignResult: { resourceName: `${prefix}/campaigns/50` } },
+        {
+          campaignConversionGoalResult: {
+            resourceName: `${prefix}/campaignConversionGoals/${campaignId}~13~2`,
+          },
+        },
+      ],
+    });
+    expect(
+      decodeExtendedMutation(result("50"), p, false).every(
+        (row) => row.success,
+      ),
+    ).toBe(true);
+    expect(decodeExtendedMutation(result("51"), p, false)[1]!.success).toBe(
+      false,
+    );
+    expect(
+      resolveExtendedResourceReference(
+        goal,
+        new Map([[temp, `${prefix}/campaigns/50`]]),
+      ),
+    ).toBe(`${prefix}/campaignConversionGoals/50~13~2`);
+    expect(resolveExtendedResourceReference(goal, new Map())).toBe(goal);
+  });
+  it("normalizes omitted false only for an independently matching campaign conversion goal", async () => {
+    const p = plan();
+    p.checks = p.checks.slice(0, 1);
+    const expected = {
+      resourceName: `${prefix}/campaignConversionGoals/1~13~2`,
+      campaign: `${prefix}/campaigns/1`,
+      category: "SUBMIT_LEAD_FORM",
+      origin: "WEBSITE",
+      biddable: false,
+    };
+    p.operations[0] = {
+      ...p.operations[0]!,
+      kind: "campaignConversionGoals",
+      resource_name: expected.resourceName,
+      fields: { resourceName: expected.resourceName, biddable: false },
+      update_mask: "biddable",
+      expected,
+      response_key: "campaignConversionGoal",
+      read_query:
+        "SELECT campaign_conversion_goal.resource_name FROM campaign_conversion_goal",
+    };
+    const result = [
+      { success: true, resource_name: expected.resourceName, error: null },
+    ];
+    const { biddable: _omitted, ...raw } = expected;
+    expect(_omitted).toBe(false);
+    const verify = (actual: Record<string, unknown>) =>
+      verifyExtendedMutation(p, result, async (q) =>
+        q.includes("FROM customer")
+          ? p.checks[0]!.rows
+          : [{ campaignConversionGoal: actual }],
+      );
+    expect((await verify(raw)).status).toBe("VERIFIED");
+    expect(raw).not.toHaveProperty("biddable");
+    for (const mismatch of [
+      { biddable: true },
+      { campaign: `${prefix}/campaigns/2` },
+      { category: "PURCHASE" },
+      { origin: "APP" },
+    ])
+      expect((await verify({ ...raw, ...mismatch })).status).toBe(
+        "NOT_VERIFIED",
+      );
+  });
   it("ad-group device modifier uses the real v24 mutate operation and ownership", () => {
     const p = plan();
     p.operations[0] = {

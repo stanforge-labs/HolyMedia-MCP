@@ -1,0 +1,69 @@
+{
+  "timestamp": "2026-10-09",
+  "status": "Critical 0 / High 0; six Moderate retained and not dismissed",
+  "production_changed": false,
+  "source": "pnpm audit JSON on pinned current dependencies",
+  "findings": [
+    {
+      "package": "js-yaml",
+      "version": "5.3.0",
+      "advisory": "GHSA-r3ph-w7gj-g6xm",
+      "fixed": "5.4.1",
+      "risk": "CPU denial of service during YAML merge parsing",
+      "exposure": "Swagger dependency; no untrusted YAML upload/parser endpoint in inspected API.",
+      "mitigation": "Do not introduce untrusted YAML parsing; targeted patch before enabling such input.",
+      "owner": "API/dependency maintenance"
+    },
+    {
+      "package": "fast-uri",
+      "version": "4.1.4",
+      "advisory": "GHSA-hrr3-gc8f-f4qj",
+      "fixed": "4.1.5",
+      "risk": "URI host normalization mismatch",
+      "exposure": "AJV/schema dependencies; provider fetch allowlists independently use exact WHATWG URL origins.",
+      "mitigation": "Keep URI schema normalization separate from security origin decisions; targeted patch backlog.",
+      "owner": "API/dependency maintenance"
+    },
+    {
+      "package": "fast-uri",
+      "version": "3.1.7",
+      "advisory": "GHSA-hrr3-gc8f-f4qj",
+      "fixed": "3.1.8",
+      "risk": "Same normalization advisory in a second installed major",
+      "exposure": "Transitive AJV/Prisma tooling; not used to authorize provider/network origins.",
+      "mitigation": "Upgrade the affected transitive path separately with schema/Prisma regressions.",
+      "owner": "API/build dependency maintenance"
+    },
+    {
+      "package": "fast-uri",
+      "version": "4.1.4",
+      "advisory": "GHSA-jvvf-x445-j334",
+      "fixed": "4.1.5",
+      "risk": "mailto header injection",
+      "exposure": "No mailto generation/send flow using fast-uri found in inspected implementation.",
+      "mitigation": "No user URI-to-email-header conversion; targeted patch backlog.",
+      "owner": "API/dependency maintenance"
+    },
+    {
+      "package": "brace-expansion",
+      "version": "5.0.11",
+      "advisory": "GHSA-q2hr-2g5m-vwhr",
+      "fixed": "5.0.12",
+      "risk": "Quadratic brace-expansion CPU",
+      "exposure": "Lint/glob tooling and fixed static-serving patterns; no caller-controlled glob route found.",
+      "mitigation": "Keep filesystem patterns static; targeted patch backlog.",
+      "owner": "Build dependency maintenance"
+    },
+    {
+      "package": "fastify",
+      "version": "5.12.2",
+      "advisory": "GHSA-4mh8-r7rc-xpvc",
+      "fixed": "5.12.5",
+      "risk": "HTTP/2 trailer handling denial of service",
+      "exposure": "Inspected API uses HTTP/1 FastifyAdapter, not HTTP/2. Production configuration not changed or actively attacked.",
+      "mitigation": "Do not enable HTTP/2 before remediation; targeted patch and trailer regressions prior to release exposure change.",
+      "owner": "API/runtime maintenance"
+    }
+  ],
+  "release_condition": "Six Moderate findings remain visible. Security/release owner review is required; this engineering task is not a production release approval."
+}

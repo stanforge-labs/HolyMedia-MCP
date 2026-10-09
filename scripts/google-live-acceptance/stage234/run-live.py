@@ -146,6 +146,9 @@ def main():
         return
     state = ROOT / 'state' / ('stage234-' + options.run_id)
     state.mkdir(mode=0o700)  # collision = STOP, never replay an attempted preview.
+    # Exact acceptance image runs as uid/gid 1000 (node). Only this newly-created,
+    # validated disposable checkpoint directory is delegated; no recursive chown.
+    os.chown(state, 1000, 1000)
     # Docker --env-file does not parse Compose quotes. Convert only disposable
     # acceptance config into a new protected file; never modify the original.
     runtime_env = state / 'runtime.env'

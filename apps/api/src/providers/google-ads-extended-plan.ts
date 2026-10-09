@@ -476,6 +476,28 @@ export function decodeExtendedMutation(
     (!Array.isArray(response) || response.length !== plan.operations.length)
   )
     globalFailure = true;
+  const createdRefs = new Map<string, string>();
+  if (!validateOnly && !globalFailure && Array.isArray(response))
+    plan.operations.forEach((operation, index) => {
+      if (
+        operation.method !== "create" ||
+        !operation.resource_name ||
+        errors.has(index)
+      )
+        return;
+      const row = extRow(response[index]);
+      const entity = customAudienceService
+        ? row
+        : Object.values(row)
+            .map(extRow)
+            .find((entry) => typeof entry.resourceName === "string");
+      try {
+        extOwner(entity?.resourceName, plan.account_id, operation.kind);
+        createdRefs.set(operation.resource_name, String(entity!.resourceName));
+      } catch {
+        /* Invalid creation identity cannot authorize dependent updates. */
+      }
+    });
   return plan.operations.map((o, i) => {
     const r = extRow(Array.isArray(response) ? response[i] : null);
     const result = customAudienceService
@@ -489,7 +511,13 @@ export function decodeExtendedMutation(
     try {
       if (resource) {
         extOwner(resource, plan.account_id, o.kind);
-        valid = o.method === "create" || resource === o.resource_name;
+        valid =
+          o.method === "create" ||
+          resource ===
+            resolveExtendedResourceReference(
+              String(o.resource_name),
+              createdRefs,
+            );
       }
     } catch {
       valid = false;
@@ -507,6 +535,21 @@ export function decodeExtendedMutation(
       error,
     };
   });
+}
+export function resolveExtendedResourceReference(
+  value: string,
+  refs: Map<string, string>,
+): string {
+  if (refs.has(value)) return refs.get(value)!;
+  const goal =
+    /^(customers\/[0-9]+)\/(campaignConversionGoals|conversionGoalCampaignConfigs)\/(-[0-9]+)(~[0-9]+~[0-9]+)?$/.exec(
+      value,
+    );
+  if (!goal) return value;
+  const campaign = refs.get(`${goal[1]}/campaigns/${goal[3]}`);
+  return campaign
+    ? `${goal[1]}/${goal[2]}/${campaign.split("/").at(-1)}${goal[4] ?? ""}`
+    : value;
 }
 export function replaceExtendedTemps(
   value: unknown,
@@ -682,6 +725,19 @@ export async function verifyExtendedMutation(
       const clearProfile = optionalLimitPaths[String(actualStrategyType)];
       if (
         comparisonEntity &&
+        o.kind === "campaigns" &&
+        expectedStrategyType === "MAXIMIZE_CONVERSION_VALUE" &&
+        actualStrategyType === expectedStrategyType &&
+        extRow(expected.maximizeConversionValue).targetRoas === 0 &&
+        extRow(comparisonEntity.maximizeConversionValue).targetRoas ===
+          undefined
+      )
+        comparisonEntity.maximizeConversionValue = {
+          ...extRow(comparisonEntity.maximizeConversionValue),
+          targetRoas: 0,
+        };
+      if (
+        comparisonEntity &&
         actualStrategyType === expectedStrategyType &&
         clearProfile
       ) {
@@ -702,6 +758,19 @@ export async function verifyExtendedMutation(
         comparisonEntity.biddingStrategy === undefined
       )
         comparisonEntity.biddingStrategy = "";
+      if (
+        comparisonEntity &&
+        o.kind === "campaignConversionGoals" &&
+        expected.biddable === false &&
+        comparisonEntity.biddable === undefined &&
+        typeof expected.campaign === "string" &&
+        comparisonEntity.campaign === expected.campaign &&
+        typeof expected.category === "string" &&
+        comparisonEntity.category === expected.category &&
+        typeof expected.origin === "string" &&
+        comparisonEntity.origin === expected.origin
+      )
+        comparisonEntity.biddable = false;
       if (
         comparisonEntity &&
         expected.negative === false &&

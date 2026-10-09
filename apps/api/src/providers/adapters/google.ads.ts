@@ -523,6 +523,39 @@ export class GoogleAdsAdapter
         query,
       );
   }
+  private async suggestGeo(
+    context: ProviderReadContext,
+    name: string,
+    country?: string,
+  ) {
+    const response = await providerJson<unknown>(
+      `${this.apiBase()}/geoTargetConstants:suggest`,
+      {
+        method: "POST",
+        headers: {
+          ...this.headers(
+            context.credentials.accessToken,
+            this.contextLoginCustomerId(context),
+          ),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          locale: "ru",
+          ...(country ? { countryCode: country } : {}),
+          locationNames: { names: [name] },
+        }),
+      },
+      this.config.providerHttpTimeoutMs,
+      googleAdsApiError,
+    );
+    const suggestions = stage0Row(response).geoTargetConstantSuggestions;
+    if (!Array.isArray(suggestions) || suggestions.length > 100)
+      throw new GoogleAdsWriteError(
+        "google_geo_invalid",
+        "Google geo suggestions недоступны или слишком многочисленны.",
+      );
+    return suggestions.map(stage0Row);
+  }
   public stage0(
     context: ProviderReadContext,
     action:
@@ -550,39 +583,8 @@ export class GoogleAdsAdapter
         (brief) => this.stage0(context, "build", brief) as Promise<Stage0Plan>,
       );
     if (action === "build")
-      return buildStage0Plan(
-        context.accountId,
-        input,
-        read,
-        async (name, country) => {
-          const response = await providerJson<unknown>(
-            `${this.apiBase()}/geoTargetConstants:suggest`,
-            {
-              method: "POST",
-              headers: {
-                ...this.headers(
-                  context.credentials.accessToken,
-                  this.contextLoginCustomerId(context),
-                ),
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                locale: "ru",
-                ...(country ? { countryCode: country } : {}),
-                locationNames: { names: [name] },
-              }),
-            },
-            this.config.providerHttpTimeoutMs,
-            googleAdsApiError,
-          );
-          const suggestions = stage0Row(response).geoTargetConstantSuggestions;
-          if (!Array.isArray(suggestions) || suggestions.length > 100)
-            throw new GoogleAdsWriteError(
-              "google_geo_invalid",
-              "Google geo suggestions недоступны или слишком многочисленны.",
-            );
-          return suggestions.map(stage0Row);
-        },
+      return buildStage0Plan(context.accountId, input, read, (name, country) =>
+        this.suggestGeo(context, name, country),
       );
     if (action === "resume")
       return buildResumePlan(context.accountId, input, read);
@@ -804,7 +806,9 @@ export class GoogleAdsAdapter
     const read = this.stage1Reader(context);
     if (action === "build")
       return version === 3
-        ? buildStage3Plan(context.accountId, input, read)
+        ? buildStage3Plan(context.accountId, input, read, (name, country) =>
+            this.suggestGeo(context, name, country),
+          )
         : version === 4
           ? buildStage4Plan(context.accountId, input, read)
           : buildStage2AdvancedPlan(context.accountId, input, read);

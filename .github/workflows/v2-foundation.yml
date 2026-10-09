@@ -9,6 +9,7 @@ on:
         "feat/**",
         "codex/google-ads-stage01-integration-final",
         "codex/google-ads-write-stage234-integration",
+        "codex/google-ads-write-full-scope-final",
         "codex/google-ads-write-stage2-completion",
         "codex/google-ads-write-stage3-targeting",
         "codex/google-ads-write-stage4-ads-assets",

@@ -134,6 +134,7 @@ export function fixture(
     campaign: "campaign",
     ad_group: "adGroup",
     customer: "customer",
+    currency_constant: "currencyConstant",
     geo_target_constant: "geoTargetConstant",
     language_constant: "languageConstant",
     customer_conversion_goal: "customerConversionGoal",
@@ -190,12 +191,21 @@ export function fixture(
     });
     resources.set("fixture-customer-goal", {
       customerConversionGoal: {
+        resourceName: `${prefix}/customerConversionGoals/13~2`,
         category: "SUBMIT_LEAD_FORM",
         origin: "WEBSITE",
         biddable: true,
       },
     });
   }
+  for (const currency of ["USD", "KZT"])
+    resources.set(`currencyConstants/${currency}`, {
+      currencyConstant: {
+        resourceName: `currencyConstants/${currency}`,
+        code: currency,
+        billableUnitMicros: "10000",
+      },
+    });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -322,8 +332,13 @@ export function fixture(
               .at(-1)!
               .split("~");
             value.campaign = `${prefix}/campaigns/${campaignId}`;
-            value.category = category;
-            value.origin = origin;
+            const canonicalGoal = [...resources.values()]
+              .map((entry) => object(entry.customerConversionGoal))
+              .find((goal) =>
+                String(goal.resourceName).endsWith(`/${category}~${origin}`),
+              );
+            value.category = canonicalGoal?.category ?? category;
+            value.origin = canonicalGoal?.origin ?? origin;
           }
           if (kind === "conversionGoalCampaignConfig") {
             value.campaign = `${prefix}/campaigns/${name.split("/").at(-1)}`;
@@ -400,6 +415,10 @@ export function fixture(
             { results: [{ metrics: { allConversions: 3 } }] },
           ]);
         let rows = [...resources.values()].filter((row) => row[key]);
+        if (table === "currency_constant") {
+          const code = query.match(/currency_constant\.code = '([A-Z]{3})'/)?.[1];
+          rows = rows.filter((entry) => object(entry.currencyConstant).code === code);
+        }
         // A GAQL FROM campaign/ad_group returns one resource, not one row per child.
         if (table === "campaign")
           rows = rows.filter(
