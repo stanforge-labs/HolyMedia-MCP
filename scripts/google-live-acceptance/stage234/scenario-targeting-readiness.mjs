@@ -415,6 +415,8 @@ function actualCriteria(raw, level, path) {
         "type",
         "status",
         "negative",
+        "device",
+        "bidModifier",
         "userList",
         "userInterest",
         "extendedDemographic",
@@ -435,6 +437,30 @@ function actualCriteria(raw, level, path) {
       (x.negative !== undefined && typeof x.negative !== "boolean")
     )
       fail("scenario_foreign_resource", `${path}.${i}`);
+    if (x.device !== undefined || x.type === "DEVICE") {
+      if (level !== "CAMPAIGN" || x.type !== "DEVICE")
+        fail("scenario_device_invalid", `${path}.${i}.device`);
+      const device = closed(
+        x.device,
+        ["type"],
+        ["type"],
+        `${path}.${i}.device`,
+      );
+      if (
+        !["MOBILE", "TABLET", "DESKTOP", "CONNECTED_TV", "OTHER"].includes(
+          device.type,
+        )
+      )
+        fail("scenario_device_invalid", `${path}.${i}.device.type`);
+    }
+    if (
+      x.bidModifier !== undefined &&
+      (typeof x.bidModifier !== "number" ||
+        !Number.isFinite(x.bidModifier) ||
+        x.bidModifier > 10 ||
+        (x.bidModifier < 0.1 && !(x.type === "DEVICE" && x.bidModifier === 0)))
+    )
+      fail("scenario_modifier_invalid", `${path}.${i}.bidModifier`);
   }
   duplicate(criteria, (x) => x.resourceName, path);
   return criteria;

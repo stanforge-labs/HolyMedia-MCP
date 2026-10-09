@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { URL } from "node:url";
+const { structuredClone } = globalThis;
 import {
   TARGETING_BASE_HEAD as head,
   TARGETING_READ_QUERIES as queries,
@@ -399,6 +401,101 @@ test("J produces city/exclusion/proximity typed rows with proven district parent
   assert.equal(r.proximity_source, "EXPLICIT_TEST_COORDINATES");
   assert.deepEqual(input, before);
   assert.equal(r.real_provider_writes, 0);
+});
+const deviceCriteria = () =>
+  ["MOBILE", "DESKTOP", "TABLET"].map((type, i) => ({
+    resourceName: `${prefix}/campaignCriteria/${fixture.campaign}~${910 + i}`,
+    campaign,
+    criterionId: String(910 + i),
+    type: "DEVICE",
+    negative: false,
+    status: "ENABLED",
+    device: { type },
+    ...(i ? { bidModifier: i === 1 ? 1 : 0 } : {}),
+  }));
+test("J retains three owned built-in device snapshots and exact optional modifiers in full digest", () => {
+  const input = jInput();
+  input.existing_criteria = deviceCriteria();
+  const before = structuredClone(input),
+    prepared = prepareGeoJScenario(input, head, now);
+  assert.equal(prepared.result, "PREPARED_NOT_LIVE");
+  assert.deepEqual(input, before);
+  assert.equal(input.existing_criteria[0].bidModifier, undefined);
+  assert.equal(input.existing_criteria[2].bidModifier, 0);
+  input.existing_criteria[0].bidModifier = 1;
+  assert.notEqual(
+    prepareGeoJScenario(input, head, now).preserved_criteria_digest,
+    prepared.preserved_criteria_digest,
+  );
+  delete input.existing_criteria[0].bidModifier;
+  input.existing_criteria[0].device.type = "CONNECTED_TV";
+  assert.notEqual(
+    prepareGeoJScenario(input, head, now).preserved_criteria_digest,
+    prepared.preserved_criteria_digest,
+  );
+});
+test("J device projection proceeds to honest district/coordinates blockers without dropping neighbors", () => {
+  for (const missing of ["district", "coordinates"]) {
+    const input = jInput();
+    input.existing_criteria = deviceCriteria();
+    if (missing === "district") input.district_candidates = [];
+    else delete input.proximity;
+    const before = structuredClone(input),
+      result = prepareGeoJScenario(input, head, now);
+    assert.equal(result.result, "BLOCKED");
+    assert.equal(
+      result.blockers[0].code,
+      missing === "district"
+        ? "scenario_district_parent_unproven"
+        : "scenario_proximity_coordinates_required",
+    );
+    assert.deepEqual(input, before);
+    assert.equal(result.real_provider_writes, 0);
+  }
+});
+test("J rejects foreign, unknown, untyped or out-of-bounds device snapshot fields", () => {
+  for (const change of [
+    (x) =>
+      (x.resourceName =
+        "customers/1111111111/campaignCriteria/24324170853~910"),
+    (x) => (x.campaign = "customers/1111111111/campaigns/24324170853"),
+    (x) => (x.unexpected = true),
+    (x) => (x.device.type = "UNKNOWN"),
+    (x) => (x.device.type = "UNSPECIFIED"),
+    (x) => (x.device.extra = true),
+    (x) => (x.device = []),
+    (x) => delete x.device,
+    (x) => (x.type = "LOCATION"),
+    (x) => (x.bidModifier = "1"),
+    (x) => (x.bidModifier = null),
+    (x) => (x.bidModifier = Number.NaN),
+    (x) => (x.bidModifier = 0.05),
+    (x) => (x.bidModifier = -1),
+    (x) => (x.bidModifier = 10.01),
+  ]) {
+    const input = jInput();
+    input.existing_criteria = deviceCriteria();
+    change(input.existing_criteria[0]);
+    const result = prepareGeoJScenario(input, head, now);
+    assert.equal(result.result, "BLOCKED");
+    assert.ok(!result.preview_request);
+    assert.equal(result.real_provider_writes, 0);
+  }
+  const input = jInput();
+  input.existing_criteria = [
+    {
+      resourceName: `${prefix}/campaignCriteria/${fixture.campaign}~44`,
+      campaign,
+      criterionId: "44",
+      type: "LOCATION",
+      status: "ENABLED",
+      bidModifier: 0,
+    },
+  ];
+  assert.equal(
+    prepareGeoJScenario(input, head, now).blockers[0].code,
+    "scenario_modifier_invalid",
+  );
 });
 for (const change of [
   "no_city",
