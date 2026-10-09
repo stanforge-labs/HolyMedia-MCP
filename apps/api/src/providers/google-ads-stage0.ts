@@ -119,6 +119,12 @@ const resources = {
     "campaignAssets",
     "campaign_asset.resource_name, campaign_asset.campaign, campaign_asset.asset, campaign_asset.field_type, campaign_asset.status",
   ],
+  campaignSharedSet: [
+    "campaign_shared_set",
+    "campaignSharedSet",
+    "campaignSharedSets",
+    "campaign_shared_set.resource_name, campaign_shared_set.campaign, campaign_shared_set.shared_set, campaign_shared_set.status",
+  ],
   campaignConversionGoal: [
     "campaign_conversion_goal",
     "campaignConversionGoal",
@@ -1818,19 +1824,59 @@ export async function buildClonePlan(
   const raw = row(input),
     account_id = customerId(account),
     id = String(raw.source_campaign_id);
+  if (customerId(String(raw.account_id)) !== account_id)
+    error(
+      "google_account_mismatch",
+      "Clone account_id не совпадает с выбранным customer.",
+    );
   const checks: Stage0Plan["checks"] = [],
+    cache = new Map<string, JsonRow[]>(),
     q = async (query: string) => {
+      if (cache.has(query)) return cache.get(query)!;
       const rows = await checkedRead(read, query);
       checks.push({ query, rows });
+      cache.set(query, rows);
       return rows;
     };
-  const fetchKind = async (kind: Stage0Operation["kind"], where: string) =>
-    list(await q(stage0Query(kind, where))).map((r) =>
-      row(r[resources[kind][1]]),
-    );
+  const fetchKind = async (
+    kind: Stage0Operation["kind"],
+    where: string,
+    extraFields = "",
+  ) =>
+    list(
+      await q(
+        extraFields
+          ? `SELECT ${resources[kind][3]}, ${extraFields} FROM ${resources[kind][0]} WHERE ${where}`
+          : stage0Query(kind, where),
+      ),
+    ).map((r) => row(r[resources[kind][1]]));
+  const prefix = `customers/${account_id}`;
+  const owned = (value: unknown, kind: string) => {
+    if (
+      typeof value !== "string" ||
+      !new RegExp(
+        `^${prefix}/${kind}/[0-9]{1,20}(?:~[A-Z0-9_]{1,80}){0,2}$`,
+      ).test(value)
+    )
+      error(
+        "google_clone_reference_invalid",
+        "Source resource не принадлежит выбранному account/type; clone остановлен.",
+      );
+    return String(value);
+  };
+  const sourceMicros = (value: unknown) => {
+    const text = String(value ?? 0);
+    if (!/^[0-9]{1,19}$/.test(text))
+      error(
+        "google_clone_reference_invalid",
+        "Source money micros не подтверждены; clone остановлен.",
+      );
+    return BigInt(text);
+  };
   const campaigns = await fetchKind(
       "campaign",
       `campaign.id = ${id} AND campaign.status != REMOVED`,
+      "campaign.maximize_conversions.target_cpa_micros, campaign.manual_cpc.enhanced_cpc_enabled",
     ),
     campaign = campaigns[0];
   if (
@@ -1852,45 +1898,146 @@ export async function buildClonePlan(
       "google_clone_unsupported_components",
       "Clone поддерживает только Search MANUAL_CPC/MAXIMIZE_CONVERSIONS.",
     );
+  if (
+    row(campaign.manualCpc).enhancedCpcEnabled === true ||
+    sourceMicros(row(campaign.maximizeConversions).targetCpaMicros) !== 0n
+  )
+    error(
+      "google_clone_unsupported_components",
+      "Source bidding parameters выходят за basic MANUAL_CPC/MAXIMIZE_CONVERSIONS clone; параметры не опущены.",
+    );
+  owned(campaign.campaignBudget, "campaignBudgets");
   const budgets = await fetchKind(
     "campaignBudget",
     `campaign_budget.resource_name = ${quote(String(campaign.campaignBudget))}`,
   );
-  if (budgets.length !== 1)
+  if (
+    budgets.length !== 1 ||
+    budgets[0]!.resourceName !== campaign.campaignBudget
+  )
     error("google_clone_unsupported_components", "Source budget недоступен.");
-  const customer = row((await q(customerQuery))[0]?.customer),
+  const customers = await q(customerQuery),
+    customer = row(customers[0]?.customer),
     currency = String(customer.currencyCode);
+  if (
+    customers.length !== 1 ||
+    String(customer.id) !== account_id ||
+    customer.resourceName !== prefix ||
+    !/^[A-Z]{3}$/.test(currency)
+  )
+    error(
+      "google_clone_reference_invalid",
+      "Source customer/currency/owner не подтверждён.",
+    );
   const money = (micros: unknown) => {
-    const n = BigInt(String(micros ?? 0));
+    const n = sourceMicros(micros);
     return {
       amount: `${n / 1_000_000n}.${String(n % 1_000_000n).padStart(6, "0")}`,
       currency,
     };
   };
-  const criteria = await fetchKind("campaignCriterion", `campaign.id = ${id}`);
-  const links = await q(
-    `SELECT campaign_shared_set.resource_name, campaign_shared_set.status FROM campaign_shared_set WHERE campaign.id = ${id} AND campaign_shared_set.status != REMOVED`,
+  const criteria = await fetchKind(
+    "campaignCriterion",
+    `campaign.id = ${id} AND campaign_criterion.status != REMOVED`,
+    "campaign_criterion.status",
   );
-  if (links.length)
-    error(
-      "google_clone_unsupported_components",
-      "Clone shared negative list links пока не поддерживается; source не скопирован.",
-    );
+  const links = await fetchKind(
+    "campaignSharedSet",
+    `campaign.id = ${id} AND campaign_shared_set.status != REMOVED`,
+  );
+  const sharedLists: { resource: string; name: string; members: JsonRow[] }[] =
+    [];
+  const sharedSeen = new Set<string>();
+  for (const link of links) {
+    const resource = owned(link.sharedSet, "sharedSets"),
+      sharedId = resource.split("/").at(-1)!;
+    if (
+      link.campaign !== campaign.resourceName ||
+      link.resourceName !== `${prefix}/campaignSharedSets/${id}~${sharedId}` ||
+      link.status !== "ENABLED" ||
+      sharedSeen.has(resource)
+    )
+      error(
+        "google_clone_reference_invalid",
+        "Source shared-list association/owner/status/identity не подтверждён или duplicate.",
+      );
+    sharedSeen.add(resource);
+    const sets = list(
+      await q(
+        `SELECT shared_set.resource_name, shared_set.id, shared_set.name, shared_set.type, shared_set.status FROM shared_set WHERE shared_set.resource_name = ${quote(resource)}`,
+      ),
+    ).map((r) => row(r.sharedSet));
+    if (
+      sets.length !== 1 ||
+      sets[0]!.resourceName !== resource ||
+      String(sets[0]!.id) !== sharedId ||
+      sets[0]!.type !== "NEGATIVE_KEYWORDS" ||
+      sets[0]!.status !== "ENABLED"
+    )
+      error(
+        "google_clone_reference_invalid",
+        "Same-account ENABLED NEGATIVE_KEYWORDS SharedSet не подтверждён.",
+      );
+    const members = list(
+      await q(
+        `SELECT shared_criterion.resource_name, shared_criterion.shared_set, shared_criterion.keyword.text, shared_criterion.keyword.match_type FROM shared_criterion WHERE shared_criterion.shared_set = ${quote(resource)}`,
+      ),
+    ).map((r) => row(r.sharedCriterion));
+    const memberSeen = new Set<string>();
+    for (const member of members) {
+      const memberResource = owned(member.resourceName, "sharedCriteria");
+      if (
+        member.sharedSet !== resource ||
+        !memberResource.startsWith(`${prefix}/sharedCriteria/${sharedId}~`) ||
+        memberSeen.has(memberResource) ||
+        !row(member.keyword).text ||
+        !["EXACT", "PHRASE", "BROAD"].includes(
+          String(row(member.keyword).matchType),
+        )
+      )
+        error(
+          "google_clone_reference_invalid",
+          "Shared list member owner/type/match/identity не подтверждён.",
+        );
+      memberSeen.add(memberResource);
+    }
+    sharedLists.push({ resource, name: String(sets[0]!.name), members });
+  }
   const locations: JsonRow[] = [],
+    proximities: JsonRow[] = [],
     languages: string[] = [],
     schedule: JsonRow[] = [],
     negatives: JsonRow[] = [];
   for (const c of criteria) {
+    owned(c.resourceName, "campaignCriteria");
+    if (
+      c.campaign !== campaign.resourceName ||
+      !String(c.resourceName).startsWith(`${prefix}/campaignCriteria/${id}~`) ||
+      (c.status !== undefined && c.status !== "ENABLED")
+    )
+      error(
+        "google_clone_reference_invalid",
+        "Source campaign criterion parent/status не подтверждён.",
+      );
     if (row(c.location).geoTargetConstant) {
-      const resource = String(row(c.location).geoTargetConstant),
-        constant = row(
-          (
-            await q(
-              `SELECT geo_target_constant.id, geo_target_constant.name, geo_target_constant.country_code FROM geo_target_constant WHERE geo_target_constant.resource_name = ${quote(resource)}`,
-            )
-          )[0]?.geoTargetConstant,
+      const resource = String(row(c.location).geoTargetConstant);
+      if (!/^geoTargetConstants\/[0-9]{1,20}$/.test(resource))
+        error(
+          "google_clone_reference_invalid",
+          "Source global geo reference/type не подтверждён.",
         );
-      if (!constant.id)
+      const constant = row(
+        (
+          await q(
+            `SELECT geo_target_constant.resource_name, geo_target_constant.id, geo_target_constant.name, geo_target_constant.country_code FROM geo_target_constant WHERE geo_target_constant.resource_name = ${quote(resource)}`,
+          )
+        )[0]?.geoTargetConstant,
+      );
+      if (
+        !constant.id ||
+        constant.resourceName !== resource ||
+        String(constant.id) !== resource.split("/").at(-1)
+      )
         error(
           "google_clone_unsupported_components",
           "Source geo constant недоступен.",
@@ -1901,16 +2048,46 @@ export async function buildClonePlan(
         country_code: constant.countryCode,
         exclude: c.negative === true,
       });
-    } else if (row(c.language).languageConstant) {
-      const resource = String(row(c.language).languageConstant),
-        constant = row(
-          (
-            await q(
-              `SELECT language_constant.code FROM language_constant WHERE language_constant.resource_name = ${quote(resource)}`,
-            )
-          )[0]?.languageConstant,
+    } else if (c.proximity) {
+      const p = row(c.proximity),
+        point = row(p.geoPoint);
+      if (c.negative === true || !p.geoPoint || Object.keys(point).length === 0)
+        error(
+          "google_clone_unsupported_components",
+          "Clone radius требует independently readable positive geoPoint; negative/address-only radius не угадывается.",
         );
-      if (!constant.code)
+      const micro = (v: unknown, max: number) => {
+        const n = Number(v ?? 0);
+        if (!Number.isSafeInteger(n) || Math.abs(n) > max)
+          error(
+            "google_clone_reference_invalid",
+            "Source proximity microdegrees вне допустимого диапазона.",
+          );
+        return n / 1_000_000;
+      };
+      const radius = {
+        latitude: micro(point.latitudeInMicroDegrees, 90_000_000),
+        longitude: micro(point.longitudeInMicroDegrees, 180_000_000),
+        radius: p.radius,
+        unit: p.radiusUnits,
+      };
+      stage0ProximityFields(radius);
+      proximities.push(radius);
+    } else if (row(c.language).languageConstant) {
+      const resource = String(row(c.language).languageConstant);
+      if (!/^languageConstants\/[0-9]{1,20}$/.test(resource))
+        error(
+          "google_clone_reference_invalid",
+          "Source global language reference/type не подтверждён.",
+        );
+      const constant = row(
+        (
+          await q(
+            `SELECT language_constant.resource_name, language_constant.code FROM language_constant WHERE language_constant.resource_name = ${quote(resource)}`,
+          )
+        )[0]?.languageConstant,
+      );
+      if (!constant.code || constant.resourceName !== resource)
         error(
           "google_clone_unsupported_components",
           "Source language недоступен.",
@@ -1937,15 +2114,29 @@ export async function buildClonePlan(
     else
       error(
         "google_clone_unsupported_components",
-        "Source содержит неподдерживаемый criterion (proximity/audience/device и т.п.). Ничего не опущено молча.",
+        "Source содержит неподдерживаемый criterion (audience/device и т.п.). Ничего не опущено молча.",
       );
   }
+  if (proximities.length && raw.new_locations)
+    error(
+      "google_clone_geo_override_requires_radius",
+      "new_locations не определяет перенос source radius; clone с radius поддерживает сохранение исходного geo, не скрытую замену/геокодирование.",
+    );
   const groups = await fetchKind(
       "adGroup",
       `campaign.id = ${id} AND ad_group.status != REMOVED`,
     ),
     adGroups: JsonRow[] = [];
   for (const g of groups) {
+    owned(g.resourceName, "adGroups");
+    if (
+      g.campaign !== campaign.resourceName ||
+      g.resourceName !== `${prefix}/adGroups/${g.id}`
+    )
+      error(
+        "google_clone_reference_invalid",
+        "Source ad group identity/parent не подтверждён.",
+      );
     if (g.type !== "SEARCH_STANDARD")
       error(
         "google_clone_unsupported_components",
@@ -1959,6 +2150,28 @@ export async function buildClonePlan(
         "adGroupAd",
         `ad_group.id = ${g.id} AND ad_group_ad.status != REMOVED`,
       );
+    for (const k of keys) {
+      owned(k.resourceName, "adGroupCriteria");
+      if (
+        k.adGroup !== g.resourceName ||
+        !String(k.resourceName).startsWith(`${prefix}/adGroupCriteria/${g.id}~`)
+      )
+        error(
+          "google_clone_reference_invalid",
+          "Source keyword parent не подтверждён.",
+        );
+    }
+    for (const a of ads) {
+      owned(a.resourceName, "adGroupAds");
+      if (
+        a.adGroup !== g.resourceName ||
+        !String(a.resourceName).startsWith(`${prefix}/adGroupAds/${g.id}~`)
+      )
+        error(
+          "google_clone_reference_invalid",
+          "Source ad parent не подтверждён.",
+        );
+    }
     if (
       keys.some((k) => !row(k.keyword).text) ||
       ads.some((a) => !row(row(a.ad).responsiveSearchAd).headlines)
@@ -1981,7 +2194,7 @@ export async function buildClonePlan(
             ? { final_url: k.finalUrls[0] }
             : {}),
           ...(campaign.biddingStrategyType === "MANUAL_CPC" &&
-          BigInt(String(k.cpcBidMicros ?? 0)) > 0n
+          sourceMicros(k.cpcBidMicros) > 0n
             ? { cpc_bid: money(k.cpcBidMicros) }
             : {}),
         })),
@@ -2023,6 +2236,11 @@ export async function buildClonePlan(
       }),
     });
   }
+  const referenceAssets: {
+    resource: string;
+    fieldType: string;
+    status?: string;
+  }[] = [];
   const assetLinks = await fetchKind(
       "campaignAsset",
       `campaign.id = ${id} AND campaign_asset.status != REMOVED`,
@@ -2035,13 +2253,77 @@ export async function buildClonePlan(
       logo_asset_ids: [],
     };
   for (const link of assetLinks) {
+    owned(link.resourceName, "campaignAssets");
+    const assetResource = owned(link.asset, "assets");
+    if (link.campaign !== campaign.resourceName)
+      error(
+        "google_clone_reference_invalid",
+        "Source asset association parent не подтверждён.",
+      );
     const found = await fetchKind(
         "asset",
         `asset.resource_name = ${quote(String(link.asset))}`,
+        "asset.call_asset.call_conversion_reporting_state, asset.call_asset.call_conversion_action, asset.call_asset.ad_schedule_targets",
       ),
       a = found[0];
-    if (!a)
+    if (found.length !== 1 || !a || a.resourceName !== assetResource)
       error("google_clone_unsupported_components", "Source asset недоступен.");
+    const expectedAssetTypes: Record<string, string> = {
+      SITELINK: "SITELINK",
+      CALLOUT: "CALLOUT",
+      STRUCTURED_SNIPPET: "STRUCTURED_SNIPPET",
+      CALL: "CALL",
+      BUSINESS_NAME: "TEXT",
+      AD_IMAGE: "IMAGE",
+      BUSINESS_LOGO: "IMAGE",
+    };
+    if (
+      expectedAssetTypes[String(link.fieldType)] &&
+      a!.type !== expectedAssetTypes[String(link.fieldType)]
+    )
+      error(
+        "google_clone_reference_invalid",
+        "Source asset type не соответствует campaign field_type.",
+      );
+    if (["CALL", "BUSINESS_NAME"].includes(String(link.fieldType))) {
+      if (
+        ![undefined, "ENABLED", "PAUSED"].includes(
+          link.status as string | undefined,
+        ) ||
+        referenceAssets.some(
+          (r) => r.resource === assetResource && r.fieldType === link.fieldType,
+        )
+      )
+        error(
+          "google_clone_reference_invalid",
+          "Source asset link status/duplicate не подтверждён.",
+        );
+      if (
+        (link.fieldType === "CALL" &&
+          (a!.type !== "CALL" ||
+            !row(a!.callAsset).countryCode ||
+            !row(a!.callAsset).phoneNumber)) ||
+        (link.fieldType === "BUSINESS_NAME" &&
+          (a!.type !== "TEXT" || !row(a!.textAsset).text))
+      )
+        error(
+          "google_clone_reference_invalid",
+          "Source CALL/BUSINESS_NAME asset type/content не подтверждён.",
+        );
+      if (link.fieldType === "BUSINESS_NAME")
+        validateText(String(row(a!.textAsset).text), 25, "Clone business name");
+      referenceAssets.push({
+        resource: assetResource,
+        fieldType: String(link.fieldType),
+        ...(link.status ? { status: String(link.status) } : {}),
+      });
+      continue;
+    }
+    if (link.status !== undefined && link.status !== "ENABLED")
+      error(
+        "google_clone_unsupported_components",
+        "Paused/unknown source text/image association нельзя незаметно включать; требуется supported reference profile.",
+      );
     if (link.fieldType === "SITELINK") {
       const s = row(a!.sitelinkAsset);
       if (!Array.isArray(a!.finalUrls) || a!.finalUrls.length !== 1)
@@ -2073,7 +2355,7 @@ export async function buildClonePlan(
     else
       error(
         "google_clone_unsupported_components",
-        `Source asset ${link.fieldType}: clone пока не поддерживается (call/business name/unknown details нельзя опускать).`,
+        `Source asset ${link.fieldType}: clone пока не поддерживается; unknown details нельзя опускать.`,
       );
   }
   const goals = await fetchKind(
@@ -2108,6 +2390,10 @@ export async function buildClonePlan(
   if (
     networks.targetContentNetwork === true ||
     networks.targetPartnerSearchNetwork === true ||
+    networks.targetGoogleSearch === false ||
+    (row(campaign.geoTargetTypeSetting).negativeGeoTargetType !== undefined &&
+      row(campaign.geoTargetTypeSetting).negativeGeoTargetType !==
+        "PRESENCE") ||
     row(campaign.geoTargetTypeSetting).positiveGeoTargetType !== "PRESENCE"
   )
     error(
@@ -2131,6 +2417,7 @@ export async function buildClonePlan(
     campaign_name: raw.new_name,
     daily_budget: raw.new_budget ?? money(budgets[0]!.amountMicros),
     locations: raw.new_locations ?? locations,
+    ...(proximities.length ? { proximities } : {}),
     languages,
     ad_groups: adGroups,
     negative_keywords: negatives,
@@ -2150,6 +2437,131 @@ export async function buildClonePlan(
     },
   };
   const plan = await build(brief);
+  const targetCampaigns = plan.operations.filter((o) => o.kind === "campaign");
+  const targetCampaign = targetCampaigns[0];
+  if (
+    plan.account_id !== account_id ||
+    targetCampaigns.length !== 1 ||
+    !targetCampaign ||
+    targetCampaign.method !== "create" ||
+    targetCampaign.fields.status !== "PAUSED" ||
+    typeof targetCampaign.resource_name !== "string" ||
+    !new RegExp(`^${prefix}/campaigns/-[1-9][0-9]*$`).test(
+      targetCampaign.resource_name,
+    )
+  )
+    error(
+      "google_clone_target_invalid",
+      "Clone builder не вернул единственную новую PAUSED campaign выбранного account.",
+    );
+  const targetResource = targetCampaign!.resource_name!;
+  const append = (
+    kind: "campaignSharedSet" | "campaignAsset",
+    fields: JsonRow,
+    expected: JsonRow,
+    label: string,
+    warnings: string[],
+    conflicts: JsonRow[] = [],
+  ) => {
+    const index = plan.operations.length;
+    plan.operations.push({
+      kind,
+      method: "create",
+      resource_name: null,
+      fields,
+      update_mask: null,
+      expected,
+      before: null,
+      row: index,
+    });
+    plan.items.push({
+      item: index,
+      keyword: label,
+      campaign_id: "new",
+      campaign_name: String(raw.new_name),
+      ad_group_id: "",
+      ad_group_name: "",
+      before: null,
+      after: expected,
+      warnings,
+      conflicts,
+      duplicate_status: "none",
+      provider_operations: [index],
+    });
+  };
+  for (const asset of referenceAssets) {
+    const fields = {
+      campaign: targetResource,
+      asset: asset.resource,
+      fieldType: asset.fieldType,
+      ...(asset.status ? { status: asset.status } : {}),
+    };
+    append(
+      "campaignAsset",
+      fields,
+      fields,
+      `Clone ${asset.fieldType} ${asset.resource}`,
+      [
+        "Существующий owned asset переиспользуется; содержимое/phone/conversion/schedule/business name не изменяются и не удаляются.",
+      ],
+    );
+  }
+  for (const shared of sharedLists) {
+    const conflicts = adGroups.flatMap((g) =>
+      list(g.keywords).flatMap((k) =>
+        shared.members.flatMap((m) => {
+          const n = row(m.keyword),
+            reason = conflictReason(
+              String(n.text),
+              n.matchType as "BROAD" | "PHRASE" | "EXACT",
+              String(k.text),
+            );
+          return reason
+            ? [
+                {
+                  negative: n.text,
+                  affected_keyword: k.text,
+                  group: g.name,
+                  shared_set: shared.resource,
+                  reason_code: reason,
+                },
+              ]
+            : [];
+        }),
+      ),
+    );
+    const fields = {
+      campaign: targetResource,
+      sharedSet: shared.resource,
+    };
+    append(
+      "campaignSharedSet",
+      fields,
+      { ...fields, status: "ENABLED" },
+      `Shared negative list ${shared.name}`,
+      [
+        "Тот же owned negative list подключается к новой PAUSED campaign; list/members/source associations не изменяются. Future list changes affect both campaigns.",
+        ...(conflicts.length
+          ? [
+              `Shared list conflicts: ${conflicts.length}; проверьте перед подтверждением.`,
+            ]
+          : []),
+      ],
+      conflicts,
+    );
+  }
+  assertGoogleBatch(plan.operations);
+  plan.summary.operation_count = plan.operations.length;
+  plan.summary.assets_count = plan.operations.filter(
+    (o) => o.kind === "campaignAsset",
+  ).length;
+  plan.summary.shared_negative_lists = sharedLists.map((s) => ({
+    resource_name: s.resource,
+    name: s.name,
+    member_count: s.members.length,
+    reused: true,
+  }));
+  plan.summary.reused_call_business_assets = referenceAssets;
   plan.checks.push(...checks);
   plan.summary.clone_source_campaign_id = id;
   plan.items[1]!.warnings.push(
