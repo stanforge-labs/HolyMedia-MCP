@@ -178,7 +178,7 @@ export function validateText(v: string, max: number, field: string) {
       `${field}: максимум ${max} символов; ничего не создано.`,
     );
 }
-function validateDate(value: unknown) {
+export function validateDate(value: unknown) {
   if (value === undefined) return;
   const date = new Date(String(value) + "T00:00:00Z");
   if (
