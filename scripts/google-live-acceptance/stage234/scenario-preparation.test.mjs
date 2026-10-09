@@ -124,9 +124,9 @@ test("G eligible only with complete owned positive explicit CPC proof plus autom
   );
   for (const change of [
     (p) => (p.keyword.cpcBidMicros = "0"),
-    (p) => (p.keyword.effectiveCpcBidSource = "AD_GROUP"),
     (p) => delete p.keyword.cpcBidMicros,
     (p) => (p.campaign.biddingStrategyType = "MANUAL_CPC"),
+    (p) => (p.campaign.biddingStrategyType = "UNKNOWN"),
   ]) {
     const p = structuredClone(proof);
     change(p);
@@ -144,6 +144,90 @@ test("G eligible only with complete owned positive explicit CPC proof plus autom
     () => prepareAcceptanceScenarios(evidence, { freshReadProof: proof, now }),
     /owner_or_state/,
   );
+});
+test("G auto CPC proof does not require dynamic effective fields to equal raw override", () => {
+  for (const effect of [
+    {},
+    {
+      effectiveCpcBidSource: "CAMPAIGN_BIDDING_STRATEGY",
+      effectiveCpcBidMicros: "900000",
+    },
+    { effectiveCpcBidSource: "AD_GROUP", effectiveCpcBidMicros: "100000" },
+  ]) {
+    const proof = fresh();
+    proof.campaign.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+    proof.keyword = {
+      criterionId: t.keyword,
+      resourceName: `${prefix}/adGroupCriteria/${t.group}~${t.keyword}`,
+      type: "KEYWORD",
+      negative: false,
+      status: "ENABLED",
+      cpcBidMicros: "100000",
+      ...effect,
+    };
+    const G = prepareAcceptanceScenarios(evidence, {
+      freshReadProof: proof,
+      now,
+    }).scenarios.G;
+    assert.equal(G.status, "ELIGIBLE_READ_ONLY_PREVIEW_NOT_STARTED");
+    assert.equal(G.planned_before.cpc_bid_micros, "100000");
+    assert.match(G.required_warning, /may not affect effective bids/);
+    assert.equal(
+      G.required_before.explicit_cpc_field,
+      "ad_group_criterion.cpc_bid_micros",
+    );
+    assert.equal(G.preview_created, false);
+    assert.equal(G.commit_authorized, false);
+    assert.equal(G.real_provider_write_calls, 0);
+    for (const missing of ["0", undefined]) {
+      proof.keyword.cpcBidMicros = missing;
+      assert.equal(
+        prepareAcceptanceScenarios(evidence, { freshReadProof: proof, now })
+          .scenarios.G.status,
+        "BLOCKED_NO_ELIGIBLE_AUTOMATED_EXPLICIT_CPC",
+      );
+    }
+  }
+});
+test("G portfolio reference cannot substitute for proven auto strategy or owned positive keyword", () => {
+  const proof = fresh();
+  proof.campaign.biddingStrategy = `${prefix}/biddingStrategies/123`;
+  proof.keyword = {
+    criterionId: t.keyword,
+    resourceName: `${prefix}/adGroupCriteria/${t.group}~${t.keyword}`,
+    type: "KEYWORD",
+    negative: false,
+    status: "ENABLED",
+    cpcBidMicros: "100000",
+  };
+  assert.equal(
+    prepareAcceptanceScenarios(evidence, { freshReadProof: proof, now })
+      .scenarios.G.status,
+    "BLOCKED_NO_ELIGIBLE_AUTOMATED_EXPLICIT_CPC",
+  );
+  proof.campaign.biddingStrategyType = "TARGET_CPA";
+  assert.equal(
+    prepareAcceptanceScenarios(evidence, { freshReadProof: proof, now })
+      .scenarios.G.status,
+    "ELIGIBLE_READ_ONLY_PREVIEW_NOT_STARTED",
+  );
+  for (const change of [
+    (p) =>
+      (p.campaign.biddingStrategy =
+        "customers/1111111111/biddingStrategies/123"),
+    (p) => (p.campaign.biddingStrategy = true),
+    (p) => (p.keyword.negative = true),
+    (p) => delete p.keyword.negative,
+    (p) =>
+      (p.keyword.resourceName = `customers/1111111111/adGroupCriteria/${t.group}~${t.keyword}`),
+    (p) => (p.verified_at = new Date(now - 300001).toISOString()),
+  ]) {
+    const p = structuredClone(proof);
+    change(p);
+    assert.throws(() =>
+      prepareAcceptanceScenarios(evidence, { freshReadProof: p, now }),
+    );
+  }
 });
 test("H +60%2USD→3.2USD with warning, nonshared is not LIVEsharedimpact evidence", () => {
   const H = prepareAcceptanceScenarios(evidence).scenarios.H;

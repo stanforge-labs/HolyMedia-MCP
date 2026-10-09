@@ -283,7 +283,7 @@ export function prepareAcceptanceScenarios(
       "Manual CPC override under automated/portfolio bidding may not affect effective bids; strategy unchanged",
     required_before: {
       positive_keyword: true,
-      explicit_cpc_source: "AD_GROUP_CRITERION",
+      explicit_cpc_field: "ad_group_criterion.cpc_bid_micros",
       existing_identity: `${prefix}/adGroupCriteria/${scenarioTarget.group}~${scenarioTarget.keyword}`,
     },
   };
@@ -293,26 +293,26 @@ export function prepareAcceptanceScenarios(
       k.resourceName !== G.required_before.existing_identity ||
       String(k.criterionId) !== scenarioTarget.keyword ||
       k.type !== "KEYWORD" ||
-      k.negative === true ||
+      k.negative !== false ||
       k.status !== "ENABLED"
     )
       fail("scenario_keyword_owner_or_state_invalid");
-    const auto =
-      [
-        "TARGET_SPEND",
-        "MAXIMIZE_CONVERSIONS",
-        "MAXIMIZE_CONVERSION_VALUE",
-        "TARGET_CPA",
-        "TARGET_ROAS",
-        "TARGET_IMPRESSION_SHARE",
-      ].includes(fresh.campaign.biddingStrategyType) ||
-      Boolean(fresh.campaign.biddingStrategy);
     if (
-      auto &&
-      k.effectiveCpcBidSource === "AD_GROUP_CRITERION" &&
-      /^[1-9][0-9]*$/.test(String(k.cpcBidMicros)) &&
-      String(k.effectiveCpcBidMicros) === String(k.cpcBidMicros)
-    ) {
+      fresh.campaign.biddingStrategy !== undefined &&
+      !new RegExp(`^${prefix}/biddingStrategies/[0-9]{1,20}$`).test(
+        fresh.campaign.biddingStrategy,
+      )
+    )
+      fail("scenario_strategy_owner_invalid");
+    const auto = [
+      "TARGET_SPEND",
+      "MAXIMIZE_CONVERSIONS",
+      "MAXIMIZE_CONVERSION_VALUE",
+      "TARGET_CPA",
+      "TARGET_ROAS",
+      "TARGET_IMPRESSION_SHARE",
+    ].includes(fresh.campaign.biddingStrategyType);
+    if (auto && /^[1-9][0-9]*$/.test(String(k.cpcBidMicros))) {
       G.status = "ELIGIBLE_READ_ONLY_PREVIEW_NOT_STARTED";
       G.planned_before = {
         resource_name: k.resourceName,
