@@ -127,6 +127,7 @@ export function fixture(
   };
   const tables: Record<string, string> = {
     ad_group_criterion: "adGroupCriterion",
+    ad_group_bid_modifier: "adGroupBidModifier",
     campaign_criterion: "campaignCriterion",
     shared_set: "sharedSet",
     shared_criterion: "sharedCriterion",
@@ -388,6 +389,33 @@ export function fixture(
                 }
               : {}),
           });
+          // Real Google Search campaign creation supplies provider-managed device
+          // rows without extra mutate operations. Preserve this in the mock, so
+          // clone source proof and postcommit inventory verification are honest.
+          if (
+            create &&
+            kind === "campaign" &&
+            value.advertisingChannelType === "SEARCH"
+          )
+            for (const [criterionId, type] of Object.entries({
+              "30000": "DESKTOP",
+              "30001": "MOBILE",
+              "30002": "TABLET",
+            })) {
+              const resourceName = `${prefix}/campaignCriteria/${value.id}~${criterionId}`;
+              resources.set(resourceName, {
+                campaign: value,
+                campaignCriterion: {
+                  resourceName,
+                  criterionId,
+                  campaign: name,
+                  type: "DEVICE",
+                  status: "ENABLED",
+                  negative: false,
+                  device: { type },
+                },
+              });
+            }
           responses.push({ [`${kind}Result`]: { resourceName: name } });
           writes++;
         }
@@ -518,8 +546,24 @@ export function fixture(
           if (id)
             rows = rows.filter((row) => String(object(row[objKey!]).id) === id);
         }
-        if (/\.type = KEYWORD/.test(query))
-          rows = rows.filter((row) => object(row[key]).type === "KEYWORD");
+        const criterionType = query.match(/\.type = (KEYWORD|DEVICE)/)?.[1];
+        if (criterionType)
+          rows = rows.filter((row) => object(row[key]).type === criterionType);
+        if (
+          table === "campaign_criterion" ||
+          table === "ad_group_bid_modifier"
+        ) {
+          const parent =
+              table === "campaign_criterion" ? "campaign" : "ad_group",
+            parentKey = table === "campaign_criterion" ? "campaign" : "adGroup",
+            parentRef = query.match(
+              new RegExp(`${table}\\.${parent} = '([^']+)'`),
+            )?.[1];
+          if (parentRef)
+            rows = rows.filter(
+              (row) => object(row[key])[parentKey] === parentRef,
+            );
+        }
         const negative = query.match(/\.negative = (TRUE|FALSE)/)?.[1];
         if (negative)
           rows = rows.filter(
