@@ -264,6 +264,11 @@ function fakeDatabase() {
             if (where.userId && row.userId !== where.userId) return false;
             if (where.workspaceId && row.workspaceId !== where.workspaceId)
               return false;
+            if (
+              where.role &&
+              !(where.role as { in: string[] }).in.includes(String(row.role))
+            )
+              return false;
             return (
               workspaces.get(String(row.workspaceId))?.accessStatus === "ACTIVE"
             );
@@ -416,6 +421,125 @@ async function issueCode(context: Awaited<ReturnType<typeof fixture>>) {
     code: new URL(consent.url).searchParams.get("code")!,
   };
 }
+
+describe("native private Google scope consent uses existing issuer and PKCE", () => {
+  beforeEach(() => {
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://prod.example.test");
+    vi.stubEnv("PUBLIC_MCP_WRITE_SCOPE_ENABLED", "false");
+    vi.stubEnv("PUBLIC_MCP_CONTROLLED_WRITE_ENABLED", "false");
+    vi.stubEnv("PROVIDER_GOOGLE_ADS_WRITE_ENABLED", "true");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  const writeScope = "adforge:mcp:read adforge:mcp:write";
+  const start = (
+    f: Awaited<ReturnType<typeof fixture>>,
+    resource: string = MCP_RESOURCE,
+  ) =>
+    f.oauth.beginAuthorization(
+      {
+        client_id: f.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        scope: writeScope,
+        resource,
+        code_challenge: pkce(f.verifier),
+        code_challenge_method: "S256",
+      },
+      f.principal,
+    );
+  it("requires explicit private Google write consent; read-only downgrade never escalates", async () => {
+    const f = await fixture(writeScope);
+    f.state.memberships[0]!.role = "ADMIN";
+    const pending = await start(f);
+    const context = await f.oauth.authorizationContext(
+      pending.transaction_id,
+      f.principal,
+    );
+    expect(context.controlledWriteProvider).toBe("GOOGLE_ADS");
+    expect(context.resource).toBe(MCP_RESOURCE);
+    await expect(
+      f.oauth.decideAuthorization(pending.transaction_id, true, f.principal),
+    ).rejects.toMatchObject({ status: 400 });
+    await f.oauth.decideAuthorization(
+      pending.transaction_id,
+      true,
+      f.principal,
+      undefined,
+      "adforge:mcp:read",
+    );
+    expect(f.state.codes.at(-1)?.scope).toBe("adforge:mcp:read");
+  });
+  it("private write grant remains native and resource-bound after token rotation", async () => {
+    const f = await fixture(writeScope);
+    f.state.memberships[0]!.role = "ADMIN";
+    const pending = await start(f);
+    const decision = await f.oauth.decideAuthorization(
+      pending.transaction_id,
+      true,
+      f.principal,
+      undefined,
+      writeScope,
+    );
+    const tokens = await f.oauth.exchangeAuthorizationCode({
+      grant_type: "authorization_code",
+      client_id: f.registered.client_id,
+      code: new URL(decision.url).searchParams.get("code"),
+      redirect_uri: "https://claude.example.test/callback",
+      code_verifier: f.verifier,
+      resource: MCP_RESOURCE,
+    });
+    const before = await f.oauth.authenticate(
+      tokens.access_token,
+      MCP_RESOURCE,
+    );
+    expect(before).toMatchObject({
+      kind: "oauth",
+      resource: MCP_RESOURCE,
+      scopes: writeScope.split(" "),
+    });
+    expect(
+      await f.oauth.authenticate(tokens.access_token, MCP_PUBLIC_RESOURCE),
+    ).toBeNull();
+    const rotated = await f.oauth.exchangeRefreshToken({
+      client_id: f.registered.client_id,
+      refresh_token: tokens.refresh_token,
+      resource: MCP_RESOURCE,
+    });
+    const after = await f.oauth.authenticate(
+      rotated.access_token,
+      MCP_RESOURCE,
+    );
+    expect(after?.grantId).toBe(before?.grantId);
+    expect(after?.tokenId).not.toBe(before?.tokenId);
+    expect(rotated.scope).toBe(writeScope);
+  });
+  it("private Google gate never enables Public write consent", async () => {
+    const f = await fixture(writeScope);
+    await expect(start(f, MCP_PUBLIC_RESOURCE)).rejects.toMatchObject({
+      status: 400,
+    });
+    vi.stubEnv("PROVIDER_GOOGLE_ADS_WRITE_ENABLED", "false");
+    await expect(start(await fixture(writeScope))).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+  it("undeclared write scope and VIEWER role cannot issue private write grant", async () => {
+    await expect(start(await fixture())).rejects.toMatchObject({ status: 400 });
+    const f = await fixture(writeScope);
+    f.state.memberships[0]!.role = "VIEWER";
+    const pending = await start(f);
+    await expect(
+      f.oauth.decideAuthorization(
+        pending.transaction_id,
+        true,
+        f.principal,
+        undefined,
+        writeScope,
+      ),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(f.state.codes).toHaveLength(0);
+  });
+});
 
 describe("OAuth authorization foundation", () => {
   const previousWriteScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;

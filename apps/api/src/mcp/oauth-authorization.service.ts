@@ -14,6 +14,7 @@ import {
   registrationMetadata,
 } from "./oauth-client-metadata.service.js";
 import { oauthEndpoints } from "./oauth-endpoints.js";
+import { PreviewError } from "./mcp-preview.error.js";
 
 export const MCP_READ_SCOPE = "adforge:mcp:read";
 export const MCP_WRITE_SCOPE = "adforge:mcp:write";
@@ -31,10 +32,12 @@ export type OAuthAuthorizationContextView = {
   workspaces: Array<{ id: string; name: string; role: string }>;
   selectedWorkspaceId: string | null;
   expiresAt: string;
+  controlledWriteProvider?: "GOOGLE_ADS";
 };
 
 @Injectable()
 export class OAuthAuthorizationService {
+  private readonly config = loadConfig();
   private readonly writeScopeEnabled = loadConfig().publicMcpWriteScopeEnabled;
   private readonly endpoints = oauthEndpoints();
 
@@ -107,8 +110,9 @@ export class OAuthAuthorizationService {
       stringValue(input.scope),
       resource,
       this.endpoints.publicResource,
+      this.endpoints.legacyResource,
     );
-    this.assertWriteScopeEnabled(scope);
+    this.assertWriteScopeEnabled(scope, resource);
     const clientScopes = new Set(client.scope.split(/\s+/).filter(Boolean));
     if (scope.split(" ").some((item) => !clientScopes.has(item))) {
       throw new BadRequestException(
@@ -225,6 +229,10 @@ export class OAuthAuthorizationService {
       workspaces,
       selectedWorkspaceId,
       expiresAt: transaction.expiresAt.toISOString(),
+      ...(transaction.resource === this.endpoints.legacyResource &&
+      transaction.scope.split(/\s+/).includes(MCP_WRITE_SCOPE)
+        ? { controlledWriteProvider: "GOOGLE_ADS" as const }
+        : {}),
     };
   }
 
@@ -239,7 +247,7 @@ export class OAuthAuthorizationService {
     const grantedScope = allow
       ? this.approvedScope(transaction.scope, approvedScope)
       : transaction.scope;
-    if (allow) this.assertWriteScopeEnabled(grantedScope);
+    if (allow) this.assertWriteScopeEnabled(grantedScope, transaction.resource);
     if (transaction.userId && transaction.userId !== principal.userId) {
       throw new UnauthorizedException("OAuth transaction is not available.");
     }
@@ -290,6 +298,25 @@ export class OAuthAuthorizationService {
       principal.userId,
       selectedWorkspaceId,
     );
+    if (
+      grantedScope.split(/\s+/).includes(MCP_WRITE_SCOPE) &&
+      transaction.resource === this.endpoints.legacyResource
+    ) {
+      const member = await this.database.client.workspaceMembership.findFirst({
+        where: {
+          userId: principal.userId,
+          workspaceId: selectedWorkspaceId,
+          role: { in: ["OWNER", "ADMIN", "MEMBER"] },
+          workspace: { accessStatus: "ACTIVE" },
+          user: { status: "active" },
+        },
+        select: { id: true },
+      });
+      if (!member)
+        throw new UnauthorizedException(
+          "Workspace Google write access denied.",
+        );
+    }
 
     const rawCode = `hm_code_${randomBytes(32).toString("base64url")}`;
     await this.database.client.$transaction(async (database) => {
@@ -366,7 +393,7 @@ export class OAuthAuthorizationService {
     ) {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
-    this.assertWriteScopeEnabled(code.scope);
+    this.assertWriteScopeEnabled(code.scope, code.resource);
 
     const familyId = randomUUID();
     const rawToken = `hm_oauth_${randomBytes(32).toString("base64url")}`;
@@ -458,7 +485,7 @@ export class OAuthAuthorizationService {
     ) {
       throw new UnauthorizedException("OAuth refresh token is invalid.");
     }
-    this.assertWriteScopeEnabled(refresh.scope);
+    this.assertWriteScopeEnabled(refresh.scope, refresh.resource);
     if (
       refresh.usedAt ||
       refresh.revokedAt ||
@@ -646,9 +673,91 @@ export class OAuthAuthorizationService {
     return this.clientMetadata.resolve(clientId);
   }
 
-  private assertWriteScopeEnabled(scope: string): void {
-    if (scope.split(/\s+/).includes(MCP_WRITE_SCOPE) && !this.writeScopeEnabled)
+  private assertWriteScopeEnabled(scope: string, resource: string): void {
+    if (
+      scope.split(/\s+/).includes(MCP_WRITE_SCOPE) &&
+      !(resource === this.endpoints.legacyResource
+        ? this.config.providerGoogleAdsWriteEnabled
+        : resource === this.endpoints.publicResource && this.writeScopeEnabled)
+    )
       throw new BadRequestException("OAuth write scope is not available.");
+  }
+
+  /** Native private Google authorization; no ServiceToken/FK substitution. */
+  public async assertGoogleWritePrincipal(
+    principal: OAuthMcpPrincipal,
+    requireAccessToken = true,
+  ) {
+    if (
+      principal.resource !== this.endpoints.legacyResource ||
+      !this.config.providerGoogleAdsWriteEnabled ||
+      !principal.scopes.includes(MCP_READ_SCOPE) ||
+      !principal.scopes.includes(MCP_WRITE_SCOPE) ||
+      !principal.grantId
+    )
+      throw new PreviewError(
+        "write_scope_required",
+        "Для Google controlled-write требуется private OAuth grant со scopes read/write и включённый Google write gate.",
+      );
+    const now = new Date();
+    const ownership = {
+      userId: principal.userId,
+      workspaceId: principal.workspaceId,
+      clientId: principal.clientId,
+      resource: principal.resource,
+    };
+    const [membership, grant, access] = await Promise.all([
+      this.database.client.workspaceMembership.findFirst({
+        where: {
+          userId: principal.userId,
+          workspaceId: principal.workspaceId,
+          role: { in: ["OWNER", "ADMIN", "MEMBER"] },
+          workspace: { accessStatus: "ACTIVE" },
+          user: { status: "active" },
+        },
+        select: { id: true },
+      }),
+      this.database.client.oAuthRefreshToken.findFirst({
+        where: {
+          ...ownership,
+          familyId: principal.grantId,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+          client: { status: "active", revokedAt: null },
+          workspace: { accessStatus: "ACTIVE" },
+          user: { status: "active" },
+        },
+        select: { scope: true, client: { select: { scope: true } } },
+      }),
+      requireAccessToken
+        ? this.database.client.oAuthAccessToken.findFirst({
+            where: {
+              ...ownership,
+              id: principal.tokenId,
+              refreshFamilyId: principal.grantId,
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+            select: { scope: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    const permitted = (scope?: string) =>
+      scope?.split(/\s+/).includes(MCP_READ_SCOPE) &&
+      scope.split(/\s+/).includes(MCP_WRITE_SCOPE);
+    if (
+      !membership ||
+      !grant ||
+      !permitted(grant.scope) ||
+      !permitted(grant.client.scope) ||
+      (requireAccessToken && (!access || !permitted(access.scope)))
+    )
+      throw new PreviewError(
+        "confirmation_context_mismatch",
+        "OAuth grant недоступен, отозван, истёк либо не имеет действующего write-доступа к workspace.",
+      );
+    return { ownerUserId: principal.userId };
   }
 
   private approvedScope(requested: string, approved?: string): string {
@@ -756,13 +865,14 @@ function normalizeScope(
   value: string,
   resource: string,
   publicResource: string,
+  privateResource: string,
 ): string {
   if (!value || value === "adforge:mcp" || value === MCP_READ_SCOPE) {
     return MCP_READ_SCOPE;
   }
   const scopes = new Set(value.split(/\s+/).filter(Boolean));
   if (
-    resource === publicResource &&
+    (resource === publicResource || resource === privateResource) &&
     scopes.size === 2 &&
     scopes.has(MCP_READ_SCOPE) &&
     scopes.has(MCP_WRITE_SCOPE)

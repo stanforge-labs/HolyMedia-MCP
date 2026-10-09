@@ -24,6 +24,7 @@ type AuthorizationContext = {
   workspaces: OAuthWorkspace[];
   selectedWorkspaceId: string | null;
   expiresAt: string;
+  controlledWriteProvider?: "GOOGLE_ADS";
 };
 
 function copyFor(clientName: string) {
@@ -274,7 +275,13 @@ export default function ClaudeConsentPage() {
             {writeRequested && (
               <section className="oauth-write-permission">
                 <h2>{t.writeTitle}</h2>
-                <p>{t.writeConsent}</p>
+                <p>
+                  {context.controlledWriteProvider === "GOOGLE_ADS"
+                    ? language === "ru"
+                      ? "Разрешить только Google Ads controlled writes в private MCP: доступ ограничен серверным account allowlist. Каждая операция требует отдельного preview и вашего ручного подтверждения в браузере. Public MCP и остальные платформы этим разрешением не включаются."
+                      : "Allow Google Ads controlled writes only through private MCP, limited to the server account allowlist. Every change requires a separate preview and your manual browser approval. This consent does not enable Public MCP or other providers."
+                    : t.writeConsent}
+                </p>
                 <label className="oauth-write-choice">
                   <input
                     type="checkbox"

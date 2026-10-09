@@ -25,7 +25,6 @@ import type {
   ProviderMetricSummary,
 } from "@holymedia/contracts";
 import { ProviderService } from "../providers/provider.service.js";
-import type { ServiceTokenPrincipal as LegacyServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import type { McpPrincipal as ServiceTokenPrincipal } from "./mcp-principal.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ReportService } from "../reports/report.service.js";
@@ -494,14 +493,6 @@ export class McpService {
     @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
-  private servicePrincipal(
-    principal: ServiceTokenPrincipal,
-  ): LegacyServiceTokenPrincipal {
-    if (principal.kind !== "service")
-      throw new PreviewError("write_scope_required");
-    return principal;
-  }
-
   public tools() {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
@@ -644,7 +635,7 @@ export class McpService {
       );
     if (name === "commit_preview")
       await this.previews.assertGooglePreviewOwner(
-        this.servicePrincipal(principal),
+        principal,
         text(args.preview_token),
       );
     return this.call(principal, name, rawArguments);
@@ -668,7 +659,7 @@ export class McpService {
     ) {
       const mapped = googleWriteGenericIntent(name, args)!;
       return this.previews.createGoogleExtended(
-        this.servicePrincipal(principal),
+        principal,
         mapped.account_id,
         4,
         mapped.intent,
@@ -714,7 +705,7 @@ export class McpService {
         );
       }
       return this.previews.createGoogleExtended(
-        this.servicePrincipal(principal),
+        principal,
         text(args.account_id),
         version,
         intent,
@@ -727,7 +718,7 @@ export class McpService {
     ) {
       const intent = stage2ToolIntent(name, args);
       return this.previews.createGoogleStage2(
-        this.servicePrincipal(principal),
+        principal,
         text(args.account_id),
         intent,
       );
@@ -742,7 +733,7 @@ export class McpService {
       ].includes(name)
     )
       return this.previews.createGoogleCampaign(
-        this.servicePrincipal(principal),
+        principal,
         args,
         name === "preview_resume_campaign"
           ? "resume"
@@ -764,10 +755,7 @@ export class McpService {
       );
     }
     if (name === "list_change_journal")
-      return this.previews.listChangeJournal(
-        this.servicePrincipal(principal),
-        args,
-      );
+      return this.previews.listChangeJournal(principal, args);
     if (name === "preview_rollback_commit") {
       if (
         Object.keys(args).join(",") !== "commit_id" ||
@@ -777,16 +765,13 @@ export class McpService {
           "invalid_request",
           "Rollback принимает только commit_id, без replacement values.",
         );
-      return this.previews.previewRollbackCommit(
-        this.servicePrincipal(principal),
-        args.commit_id,
-      );
+      return this.previews.previewRollbackCommit(principal, args.commit_id);
     }
     if (args.provider === "GOOGLE_ADS" || GOOGLE_STAGE1_TOOLS.includes(name)) {
       const intent = stage1ToolIntent(name, args);
       if (intent)
         return this.previews.createGoogleStage1(
-          this.servicePrincipal(principal),
+          principal,
           text(args.account_id),
           intent,
         );
@@ -824,7 +809,7 @@ export class McpService {
             "invalid_request",
             "Google status preview не принимает дополнительные mutation-поля.",
           );
-        return this.previews.create(this.servicePrincipal(principal), {
+        return this.previews.create(principal, {
           provider: "GOOGLE_ADS",
           accountId: text(args.account_id),
           objectId: "keyword_batch",
@@ -1831,7 +1816,7 @@ export class McpService {
           throw new ForbiddenException(
             "Name-only preview does not accept additional fields.",
           );
-        return this.previews.create(this.servicePrincipal(principal), {
+        return this.previews.create(principal, {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
           objectId: text(args.campaign_id || args.campaignId),
@@ -1840,7 +1825,7 @@ export class McpService {
         });
       case "preview_pause_campaign":
       case "preview_resume_campaign":
-        return this.previews.create(this.servicePrincipal(principal), {
+        return this.previews.create(principal, {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
           objectId: text(args.campaign_id || args.campaignId),
@@ -1848,7 +1833,7 @@ export class McpService {
           payload: {},
         });
       case "preview_change_campaign_budget":
-        return this.previews.create(this.servicePrincipal(principal), {
+        return this.previews.create(principal, {
           provider: campaignProvider(args.provider),
           accountId: text(args.account_id || args.accountId),
           objectId: text(args.campaign_id || args.campaignId),
@@ -1864,7 +1849,7 @@ export class McpService {
         )
           throw new PreviewError("invalid_confirmation_arguments");
         return this.previews.confirm(
-          this.servicePrincipal(principal),
+          principal,
           text(args.preview_token || args.previewToken),
         );
       case "commit_preview":
@@ -1880,7 +1865,7 @@ export class McpService {
             "Commit accepts only the confirmed preview token, not replacement fields.",
           );
         return this.previews.commit(
-          this.servicePrincipal(principal),
+          principal,
           text(args.preview_token || args.previewToken),
         );
       default:
@@ -2368,7 +2353,7 @@ export class McpService {
         args.adId,
       "new",
     );
-    return this.previews.create(this.servicePrincipal(principal), {
+    return this.previews.create(principal, {
       provider,
       accountId,
       objectId,

@@ -25,7 +25,12 @@ import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
-import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import type {
+  McpPrincipal as ServiceTokenPrincipal,
+  OAuthMcpPrincipal,
+} from "./mcp-principal.js";
+import type { ServiceTokenPrincipal as LegacyServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
 import { ProviderService } from "../providers/provider.service.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import {
@@ -68,6 +73,41 @@ import {
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
+function serviceIdentity(principal: LegacyServiceTokenPrincipal): string;
+function serviceIdentity(principal: ServiceTokenPrincipal): string | null;
+function serviceIdentity(principal: ServiceTokenPrincipal) {
+  return principal.kind === "service" ? principal.serviceIdentityId : null;
+}
+function principalActor(principal: ServiceTokenPrincipal) {
+  return principal.kind === "oauth"
+    ? { actorType: "HUMAN" as const, actorUserId: principal.userId }
+    : { actorType: "SERVICE" as const };
+}
+function principalBinding(principal: ServiceTokenPrincipal) {
+  return principal.kind === "oauth"
+    ? {
+        principalType: "OAUTH_USER" as const,
+        serviceTokenId: null,
+        oauthUserId: principal.userId,
+        oauthClientId: principal.clientId,
+        oauthGrantId: principal.grantId,
+      }
+    : {
+        principalType: "SERVICE_TOKEN" as const,
+        serviceTokenId: principal.tokenId,
+      };
+}
+function oauthContext(principal: ServiceTokenPrincipal) {
+  return principal.kind === "oauth"
+    ? {
+        userId: principal.userId,
+        clientId: principal.clientId,
+        grantId: principal.grantId,
+        workspaceId: principal.workspaceId,
+        resource: principal.resource,
+      }
+    : null;
+}
 type GoogleKeywordRejection = {
   index: number;
   identity: GoogleKeywordIdentity;
@@ -128,6 +168,8 @@ export class McpPreviewService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProviderService) private readonly providers: ProviderService,
+    @Inject(OAuthAuthorizationService)
+    private readonly oauth?: OAuthAuthorizationService,
   ) {}
 
   public create(
@@ -154,6 +196,8 @@ export class McpPreviewService {
     principal: ServiceTokenPrincipal,
     input: PreviewInput,
   ) {
+    if (principal.kind !== "service")
+      throw new PreviewError("write_scope_required");
     if (!OPERATIONS.has(input.operation))
       throw new ForbiddenException("This MCP operation is not available.");
     const account = await this.account(principal, input.accountId);
@@ -212,8 +256,8 @@ export class McpPreviewService {
       diff.controlled = {
         version: 1,
         workspaceId: principal.workspaceId,
-        serviceTokenId: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        ...principalBinding(principal),
+        serviceIdentityId: serviceIdentity(principal),
         connectionId: account.connectionId,
         accountId: account.id,
         externalAccountId: account.externalAccountId,
@@ -229,7 +273,7 @@ export class McpPreviewService {
     const preview = await this.database.client.mcpPreview.create({
       data: {
         workspaceId: principal.workspaceId,
-        serviceTokenId: principal.tokenId,
+        ...principalBinding(principal),
         provider: input.provider,
         accountId: account.id,
         externalObjectId: input.objectId.trim(),
@@ -242,7 +286,7 @@ export class McpPreviewService {
     });
     await this.audit.record({
       eventType: "mcp_preview_created",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
@@ -303,6 +347,8 @@ export class McpPreviewService {
     const preview = await this.find(principal, previewToken);
     if (preview.provider === "GOOGLE_ADS")
       throw new PreviewError("preview_not_confirmed");
+    if (principal.kind !== "service")
+      throw new PreviewError("write_scope_required");
     if (preview.consumedAt) throw new PreviewError("preview_already_consumed");
     if (preview.expiresAt <= new Date())
       throw new PreviewError("preview_expired");
@@ -321,7 +367,7 @@ export class McpPreviewService {
       where: {
         id: preview.id,
         workspaceId: principal.workspaceId,
-        serviceTokenId: principal.tokenId,
+        ...principalBinding(principal),
         previewTokenDigest: preview.previewTokenDigest,
         accountId: account.id,
         operation: preview.operation,
@@ -346,7 +392,7 @@ export class McpPreviewService {
         ...(controlled
           ? {
               serviceToken: {
-                serviceIdentityId: principal.serviceIdentityId,
+                serviceIdentityId: serviceIdentity(principal),
                 revokedAt: null,
                 scopes: { array_contains: [READ_SCOPE, WRITE_SCOPE] },
                 AND: [
@@ -401,13 +447,13 @@ export class McpPreviewService {
     try {
       await this.audit.record({
         eventType: "mcp_preview_confirmed",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
         metadata: {
-          serviceTokenId: principal.tokenId,
-          serviceIdentityId: principal.serviceIdentityId,
+          ...principalBinding(principal),
+          serviceIdentityId: serviceIdentity(principal),
           connectionId: account.connectionId,
           accountId: account.id,
           operation: preview.operation,
@@ -487,14 +533,16 @@ export class McpPreviewService {
       }
       await this.audit.record({
         eventType: "mcp_commit_attempt_failed",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
-        targetType: "service_token",
-        targetId: principal.tokenId,
+        targetType:
+          principal.kind === "oauth" ? "oauth_grant" : "service_token",
+        targetId:
+          principal.kind === "oauth" ? principal.grantId : principal.tokenId,
         success: false,
         metadata: {
-          serviceTokenId: principal.tokenId,
-          serviceIdentityId: principal.serviceIdentityId,
+          ...principalBinding(principal),
+          serviceIdentityId: serviceIdentity(principal),
           errorType:
             error instanceof Error ? error.constructor.name : "Unknown",
         },
@@ -515,6 +563,8 @@ export class McpPreviewService {
     const preview = await this.find(principal, previewToken);
     if (preview.provider === "GOOGLE_ADS")
       return this.commitGoogleKeywords(principal, preview);
+    if (principal.kind !== "service")
+      throw new PreviewError("write_scope_required");
     if (preview.consumedAt)
       throw new PreviewError(
         "preview_already_consumed",
@@ -553,7 +603,7 @@ export class McpPreviewService {
     if (policyReason) {
       await this.audit.record({
         eventType: "mcp_commit_blocked",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
@@ -566,7 +616,7 @@ export class McpPreviewService {
           operation: preview.operation,
           requestedName:
             typeof payload.new_name === "string" ? payload.new_name : null,
-          serviceTokenId: principal.tokenId,
+          ...principalBinding(principal),
         },
       });
       return {
@@ -601,7 +651,7 @@ export class McpPreviewService {
       );
       await this.audit.record({
         eventType: "mcp_commit_completed",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
@@ -620,7 +670,7 @@ export class McpPreviewService {
     } catch (error) {
       await this.audit.record({
         eventType: "mcp_commit_failed",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
@@ -692,14 +742,14 @@ export class McpPreviewService {
     ) {
       await this.audit.record({
         eventType: "meta_app_review_rename_blocked",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
         success: false,
         metadata: {
           reason: "preview_state_changed",
-          serviceTokenId: principal.tokenId,
+          ...principalBinding(principal),
           connectionId: account.connectionId,
         },
       });
@@ -720,8 +770,8 @@ export class McpPreviewService {
       previousName: before.name,
       requestedName: String(payload.new_name ?? ""),
       campaignStatus: before.status,
-      serviceTokenId: principal.tokenId,
-      serviceIdentityId: principal.serviceIdentityId,
+      ...principalBinding(principal),
+      serviceIdentityId: serviceIdentity(principal),
       tokenPrefix: identity?.tokenPrefix ?? null,
       connectionId: account.connectionId,
       previewId: preview.id,
@@ -730,7 +780,7 @@ export class McpPreviewService {
     if (precondition.kind === "blocked") {
       await this.audit.record({
         eventType: "meta_app_review_rename_blocked",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
@@ -748,7 +798,7 @@ export class McpPreviewService {
     if (before.name === requestedName) {
       await this.audit.record({
         eventType: "meta_app_review_rename_already_applied",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
@@ -765,7 +815,7 @@ export class McpPreviewService {
     }
     await this.audit.record({
       eventType: "meta_app_review_rename_prechecked",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
@@ -794,7 +844,7 @@ export class McpPreviewService {
       eventType: verified
         ? "meta_app_review_rename_completed"
         : "meta_app_review_rename_verification_failed",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
@@ -849,10 +899,16 @@ export class McpPreviewService {
     principal: ServiceTokenPrincipal,
     accountId: string,
   ) {
+    if (principal.kind === "oauth") {
+      if (!this.oauth) throw new PreviewError("confirmation_context_mismatch");
+      return this.oauth
+        .assertGoogleWritePrincipal(principal)
+        .then(({ ownerUserId }) => ({ ownerUserId, tokenPrefix: undefined }));
+    }
     const token = await this.database.client.serviceToken.findFirst({
       where: {
         id: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        serviceIdentityId: serviceIdentity(principal),
         revokedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         serviceIdentity: {
@@ -893,7 +949,10 @@ export class McpPreviewService {
         "confirmation_context_mismatch",
         "A valid controlled-write key with workspace membership and account access is required.",
       );
-    return token;
+    return {
+      ...token,
+      ownerUserId: token.serviceIdentity?.createdById ?? null,
+    };
   }
 
   private assertSnapshot(
@@ -912,7 +971,7 @@ export class McpPreviewService {
       snapshot.version !== 1 ||
       snapshot.workspaceId !== principal.workspaceId ||
       snapshot.serviceTokenId !== principal.tokenId ||
-      snapshot.serviceIdentityId !== principal.serviceIdentityId ||
+      snapshot.serviceIdentityId !== serviceIdentity(principal) ||
       snapshot.connectionId !== account.connectionId ||
       snapshot.accountId !== account.id ||
       snapshot.externalAccountId !== account.externalAccountId ||
@@ -1169,15 +1228,20 @@ export class McpPreviewService {
     const preview = await this.database.client.mcpPreview.create({
       data: {
         workspaceId: principal.workspaceId,
-        principalType: "SERVICE_TOKEN",
-        serviceTokenId: principal.tokenId,
+        ...principalBinding(principal),
         provider: "GOOGLE_ADS",
         accountId: account.id,
         connectionId: account.connectionId,
         externalObjectId: identities[0]!.resource_name,
         operation: "GOOGLE_KEYWORD_STATUS",
         payload: payload as Prisma.InputJsonValue,
-        diff: { items, provider_validation: "passed" } as Prisma.InputJsonValue,
+        diff: {
+          items,
+          provider_validation: "passed",
+          ...(principal.kind === "oauth"
+            ? { authorization: oauthContext(principal) }
+            : {}),
+        } as Prisma.InputJsonValue,
         beforeState: before as Prisma.InputJsonValue,
         requestedState: mutations as Prisma.InputJsonValue,
         snapshotDigest: digest(
@@ -1195,15 +1259,15 @@ export class McpPreviewService {
     });
     await this.audit.record({
       eventType: "mcp_preview_created",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
       metadata: {
         provider: "GOOGLE_ADS",
         accountId: account.externalAccountId,
-        serviceTokenId: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        ...principalBinding(principal),
+        serviceIdentityId: serviceIdentity(principal),
         operation: "GOOGLE_KEYWORD_STATUS",
         providerValidation: "passed",
         operationCount: eligibleChanged.length,
@@ -1440,8 +1504,7 @@ export class McpPreviewService {
     const preview = await this.database.client.mcpPreview.create({
       data: {
         workspaceId: principal.workspaceId,
-        principalType: "SERVICE_TOKEN",
-        serviceTokenId: principal.tokenId,
+        ...principalBinding(principal),
         provider: "GOOGLE_ADS",
         accountId: account.id,
         connectionId: account.connectionId,
@@ -1452,7 +1515,12 @@ export class McpPreviewService {
           intent: plan.intent,
           rollback_of: rollbackOf,
         } as Prisma.InputJsonValue,
-        diff: { provider_validation: "passed" },
+        diff: {
+          provider_validation: "passed",
+          ...(principal.kind === "oauth"
+            ? { authorization: oauthContext(principal) }
+            : {}),
+        },
         beforeState: plan.checks as unknown as Prisma.InputJsonValue,
         requestedState: plan as unknown as Prisma.InputJsonValue,
         snapshotDigest: digest(canonical(plan)),
@@ -1464,7 +1532,7 @@ export class McpPreviewService {
     });
     await this.audit.record({
       eventType: "mcp_google_stage1_preview_created",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
@@ -1596,6 +1664,10 @@ export class McpPreviewService {
         "attempted",
         null,
       );
+    if (principal.kind === "oauth") {
+      await this.assertControlledPrincipal(principal, account.id);
+      await this.assertNativeOAuthApproval(principal, preview);
+    }
     let results: Stage1MutationResult[];
     try {
       results = (await this.googlePlanCall(
@@ -1700,7 +1772,7 @@ export class McpPreviewService {
       item = plan.items[operation.row]!;
     return this.audit.record({
       eventType: "mcp_google_stage1_operation",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: previewId,
@@ -1716,8 +1788,8 @@ export class McpPreviewService {
             : typeof payloadRecord(actual).resourceName === "string"
               ? String(payloadRecord(actual).resourceName)
               : operation.resource_name,
-        serviceTokenId: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        ...principalBinding(principal),
+        serviceIdentityId: serviceIdentity(principal),
         previewId,
         commitId: this.googleCommitId(previewId),
         operation: plan.intent.action,
@@ -1742,7 +1814,7 @@ export class McpPreviewService {
     const commitId = this.googleCommitId(preview.id);
     await this.audit.record({
       eventType: "mcp_google_commit_result",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
@@ -1754,8 +1826,8 @@ export class McpPreviewService {
         previewId: preview.id,
         operation: preview.operation,
         result: status,
-        serviceTokenId: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        ...principalBinding(principal),
+        serviceIdentityId: serviceIdentity(principal),
       },
     });
     return commitId;
@@ -1901,6 +1973,13 @@ export class McpPreviewService {
           user_id: row.approvedByUserId,
           service_identity_id: row.serviceToken?.serviceIdentityId,
           service_token_id: row.serviceTokenId,
+          ...(row.principalType === "OAUTH_USER"
+            ? {
+                oauth_user_id: row.oauthUserId,
+                oauth_client_id: row.oauthClientId,
+                oauth_grant_id: row.oauthGrantId,
+              }
+            : {}),
         },
         when: row.commitAttemptedAt?.toISOString(),
         provider: row.provider,
@@ -1949,6 +2028,16 @@ export class McpPreviewService {
         "rollback_not_found",
         "Commit не найден или недоступен.",
       );
+    if (
+      principal.kind === "oauth" &&
+      (preview.principalType !== "OAUTH_USER" ||
+        preview.oauthUserId !== principal.userId ||
+        preview.oauthClientId !== principal.clientId ||
+        preview.oauthGrantId !== principal.grantId ||
+        canonical(payloadRecord(preview.diff).authorization) !==
+          canonical(oauthContext(principal)))
+    )
+      throw new PreviewError("confirmation_context_mismatch");
     const account = await this.account(principal, preview.accountId);
     assertGoogleWriteAccount(this.config, account.externalAccountId);
     await this.assertControlledPrincipal(principal, account.id);
@@ -2219,7 +2308,7 @@ export class McpPreviewService {
   ) {
     const context = await this.googleBrowserContext(human, nonce);
     if (!context) return null;
-    const { preview, account } = context;
+    const { preview, account, principal } = context;
     if (/^GOOGLE_STAGE[0-5]_/.test(preview.operation))
       this.googleStage1Stored(preview, account);
     else this.googleStored(preview, account);
@@ -2230,14 +2319,14 @@ export class McpPreviewService {
       where: {
         id: preview.id,
         workspaceId: preview.workspaceId,
-        principalType: "SERVICE_TOKEN",
-        serviceTokenId: preview.serviceTokenId,
+        ...principalBinding(principal),
         provider: "GOOGLE_ADS",
         approvalTokenDigest: digest(nonce),
         confirmedAt: null,
         consumedAt: null,
         cancelledAt: null,
         expiresAt: { gt: now },
+        diff: { equals: preview.diff as Prisma.InputJsonValue },
       },
       data:
         decision === "approve"
@@ -2272,22 +2361,68 @@ export class McpPreviewService {
   private async googleBrowserContext(human: HumanPrincipal, nonce: string) {
     if (!/^hmap_[A-Za-z0-9_-]{43}$/.test(nonce))
       throw new PreviewError("approval_not_found");
-    const preview = await this.database.client.mcpPreview.findFirst({
-      where: {
-        approvalTokenDigest: digest(nonce),
-        principalType: "SERVICE_TOKEN",
-        provider: "GOOGLE_ADS",
-        serviceToken: { serviceIdentity: { createdById: human.userId } },
-      },
-      include: { serviceToken: { select: { serviceIdentityId: true } } },
-    });
+    const preview =
+      (await this.database.client.mcpPreview.findFirst({
+        where: {
+          approvalTokenDigest: digest(nonce),
+          principalType: "SERVICE_TOKEN",
+          provider: "GOOGLE_ADS",
+          serviceToken: { serviceIdentity: { createdById: human.userId } },
+        },
+        include: { serviceToken: { select: { serviceIdentityId: true } } },
+      })) ??
+      (await this.database.client.mcpPreview.findFirst({
+        where: {
+          approvalTokenDigest: digest(nonce),
+          principalType: "OAUTH_USER",
+          provider: "GOOGLE_ADS",
+          oauthUserId: human.userId,
+        },
+        include: { serviceToken: { select: { serviceIdentityId: true } } },
+      }));
     if (
       !preview ||
       preview.provider !== "GOOGLE_ADS" ||
-      preview.principalType !== "SERVICE_TOKEN"
+      !["SERVICE_TOKEN", "OAUTH_USER"].includes(preview.principalType)
     )
       return null;
     this.googleUsable(preview);
+    if (preview.principalType === "OAUTH_USER") {
+      if (
+        !preview.oauthUserId ||
+        !preview.oauthClientId ||
+        !preview.oauthGrantId
+      )
+        throw new PreviewError("approval_not_found");
+      const resource = payloadRecord(
+        payloadRecord(preview.diff).authorization,
+      ).resource;
+      const principal: OAuthMcpPrincipal = {
+        kind: "oauth",
+        tokenId: "",
+        userId: preview.oauthUserId,
+        clientId: preview.oauthClientId,
+        grantId: preview.oauthGrantId,
+        resource: String(resource),
+        workspaceId: preview.workspaceId,
+        scopes: [READ_SCOPE, WRITE_SCOPE],
+        accountIds: [],
+        resourceAccessMode: "ALL_CONNECTED",
+      };
+      if (
+        canonical(payloadRecord(preview.diff).authorization) !==
+          canonical(oauthContext(principal)) ||
+        !this.oauth
+      )
+        throw new PreviewError("approval_not_found");
+      await this.oauth.assertGoogleWritePrincipal(principal, false);
+      await this.assertOAuthHumanSession(human.userId, human.sessionId);
+      const account = await this.account(principal, preview.accountId);
+      if (account.provider !== "GOOGLE_ADS")
+        throw new PreviewError("approval_not_found");
+      assertGoogleWriteAccount(this.config, account.externalAccountId);
+      return { preview, account, principal };
+    }
     if (!preview.serviceTokenId || !preview.serviceToken)
       throw new PreviewError("approval_not_found");
     const principal: ServiceTokenPrincipal = {
@@ -2301,9 +2436,53 @@ export class McpPreviewService {
     const account = await this.account(principal, preview.accountId);
     assertGoogleWriteAccount(this.config, account.externalAccountId);
     const token = await this.assertControlledPrincipal(principal, account.id);
-    if (token.serviceIdentity.createdById !== human.userId)
+    if (token.ownerUserId !== human.userId)
       throw new PreviewError("approval_not_found");
-    return { preview, account };
+    return { preview, account, principal };
+  }
+  private async assertOAuthHumanSession(userId: string, sessionId: string) {
+    const session = await this.database.client.session.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+        user: { status: "active" },
+      },
+      select: { id: true },
+    });
+    if (!session) throw new PreviewError("confirmation_context_mismatch");
+  }
+  private async assertNativeOAuthApproval(
+    principal: ServiceTokenPrincipal,
+    preview: {
+      id: string;
+      approvalSessionId: string | null;
+      approvedByUserId: string | null;
+    },
+  ) {
+    if (principal.kind !== "oauth") return;
+    if (
+      !preview.approvalSessionId ||
+      preview.approvedByUserId !== principal.userId
+    )
+      throw new PreviewError("preview_not_confirmed");
+    await this.assertOAuthHumanSession(
+      principal.userId,
+      preview.approvalSessionId,
+    );
+    const approved = await this.database.client.auditEvent.findFirst({
+      where: {
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        eventType: "mcp_preview_web_approved",
+        actorType: "HUMAN",
+        actorUserId: principal.userId,
+        success: true,
+      },
+    });
+    if (!approved) throw new PreviewError("preview_not_confirmed");
   }
   private googleUsable(preview: {
     expiresAt: Date;
@@ -2431,14 +2610,14 @@ export class McpPreviewService {
   ) {
     await this.audit.record({
       eventType: "mcp_google_commit_attempted",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: preview.id,
       metadata: {
         provider: "GOOGLE_ADS",
-        serviceTokenId: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        ...principalBinding(principal),
+        serviceIdentityId: serviceIdentity(principal),
         accountId: preview.accountId,
         operation: preview.operation,
       },
@@ -2451,9 +2630,10 @@ export class McpPreviewService {
       !preview.confirmedAt ||
       !preview.approvalSessionId ||
       !preview.approvedByUserId ||
-      preview.approvedByUserId !== token.serviceIdentity.createdById
+      preview.approvedByUserId !== token.ownerUserId
     )
       throw new PreviewError("preview_not_confirmed");
+    await this.assertNativeOAuthApproval(principal, preview);
     if (this.config.previewOnly || !this.config.confirmedWriteEnabled)
       throw new GoogleAdsWriteError(
         "confirmed_write_disabled",
@@ -2510,12 +2690,13 @@ export class McpPreviewService {
     preview: Awaited<ReturnType<McpPreviewService["find"]>>,
     account: Awaited<ReturnType<McpPreviewService["account"]>>,
   ) {
+    await this.assertControlledPrincipal(principal, account.id);
+    await this.assertNativeOAuthApproval(principal, preview);
     const now = new Date();
     const claimed = await this.database.client.mcpPreview.updateMany({
       where: {
         id: preview.id,
-        principalType: "SERVICE_TOKEN",
-        serviceTokenId: principal.tokenId,
+        ...principalBinding(principal),
         workspaceId: principal.workspaceId,
         provider: "GOOGLE_ADS",
         accountId: account.id,
@@ -2533,40 +2714,58 @@ export class McpPreviewService {
           equals: preview.requestedState as Prisma.InputJsonValue,
         },
         snapshotDigest: preview.snapshotDigest,
-        serviceToken: {
-          serviceIdentityId: principal.serviceIdentityId,
-          revokedAt: null,
-          scopes: { array_contains: [READ_SCOPE, WRITE_SCOPE] },
-          AND: [
-            { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-            {
-              OR: [
-                {
-                  resourceAccessMode: "ALL_CONNECTED",
-                  OR: [
-                    { accountIds: { equals: Prisma.AnyNull } },
-                    { accountIds: { equals: [] } },
-                    { accountIds: { array_contains: [account.id] } },
-                  ],
+        diff: { equals: preview.diff as Prisma.InputJsonValue },
+        ...(principal.kind === "service"
+          ? {
+              serviceToken: {
+                serviceIdentityId: principal.serviceIdentityId,
+                revokedAt: null,
+                scopes: { array_contains: [READ_SCOPE, WRITE_SCOPE] },
+                AND: [
+                  { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+                  {
+                    OR: [
+                      {
+                        resourceAccessMode: "ALL_CONNECTED",
+                        OR: [
+                          { accountIds: { equals: Prisma.AnyNull } },
+                          { accountIds: { equals: [] } },
+                          { accountIds: { array_contains: [account.id] } },
+                        ],
+                      },
+                      {
+                        resourceAccessMode: "STATIC_ALLOWLIST",
+                        accountIds: { array_contains: [account.id] },
+                      },
+                    ],
+                  },
+                ],
+                serviceIdentity: {
+                  workspaceId: principal.workspaceId,
+                  createdById: preview.approvedByUserId,
+                  revokedAt: null,
+                  workspace: { accessStatus: "ACTIVE" },
+                  createdBy: {
+                    status: "active",
+                    memberships: {
+                      some: { workspaceId: principal.workspaceId },
+                    },
+                  },
                 },
-                {
-                  resourceAccessMode: "STATIC_ALLOWLIST",
-                  accountIds: { array_contains: [account.id] },
+              },
+            }
+          : {
+              oauthUser: {
+                status: "active",
+                memberships: {
+                  some: {
+                    workspaceId: principal.workspaceId,
+                    role: { in: ["OWNER", "ADMIN", "MEMBER"] },
+                  },
                 },
-              ],
-            },
-          ],
-          serviceIdentity: {
-            workspaceId: principal.workspaceId,
-            createdById: preview.approvedByUserId,
-            revokedAt: null,
-            workspace: { accessStatus: "ACTIVE" },
-            createdBy: {
-              status: "active",
-              memberships: { some: { workspaceId: principal.workspaceId } },
-            },
-          },
-        },
+              },
+              oauthClient: { status: "active", revokedAt: null },
+            }),
         account: {
           workspaceId: principal.workspaceId,
           provider: "GOOGLE_ADS",
@@ -2586,6 +2785,10 @@ export class McpPreviewService {
       },
     });
     if (claimed.count !== 1) throw new PreviewError("preview_already_consumed");
+    if (principal.kind === "oauth") {
+      await this.assertControlledPrincipal(principal, account.id);
+      await this.assertNativeOAuthApproval(principal, preview);
+    }
   }
   private async executeGoogleKeywords(
     principal: ServiceTokenPrincipal,
@@ -2609,7 +2812,7 @@ export class McpPreviewService {
     for (const rejection of stored.rejections)
       await this.audit.record({
         eventType: "mcp_google_keyword_row_rejected",
-        actorType: "SERVICE",
+        ...principalActor(principal),
         workspaceId: principal.workspaceId,
         targetType: "mcp_preview",
         targetId: preview.id,
@@ -2617,8 +2820,8 @@ export class McpPreviewService {
         metadata: {
           provider: "GOOGLE_ADS",
           accountId: account.externalAccountId,
-          serviceTokenId: principal.tokenId,
-          serviceIdentityId: principal.serviceIdentityId,
+          ...principalBinding(principal),
+          serviceIdentityId: serviceIdentity(principal),
           commitId: this.googleCommitId(preview.id),
           previewId: preview.id,
           objectId: rejection.identity.criterion_id,
@@ -2631,6 +2834,10 @@ export class McpPreviewService {
           googleErrorCode: rejection.error.google_code,
         },
       });
+    if (principal.kind === "oauth") {
+      await this.assertControlledPrincipal(principal, account.id);
+      await this.assertNativeOAuthApproval(principal, preview);
+    }
     let mutation: GoogleMutationResult[];
     try {
       mutation = await this.providers.commitGoogleKeywordStatuses(
@@ -2791,15 +2998,15 @@ export class McpPreviewService {
   ) {
     return this.audit.record({
       eventType: "mcp_google_keyword_status",
-      actorType: "SERVICE",
+      ...principalActor(principal),
       workspaceId: principal.workspaceId,
       targetType: "mcp_preview",
       targetId: previewId,
       success:
         result === "success" || result === "no_op" || result === "attempted",
       metadata: {
-        serviceTokenId: principal.tokenId,
-        serviceIdentityId: principal.serviceIdentityId,
+        ...principalBinding(principal),
+        serviceIdentityId: serviceIdentity(principal),
         provider: "GOOGLE_ADS",
         accountId: account,
         campaignId: row.campaign_id,
@@ -2898,13 +3105,22 @@ export class McpPreviewService {
       where: {
         previewTokenDigest: digest(value),
         workspaceId: principal.workspaceId,
-        serviceTokenId: principal.tokenId,
+        ...principalBinding(principal),
         ...(principal.accountIds.length
           ? { accountId: { in: principal.accountIds } }
           : {}),
       },
     });
     if (!preview) throw new PreviewError("preview_not_found");
+    if (principal.kind === "oauth") {
+      if (
+        preview.provider !== "GOOGLE_ADS" ||
+        canonical(payloadRecord(preview.diff).authorization) !==
+          canonical(oauthContext(principal))
+      )
+        throw new PreviewError("confirmation_context_mismatch");
+      await this.assertControlledPrincipal(principal, preview.accountId);
+    }
     return preview;
   }
 

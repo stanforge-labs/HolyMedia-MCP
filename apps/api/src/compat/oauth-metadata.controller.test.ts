@@ -4,8 +4,10 @@ import { OAuthMetadataController } from "./oauth-metadata.controller.js";
 describe("OAuth discovery metadata", () => {
   const previous = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
   const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  const previousGoogle = process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED;
   beforeEach(() => {
     process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+    process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = "false";
   });
   afterEach(() => {
     if (previous === undefined)
@@ -14,6 +16,9 @@ describe("OAuth discovery metadata", () => {
     if (previousBaseUrl === undefined)
       delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+    if (previousGoogle === undefined)
+      delete process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED;
+    else process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = previousGoogle;
   });
 
   it("publishes absolute protected resource documents, without write while gated off", () => {
@@ -34,6 +39,22 @@ describe("OAuth discovery metadata", () => {
       scopes_supported: ["adforge:mcp:read"],
       bearer_methods_supported: ["header"],
     });
+  });
+
+  it("private Google gate advertises private write without broadening Public scopes", () => {
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = "true";
+    const controller = new OAuthMetadataController();
+    expect(controller.protectedMcpResource().scopes_supported).toEqual([
+      "adforge:mcp:read",
+      "adforge:mcp:write",
+    ]);
+    expect(controller.protectedPublicMcpResource().scopes_supported).toEqual([
+      "adforge:mcp:read",
+    ]);
+    expect(controller.authorizationServer().scopes_supported).toContain(
+      "adforge:mcp:write",
+    );
   });
 
   it("publishes matching public-client Authorization Code metadata", () => {
