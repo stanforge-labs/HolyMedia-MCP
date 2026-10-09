@@ -132,6 +132,40 @@ export function assertFixture(snapshot) {
   )
     fail("stage234_fixture_targeting_changed");
 }
+export function assertPausedDeliveryFixtures(snapshot) {
+  const campaigns = snapshot.fixtureCampaigns ?? [],
+    groups = snapshot.fixtureGroups ?? [],
+    ads = snapshot.fixtureAds ?? [];
+  const ids = [target.campaign, "24339483523"];
+  if (
+    campaigns.length !== 2 ||
+    new Set(campaigns.map((r) => String(r.campaign?.id))).size !== 2 ||
+    campaigns.some(
+      (r) =>
+        !ids.includes(String(r.campaign?.id)) ||
+        r.campaign?.status !== "PAUSED" ||
+        r.campaign?.resourceName !==
+          `customers/${target.customer}/campaigns/${r.campaign?.id}`,
+    ) ||
+    groups.length !== 3 ||
+    ads.length !== 3 ||
+    groups.some(
+      (r) =>
+        !ids.includes(String(r.campaign?.id)) ||
+        r.adGroup?.status !== "PAUSED" ||
+        r.adGroup?.resourceName !==
+          `customers/${target.customer}/adGroups/${r.adGroup?.id}`,
+    ) ||
+    ads.some(
+      (r) =>
+        !ids.includes(String(r.campaign?.id)) ||
+        r.adGroupAd?.status !== "PAUSED" ||
+        r.adGroupAd?.resourceName !==
+          `customers/${target.customer}/adGroupAds/${r.adGroup?.id}~${r.adGroupAd?.ad?.id}`,
+    )
+  )
+    fail("stage234_delivery_fixture_state_changed");
+}
 export function assertPreview(preview) {
   const item = preview?.items?.[0],
     before = item?.before,
@@ -342,19 +376,28 @@ export async function runLivePreview() {
     const snapshot = async () =>
       Object.fromEntries(
         await Promise.all(
-          ["campaign", "group", "keywords", "rsa", "budget", "criteria"].map(
-            async (name) => [
-              name,
-              (await read(queries[name])).sort((a, b) =>
-                canonical(a).localeCompare(canonical(b)),
-              ),
-            ],
-          ),
+          [
+            "campaign",
+            "group",
+            "keywords",
+            "rsa",
+            "budget",
+            "criteria",
+            "fixtureCampaigns",
+            "fixtureGroups",
+            "fixtureAds",
+          ].map(async (name) => [
+            name,
+            (await read(queries[name])).sort((a, b) =>
+              canonical(a).localeCompare(canonical(b)),
+            ),
+          ]),
         ),
       );
     stage = "fixture_before";
     const before = await snapshot();
     assertFixture(before);
+    assertPausedDeliveryFixtures(before);
     stage = "I_read_only_catalog_eligibility";
     const eligibleAudiences = await read(queries.eligibleAudiences);
     if (
@@ -602,6 +645,7 @@ export async function runLivePreview() {
     stage = "provider_reread_unchanged";
     const after = await snapshot();
     assertFixture(after);
+    assertPausedDeliveryFixtures(after);
     if (canonical(before) !== canonical(after))
       fail("stage234_provider_changed_after_preview");
     if (

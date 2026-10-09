@@ -23,6 +23,7 @@ import {
   assertPreview,
   makeCheckpoint,
   assertInvalidRsaResult,
+  assertPausedDeliveryFixtures,
 } from "./live-runner.mjs";
 
 const env = {
@@ -60,6 +61,51 @@ const req = (body) => ({
 });
 const check = (url, body, opts = {}) =>
   validateLiveRequest(url, req(body), { env, proof, now, ...opts });
+
+test("both known TEST delivery fixtures must remain PAUSED; missing or enabled parents reject", () => {
+  const campaigns = [target.campaign, "24339483523"],
+    groups = [target.group, "200180930839", "200180931039"],
+    ads = [target.rsa, "800000001", "800000002"];
+  const data = {
+    fixtureCampaigns: campaigns.map((id) => ({
+      campaign: {
+        id,
+        status: "PAUSED",
+        resourceName: `customers/${target.customer}/campaigns/${id}`,
+      },
+    })),
+    fixtureGroups: groups.map((id, i) => ({
+      campaign: { id: campaigns[i ? 1 : 0] },
+      adGroup: {
+        id,
+        status: "PAUSED",
+        resourceName: `customers/${target.customer}/adGroups/${id}`,
+      },
+    })),
+    fixtureAds: ads.map((id, i) => ({
+      campaign: { id: campaigns[i ? 1 : 0] },
+      adGroup: { id: groups[i] },
+      adGroupAd: {
+        status: "PAUSED",
+        resourceName: `customers/${target.customer}/adGroupAds/${groups[i]}~${id}`,
+        ad: { id },
+      },
+    })),
+  };
+  assertPausedDeliveryFixtures(data);
+  assert.throws(() => assertPausedDeliveryFixtures({}));
+  for (const kind of ["fixtureCampaigns", "fixtureGroups", "fixtureAds"]) {
+    const bad = structuredClone(data);
+    const entity =
+      kind === "fixtureCampaigns"
+        ? "campaign"
+        : kind === "fixtureGroups"
+          ? "adGroup"
+          : "adGroupAd";
+    bad[kind][0][entity].status = "ENABLED";
+    assert.throws(() => assertPausedDeliveryFixtures(bad));
+  }
+});
 
 test("local TEST session readiness is not approval and cannot carry auth or another origin", () => {
   const url = "http://127.0.0.1:4001/acceptance/session";

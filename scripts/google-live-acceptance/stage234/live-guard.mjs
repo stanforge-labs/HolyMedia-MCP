@@ -48,6 +48,12 @@ export const queries = Object.freeze({
     "SELECT currency_constant.resource_name, currency_constant.code, currency_constant.billable_unit_micros FROM currency_constant WHERE currency_constant.code = 'USD'",
   eligibleAudiences:
     "SELECT user_interest.resource_name, user_interest.user_interest_id, user_interest.name, user_interest.taxonomy_type, user_interest.launched_to_all FROM user_interest WHERE user_interest.taxonomy_type IN ('IN_MARKET', 'AFFINITY') AND user_interest.launched_to_all = TRUE LIMIT 10",
+  fixtureCampaigns:
+    "SELECT campaign.id, campaign.resource_name, campaign.status FROM campaign WHERE campaign.id IN (24324170853, 24339483523)",
+  fixtureGroups:
+    "SELECT campaign.id, ad_group.id, ad_group.resource_name, ad_group.status FROM ad_group WHERE campaign.id IN (24324170853, 24339483523) AND ad_group.status != REMOVED",
+  fixtureAds:
+    "SELECT campaign.id, ad_group.id, ad_group_ad.resource_name, ad_group_ad.status, ad_group_ad.ad.id FROM ad_group_ad WHERE campaign.id IN (24324170853, 24339483523) AND ad_group_ad.status != REMOVED",
   hierarchy:
     "SELECT customer_client.id, customer_client.level, customer_client.test_account FROM customer_client WHERE customer_client.id = 8590146099",
   campaign:
