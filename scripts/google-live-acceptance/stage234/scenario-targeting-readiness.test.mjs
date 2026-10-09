@@ -12,6 +12,19 @@ import {
   crossClientReadiness,
 } from "./scenario-targeting-readiness.mjs";
 import { originalKeywords } from "./live-guard.mjs";
+test("real v24 inventory uses no fabricated ExtendedDemographic enum", () => {
+  assert.ok(
+    queries.groupAudiences.includes(
+      "ad_group_criterion.extended_demographic.extended_demographic_id",
+    ),
+  );
+  assert.ok(!queries.groupAudiences.includes("'EXTENDED_DEMOGRAPHIC'"));
+  assert.ok(
+    queries.groupAudiences.includes(
+      `ad_group_criterion.ad_group = 'customers/${fixture.customer}/adGroups/${fixture.group}'`,
+    ),
+  );
+});
 const now = Date.parse("2026-10-09T12:00:00.000Z"),
   prefix = `customers/${fixture.customer}`,
   campaign = `${prefix}/campaigns/${fixture.campaign}`,

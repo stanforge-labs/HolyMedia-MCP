@@ -157,10 +157,10 @@ export function safeReadinessError(e) {
         ? code
         : "readiness_failure_redacted",
     http_status:
-      Number.isInteger(e?.providerStatus) &&
-      e.providerStatus >= 100 &&
-      e.providerStatus <= 599
-        ? e.providerStatus
+      /^\d{3}$/.test(String(e?.providerStatus)) &&
+      Number(e.providerStatus) >= 100 &&
+      Number(e.providerStatus) <= 599
+        ? Number(e.providerStatus)
         : null,
     google_code:
       typeof e?.providerCode === "string" &&
@@ -437,6 +437,14 @@ export function assertReadinessDelivery(snapshot) {
     fail("readiness_active_negative_conflict");
 }
 function criteria(rows, key) {
+  // Extended demographic is a valid oneof, not a CriterionType enum value.
+  // Keep all raw rows in the immutable snapshot; project audience candidates only.
+  if (key === "adGroupCriterion")
+    rows = rows.filter(
+      (r) =>
+        ["USER_LIST", "USER_INTEREST"].includes(r[key]?.type) ||
+        r[key]?.extendedDemographic,
+    );
   return rows.map((r) =>
     project(object(r[key]), [
       "resourceName",
