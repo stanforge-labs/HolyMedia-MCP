@@ -74,7 +74,7 @@ def execute(opts):
     state=base.ROOT/"state"/("stage234-i-commit-"+opts.run_id)
     state.mkdir(mode=0o700);os.chown(state,1000,1000)
     files={name:(original/name).read_bytes() for name in names}
-    files["i-commit-harness-source.json"]=json.dumps({"head":opts.harness_head,"files":{name:hashlib.sha256((directory/name).read_bytes()).hexdigest() for name in ["audience-commit-guard.mjs","audience-commit-runner.mjs","run-audience-commit.py","context-vault.mjs","wait-local-ready.mjs","startup-diagnostics.mjs"]}}).encode()
+    files["i-commit-harness-source.json"]=json.dumps({"head":opts.harness_head,"files":{name:hashlib.sha256((directory/name).read_bytes()).hexdigest() for name in ["audience-commit-guard.mjs","audience-commit-runner.mjs","run-audience-commit.py","timestamp.mjs","context-vault.mjs","wait-local-ready.mjs","startup-diagnostics.mjs"]}}).encode()
     for name,data in files.items():
         fd=os.open(state/name,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         with os.fdopen(fd,"wb") as f:f.write(data)

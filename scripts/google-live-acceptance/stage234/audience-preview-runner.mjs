@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 import { startupDiagnostics } from "./startup-diagnostics.mjs";
+import { timestampMillis } from "./timestamp.mjs";
 import {
   readAcceptanceContext,
   sealAcceptanceContext,
@@ -99,10 +100,10 @@ export async function runIPreview() {
       context.key_id !== key.id ||
       key.revokedAt ||
       key.serviceIdentity?.revokedAt ||
-      !Number.isFinite(Date.parse(key.expiresAt)) ||
-      Date.parse(key.expiresAt) !== Date.parse(context.expires_at) ||
-      Date.parse(key.expiresAt) <= Date.now() ||
-      Date.parse(key.expiresAt) > Date.now() + 24 * 60 * 60 * 1000 ||
+      !Number.isFinite(timestampMillis(key.expiresAt)) ||
+      timestampMillis(key.expiresAt) !== timestampMillis(context.expires_at) ||
+      timestampMillis(key.expiresAt) <= Date.now() ||
+      timestampMillis(key.expiresAt) > Date.now() + 24 * 60 * 60 * 1000 ||
       key.serviceIdentity.workspaceId !== account.workspaceId ||
       key.resourceAccessMode !== "STATIC_ALLOWLIST" ||
       canonical(key.accountIds) !== canonical([account.id]) ||

@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
+import { timestampMillis } from "./timestamp.mjs";
 import {
   assertApprovedI,
   validateCommitRequest,
@@ -168,6 +169,82 @@ test("I persisted exact approval accepts actual preview TTL independent of readi
   assert.equal(assertApprovedI(f, id, now).approval_persisted, true);
   f.context.readiness_timestamp = new Date(now - 1200000).toISOString();
   assertApprovedI(f, id, now);
+});
+test("I Prisma Date retains 677ms, exact ISO binding and subsecond audit ordering", () => {
+  const at = Date.parse("2026-10-10T12:00:00.000Z"),
+    expiry = "2026-10-10T12:51:17.677Z";
+  assert.equal(timestampMillis(new Date(expiry)), timestampMillis(expiry));
+  const f = fixture();
+  f.key.expiresAt = new Date(expiry);
+  f.context.expires_at = expiry;
+  f.stored.expiresAt = new Date("2026-10-10T12:20:00.677Z");
+  f.session.expiresAt = new Date(expiry);
+  f.stored.confirmedAt = new Date(at - 500 + 177);
+  f.approval.createdAt = new Date(at - 500 + 178);
+  assertApprovedI(f, id, at);
+  f.context.expires_at = "2026-10-10T12:51:17.678Z";
+  assert.throws(() => assertApprovedI(f, id, at), /account_owner_invalid/);
+  f.context.expires_at = expiry;
+  f.approval.createdAt = new Date(at - 500 + 176);
+  assert.throws(() => assertApprovedI(f, id, at), /session_audit_invalid/);
+  f.approval.createdAt = new Date(at - 500 + 177);
+  assertApprovedI(f, id, at);
+});
+test("I precise expiry boundaries reject exactly expired Date or ISO without tolerance", () => {
+  const at = Date.parse("2026-10-10T12:00:00.677Z");
+  for (const kind of ["key", "session", "preview"]) {
+    const f = fixture();
+    f.stored.confirmedAt = new Date(at - 1000);
+    f.approval.createdAt = new Date(at - 999);
+    f.key.expiresAt = new Date(at + 10000);
+    f.context.expires_at = f.key.expiresAt.toISOString();
+    f.session.expiresAt = new Date(at + 10000);
+    f.stored.expiresAt = new Date(at + 10000);
+    if (kind === "key") {
+      f.key.expiresAt = new Date(at);
+      f.context.expires_at = f.key.expiresAt.toISOString();
+    }
+    if (kind === "session") f.session.expiresAt = new Date(at);
+    if (kind === "preview") f.stored.expiresAt = new Date(at);
+    assert.throws(() => assertApprovedI(f, id, at));
+    if (kind === "key") {
+      f.key.expiresAt = new Date(at + 1);
+      f.context.expires_at = f.key.expiresAt.toISOString();
+    }
+    if (kind === "session") f.session.expiresAt = new Date(at + 1);
+    if (kind === "preview") f.stored.expiresAt = new Date(at + 1);
+    assertApprovedI(f, id, at);
+  }
+});
+test("I timestamps reject invalid, missing, numeric and rollover dates", () => {
+  for (const value of [
+    null,
+    undefined,
+    1791636677677,
+    "1791636677677",
+    "invalid",
+    new Date(Number.NaN),
+    "2026-02-30T12:00:00.677Z",
+    "2026-10-10T24:00:00.677Z",
+    {},
+    "2026-10-10",
+  ])
+    assert.equal(Number.isNaN(timestampMillis(value)), true);
+  for (const field of ["confirmedAt", "expiresAt"]) {
+    const f = fixture();
+    f.stored[field] = new Date(Number.NaN);
+    assert.throws(() => assertApprovedI(f, id, now));
+  }
+  const previewSource = readFileSync(
+    new URL("./audience-preview-runner.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    previewSource.includes(
+      "timestampMillis(key.expiresAt) !== timestampMillis(context.expires_at)",
+    ),
+  );
+  assert.ok(!previewSource.includes("Date.parse(key.expiresAt)"));
 });
 test("I identity, finite expiry, exact scopes, session, audit, immutable and freshness fail closed", () => {
   const edits = [

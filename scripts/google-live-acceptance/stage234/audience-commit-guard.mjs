@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { URL } from "node:url";
 import process from "node:process";
 import { readAcceptanceContext } from "./context-vault.mjs";
+import { timestampMillis } from "./timestamp.mjs";
 import {
   target,
   canonical,
@@ -99,7 +100,7 @@ export function assertApprovedI(
   const active = (row) =>
     row &&
     !row.revokedAt &&
-    (!row.expiresAt || Date.parse(row.expiresAt) > now);
+    (!row.expiresAt || timestampMillis(row.expiresAt) > now);
   if (
     !context?.preview?.preview_id ||
     typeof context.preview.preview_token !== "string" ||
@@ -111,9 +112,9 @@ export function assertApprovedI(
   if (
     !active(key) ||
     context.key_id !== key.id ||
-    !Number.isFinite(Date.parse(key.expiresAt)) ||
-    Date.parse(key.expiresAt) !== Date.parse(context.expires_at) ||
-    Date.parse(key.expiresAt) > now + 24 * 60 * 60 * 1000 ||
+    !Number.isFinite(timestampMillis(key.expiresAt)) ||
+    timestampMillis(key.expiresAt) !== timestampMillis(context.expires_at) ||
+    timestampMillis(key.expiresAt) > now + 24 * 60 * 60 * 1000 ||
     key.serviceIdentity?.revokedAt ||
     !key.serviceIdentity?.createdById ||
     key.serviceIdentity.workspaceId !== account?.workspaceId ||
@@ -136,8 +137,8 @@ export function assertApprovedI(
     fail("stage234_commit_account_owner_invalid");
   if (
     !stored.confirmedAt ||
-    !Number.isFinite(Date.parse(stored.confirmedAt)) ||
-    Date.parse(stored.confirmedAt) > now ||
+    !Number.isFinite(timestampMillis(stored.confirmedAt)) ||
+    timestampMillis(stored.confirmedAt) > now ||
     !stored.approvalSessionId ||
     !stored.approvedByUserId ||
     stored.approvedByUserId !== key.serviceIdentity.createdById ||
@@ -146,7 +147,7 @@ export function assertApprovedI(
     fail("stage234_commit_approval_not_persisted");
   if (
     !active(session) ||
-    !Number.isFinite(Date.parse(session?.expiresAt)) ||
+    !Number.isFinite(timestampMillis(session?.expiresAt)) ||
     session.id !== stored.approvalSessionId ||
     session.userId !== stored.approvedByUserId ||
     session.user?.status !== "active" ||
@@ -157,13 +158,13 @@ export function assertApprovedI(
     approval.actorType !== "HUMAN" ||
     approval.actorUserId !== stored.approvedByUserId ||
     approval.success !== true ||
-    !Number.isFinite(Date.parse(approval.createdAt)) ||
-    Date.parse(approval.createdAt) < Date.parse(stored.confirmedAt)
+    !Number.isFinite(timestampMillis(approval.createdAt)) ||
+    timestampMillis(approval.createdAt) < timestampMillis(stored.confirmedAt)
   )
     fail("stage234_commit_session_audit_invalid");
   if (
-    Date.parse(stored.expiresAt) <= now ||
-    !Number.isFinite(Date.parse(stored.expiresAt))
+    timestampMillis(stored.expiresAt) <= now ||
+    !Number.isFinite(timestampMillis(stored.expiresAt))
   )
     fail("stage234_commit_preview_expired");
   if (stored.consumedAt || stored.cancelledAt || stored.commitAttemptedAt)
@@ -206,8 +207,8 @@ function assertAuthority(authority, context, env, proof, now) {
     !authority.approval_session_valid ||
     !authority.approval_audit_valid ||
     !/^[a-f0-9]{64}$/.test(authority.snapshot_digest ?? "") ||
-    !Number.isFinite(Date.parse(authority.expires_at)) ||
-    Date.parse(authority.expires_at) <= now
+    !Number.isFinite(timestampMillis(authority.expires_at)) ||
+    timestampMillis(authority.expires_at) <= now
   )
     fail("stage234_i_commit_authority_invalid");
   assertProof(proof, env, now);
