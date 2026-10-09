@@ -9,11 +9,12 @@ import {
   sealAcceptanceContext,
 } from "./context-vault.mjs";
 import process from "node:process";
-const { structuredClone, AbortSignal, setTimeout, console } = globalThis;
+const { structuredClone, AbortSignal, console } = globalThis;
 // Resolve after guard installation; never capture the unguarded native fetch.
 const fetch = (...args) => globalThis.fetch(...args);
 import { queries, sanitized, safeError } from "./live-guard.mjs";
 import { assertFixture, assertPausedDeliveryFixtures } from "./live-runner.mjs";
+import { waitLocalReady } from "./wait-local-ready.mjs";
 import {
   target,
   canonical,
@@ -318,23 +319,7 @@ export async function runNContinuation() {
         env: { ...env, STAGE234_COMMIT_GUARD_PRELOAD: "1", LOG_LEVEL: "error" },
       },
     );
-    let ready = false;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      if (server.exitCode !== null)
-        fail("stage234_commit_stock_api_start_failed");
-      try {
-        ready =
-          (
-            await fetch("http://127.0.0.1:4000/ready", {
-              signal: AbortSignal.timeout(1000),
-            })
-          ).status === 200;
-      } catch {
-        // Bounded local API health wait only, never a provider retry.
-      }
-      if (ready) break;
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+    const ready = await waitLocalReady({ fetch, server });
     if (!ready) fail("stage234_commit_stock_api_not_ready");
     // Fresh DB approval immediately precedes the one immutable HTTP commit.
     bound = await approveProof();

@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "acceptance_test": "N_CONTINUATION",
+  "result": "BLOCKED_BEFORE_MCP",
+  "preview_id": "ff5169fe-86ca-467f-9448-8c481619ad0c",
+  "approved_at": "2026-10-09T14:17:46.791Z",
+  "approval_session_valid": true,
+  "approval_audit_valid": true,
+  "immutable_payload_valid": true,
+  "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+  "image_digest": "sha256:77f70b71f61953626d18c8e66f1315c3db1df8bc6848371a312866134580e9bd",
+  "failure": {
+    "code": "stage234_commit_stock_api_not_ready",
+    "stage": "fresh_test_fixture_preflight",
+    "timestamp": "2026-10-09T14:19:46.310Z",
+    "mcp_commit_sent": false,
+    "google_mutation_sent": false,
+    "original_child_stderr_discarded": true,
+    "lower_level_cause": "UNPROVEN",
+    "readiness_timeout_reproduced": false
+  },
+  "claims": {
+    "supervisor_launch": true,
+    "mcp_commit": false,
+    "google_write": false,
+    "rollback_preview": false,
+    "retained": true
+  },
+  "db": {
+    "commitStatus": "CONFIRMED",
+    "consumedAt": null,
+    "commitAttemptedAt": null,
+    "expired": true,
+    "expiresAt": "2026-10-09T14:23:01.301Z",
+    "write_audit_count": 0,
+    "approval_audit": {
+      "eventType": "mcp_preview_web_approved",
+      "timestamp": "2026-10-09T14:17:46.832Z",
+      "success": true
+    }
+  },
+  "diagnostics": {
+    "kind": "STOCK_API_STARTUP_ONLY",
+    "provider_fetch_denied": true,
+    "read_only_historical_state": true,
+    "mcp_called": false,
+    "real_writes": 0,
+    "timed_light_parent_first_guarded_ready_ms": 6754,
+    "timed_loaded_parent_first_guarded_ready_ms": 6137,
+    "loaded_parent_rss_bytes": 170414080,
+    "limits_unchanged": {
+      "memory": "768m",
+      "cpus": 1
+    },
+    "production_unchanged": true
+  },
+  "targeted_resilience_fix": {
+    "monotonic_health_budget_ms": 45000,
+    "request_timeout_ms": 1000,
+    "no_provider_retry": true,
+    "no_commit_retry": true,
+    "preview_ttl_unchanged": true,
+    "rechecks_persisted_approval_after_ready": true,
+    "helper_in_manifest": true,
+    "old_claims_not_removed": true
+  },
+  "provider_calls_this_continuation": {
+    "read": 46,
+    "validate_only": 0,
+    "real_write": 0,
+    "oauth_refresh": 1
+  },
+  "cumulative_current_cycle": {
+    "read": 193,
+    "validate_only": 1,
+    "real_write": 0,
+    "oauth_refresh": 2,
+    "historical_stage01_calls_excluded": true
+  },
+  "fresh_after_failure_read": {
+    "kind": "stage234_targeting_readiness_fixed_READ_only",
+    "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+    "harness_head": "a60bd4346404dbc67c3c2311bb658cd051dd58fe",
+    "image_digest": "sha256:77f70b71f61953626d18c8e66f1315c3db1df8bc6848371a312866134580e9bd",
+    "result": "PASS_READ_ONLY",
+    "test_customer_id": "8590146099",
+    "mcc_id": "4378327049",
+    "fixture_unchanged": true,
+    "fixture_digest": "4bc6e11e7fab3b9c5489d063e2da55c33bfc852ee5d7c855b24a9a2b34e53fe5",
+    "fixture_campaign_criteria": [
+      {
+        "resourceName": "customers/8590146099/campaignCriteria/24324170853~1031",
+        "campaign": "customers/8590146099/campaigns/24324170853",
+        "criterionId": "1031",
+        "type": "LANGUAGE",
+        "status": "ENABLED",
+        "negative": false,
+        "language": {
+          "languageConstant": "languageConstants/1031"
+        }
+      },
+      {
+        "resourceName": "customers/8590146099/campaignCriteria/24324170853~30000",
+        "campaign": "customers/8590146099/campaigns/24324170853",
+        "criterionId": "30000",
+        "type": "DEVICE",
+        "status": "ENABLED",
+        "negative": false,
+        "device": {
+          "type": "DESKTOP"
+        }
+      },
+      {
+        "resourceName": "customers/8590146099/campaignCriteria/24324170853~30001",
+        "campaign": "customers/8590146099/campaigns/24324170853",
+        "criterionId": "30001",
+        "type": "DEVICE",
+        "status": "ENABLED",
+        "negative": false,
+        "device": {
+          "type": "MOBILE"
+        }
+      },
+      {
+        "resourceName": "customers/8590146099/campaignCriteria/24324170853~30002",
+        "campaign": "customers/8590146099/campaigns/24324170853",
+        "criterionId": "30002",
+        "type": "DEVICE",
+        "status": "ENABLED",
+        "negative": false,
+        "device": {
+          "type": "TABLET"
+        }
+      },
+      {
+        "resourceName": "customers/8590146099/campaignCriteria/24324170853~9235214",
+        "campaign": "customers/8590146099/campaigns/24324170853",
+        "criterionId": "9235214",
+        "type": "LOCATION",
+        "status": "ENABLED",
+        "negative": false,
+        "location": {
+          "geoTargetConstant": "geoTargetConstants/9235214"
+        }
+      }
+    ],
+    "I": {
+      "acceptance_test": "I",
+      "real_provider_calls": 0,
+      "real_provider_writes": 0,
+      "production_changed": false,
+      "main_changed": false,
+      "result": "BLOCKED",
+      "blockers": [
+        {
+          "source": "HOLYMEDIA",
+          "code": "audience_eligibility_not_proven",
+          "field_path": "I.catalog",
+          "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+        }
+      ],
+      "catalog_observed_count": 101,
+      "catalog_coverage": "BOUNDED_SAMPLE_ONLY",
+      "absence_of_eligible_catalog_proven": false,
+      "catalog_results": {
+        "eligibleInterests": {
+          "result": "BLOCKED",
+          "observed_count": 101,
+          "blockers": [
+            {
+              "source": "HOLYMEDIA",
+              "code": "audience_eligibility_not_proven",
+              "field_path": "I.catalog",
+              "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+            }
+          ]
+        },
+        "userLists": {
+          "result": "BLOCKED",
+          "observed_count": 0,
+          "blockers": [
+            {
+              "source": "HOLYMEDIA",
+              "code": "audience_eligibility_not_proven",
+              "field_path": "I.catalog",
+              "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+            }
+          ]
+        },
+        "detailedDemographics": {
+          "result": "BLOCKED",
+          "observed_count": 34,
+          "blockers": [
+            {
+              "source": "HOLYMEDIA",
+              "code": "audience_eligibility_not_proven",
+              "field_path": "I.catalog",
+              "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+            }
+          ]
+        }
+      }
+    },
+    "J": {
+      "acceptance_test": "J",
+      "real_provider_calls": 0,
+      "real_provider_writes": 0,
+      "production_changed": false,
+      "main_changed": false,
+      "result": "BLOCKED",
+      "blockers": [
+        {
+          "source": "HOLYMEDIA",
+          "code": "scenario_fields_invalid",
+          "field_path": "J.existing_criteria.1",
+          "message": "TEST proof/typed inventory отсутствуют или не прошли guard; preview/commit не выполнялись."
+        }
+      ]
+    },
+    "PMax": {
+      "acceptance_test": "PMAX_PREREQUISITES",
+      "real_provider_calls": 0,
+      "real_provider_writes": 0,
+      "production_changed": false,
+      "main_changed": false,
+      "result": "BLOCKED",
+      "source_head": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+      "blockers": [
+        {
+          "source": "HOLYMEDIA",
+          "code": "pmax_existing_enabled_goal_missing",
+          "field_path": "PMax.conversion_actions",
+          "message": "Нет доказанного existing same-account ENABLED conversion action. Новую цель/конверсию этот readiness-пакет не создаёт."
+        },
+        {
+          "source": "HOLYMEDIA",
+          "code": "pmax_existing_media_missing",
+          "field_path": "PMax.assets.MARKETING_IMAGE",
+          "message": "Не доказан usable existing MARKETING_IMAGE; media/brand assets не генерируются и не загружаются автоматически."
+        },
+        {
+          "source": "HOLYMEDIA",
+          "code": "pmax_existing_media_missing",
+          "field_path": "PMax.assets.SQUARE_MARKETING_IMAGE",
+          "message": "Не доказан usable existing SQUARE_MARKETING_IMAGE; media/brand assets не генерируются и не загружаются автоматически."
+        },
+        {
+          "source": "HOLYMEDIA",
+          "code": "pmax_existing_media_missing",
+          "field_path": "PMax.assets.LOGO",
+          "message": "Не доказан usable existing LOGO; media/brand assets не генерируются и не загружаются автоматически."
+        }
+      ],
+      "same_account_goals": [],
+      "existing_media_by_role": {
+        "MARKETING_IMAGE": [],
+        "SQUARE_MARKETING_IMAGE": [],
+        "LOGO": [],
+        "BUSINESS_NAME": ["428412289294", "428412289297", "428412289300"]
+      },
+      "existing_brand_guidelines": [],
+      "inventory_coverage": "BOUNDED_SAMPLE_ONLY",
+      "no_inventory_absence_claim": true,
+      "live_acceptance": "NOT_RUN",
+      "remaining": "Read exact selected resources again, prove asset associations/branding minima, launch checklist and Google validate_only via stock PMax preview. No new goals/uploads or live create are authorized by this artifact."
+    },
+    "inventory_read_errors": {},
+    "inventory_row_counts": {
+      "eligibleInterests": 101,
+      "userLists": 0,
+      "detailedDemographics": 34,
+      "city": 1,
+      "districts": 101,
+      "conversions": 0,
+      "assets": 5,
+      "pmaxCampaigns": 0
+    },
+    "catalog_sample_policy": "Bounded samples only; no zero-inventory global claims. No silent truncation may authorize a write.",
+    "cross_client": {
+      "Q": "NOT_RUN_NO_CLIENT_PROOF",
+      "R": "NOT_RUN_NO_CLIENT_PROOF",
+      "S": "NOT_RUN_HUMAN_CONSENT_REQUIRED"
+    },
+    "counts": {
+      "read": 34,
+      "oauth_refresh": 1,
+      "failed_http": 0,
+      "validate_only": 0,
+      "write": 0
+    },
+    "provider_read_call_count": 34,
+    "validate_only_call_count": 0,
+    "real_provider_write_call_count": 0,
+    "approval_performed": false,
+    "committed": false,
+    "production_changed": false,
+    "main_changed": false,
+    "timestamp": "2026-10-09T14:38:03.975Z"
+  },
+  "final_group_cpc_micros": "100000",
+  "rollback_required": false,
+  "rollback_created": false,
+  "old_preview_must_not_be_reused": true,
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T14:38:03.975Z"
+}
