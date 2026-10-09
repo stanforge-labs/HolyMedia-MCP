@@ -8,6 +8,7 @@ import {
   googleWriteGenericSchema,
   googleWriteOpenApi,
   googleWriteProfileName,
+  googleWriteProfileInputSchema,
   googleWriteToolProfile,
   type GoogleWriteClientTool,
 } from "./google-write-client-contract.js";
@@ -145,7 +146,7 @@ describe("Google private profile: required PPC P47–53", () => {
     expect(profile.some((tool) => tool.name === "confirm_preview")).toBe(false);
     expect(all).toEqual(snapshot);
   });
-  it("adds truthful read/commit/remove/rollback hints without changing schema", () => {
+  it("adds truthful hints and projects only trusted Google-only input schemas", () => {
     const profile = googleWriteToolProfile(registry());
     for (const name of [
       "get_campaign_structure",
@@ -173,7 +174,9 @@ describe("Google private profile: required PPC P47–53", () => {
       profile.find((tool) => tool.name === "google_ads_targeting_preview")!
         .annotations!.readOnlyHint,
     ).toBe(false);
-    expect(profile[0]!.inputSchema).toEqual(registry()[0]!.inputSchema);
+    expect(profile[0]!.inputSchema).toEqual(
+      googleWriteProfileInputSchema(profile[0]!),
+    );
   });
   it("does not add tools absent from the authenticated registry", () => {
     expect(googleWriteToolProfile([])).toEqual([]);
