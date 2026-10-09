@@ -97,6 +97,19 @@ export function parseStage4Intent(raw: unknown): Stage4Intent {
     ],
     pmax_search_theme_add: ["campaign_id", "asset_group_id", "search_theme"],
     pmax_audience_signal_add: ["campaign_id", "asset_group_id", "audience_id"],
+    pmax_asset_attach: [
+      "campaign_id",
+      "asset_group_id",
+      "asset_id",
+      "field_type",
+    ],
+    pmax_asset_detach: [
+      "campaign_id",
+      "asset_group_id",
+      "asset_id",
+      "field_type",
+      "acknowledge_irreversible",
+    ],
     pmax_create: [],
   };
   const items = intent.items.map((v) => {
@@ -275,6 +288,18 @@ const actionRequired: Record<string, string[]> = {
   asset_group_update: ["campaign_id", "asset_group_id"],
   pmax_search_theme_add: ["campaign_id", "asset_group_id", "search_theme"],
   pmax_audience_signal_add: ["campaign_id", "asset_group_id", "audience_id"],
+  pmax_asset_attach: [
+    "campaign_id",
+    "asset_group_id",
+    "asset_id",
+    "field_type",
+  ],
+  pmax_asset_detach: [
+    "campaign_id",
+    "asset_group_id",
+    "asset_id",
+    "field_type",
+  ],
   pmax_create: [],
 };
 export async function buildStage4Plan(
@@ -283,6 +308,11 @@ export async function buildStage4Plan(
   read: Stage1Reader,
 ): Promise<ExtendedPlan> {
   const intent = parseStage4Intent(raw);
+  if (intent.action === "pmax_asset_detach")
+    extFail(
+      "google_pmax_minimum_assets_unsupported",
+      "PMax detach не реализован: требуется доказательство minimum remaining asset/brand profile. Старые assets и связи не изменяются.",
+    );
   if (
     ["ad_remove", "asset_detach"].includes(intent.action) &&
     intent.items.some((i) => i.acknowledge_irreversible !== true)
@@ -897,7 +927,8 @@ export async function buildStage4Plan(
         if (
           intent.action === "ad_group_update" ||
           (intent.action === "campaign_update" &&
-            masks.every((m) => m === "name" || m === "status"))
+            masks.every((m) => m === "name" || m === "status") &&
+            !(masks.includes("status") && before.status === "ENABLED"))
         )
           inverse.push({
             ...row,
@@ -953,6 +984,131 @@ export async function buildStage4Plan(
           query,
           "assetGroup",
           masks.join(","),
+        );
+      } else if (intent.action === "pmax_asset_attach") {
+        const fieldType = String(row.field_type),
+          permitted = [
+            "HEADLINE",
+            "LONG_HEADLINE",
+            "DESCRIPTION",
+            "MARKETING_IMAGE",
+            "SQUARE_MARKETING_IMAGE",
+          ];
+        if (!permitted.includes(fieldType))
+          extFail(
+            "google_pmax_asset_field_unsupported",
+            "PMax profile допускает только HEADLINE/LONG_HEADLINE/DESCRIPTION/MARKETING_IMAGE/SQUARE_MARKETING_IMAGE. Brand logos/business name требуют отдельного campaign-level profile.",
+          );
+        if (before.status !== "PAUSED" && c.status !== "PAUSED")
+          extFail(
+            "google_pmax_active_profile_unsupported",
+            "Attachment profile требует PAUSED asset group или campaign. Активный PMax не затрагивается.",
+          );
+        const assetResource = `${prefix}/assets/${extId(row.asset_id)}`,
+          asset = await one(
+            `SELECT ${assetFields} FROM asset WHERE asset.resource_name = ${extQuote(assetResource)}`,
+            "asset",
+            assetResource,
+            "assets",
+          );
+        const textType = ["HEADLINE", "LONG_HEADLINE", "DESCRIPTION"].includes(
+          fieldType,
+        );
+        if (asset.type !== (textType ? "TEXT" : "IMAGE"))
+          extFail(
+            "google_stage4_asset_type_invalid",
+            "Тип Google asset не соответствует PMax field_type.",
+          );
+        if (textType)
+          validateText(
+            String(extRow(asset.textAsset).text ?? ""),
+            fieldType === "HEADLINE" ? 30 : 90,
+            `PMax ${fieldType}`,
+          );
+        else {
+          imageDimensions(asset);
+          const dimensions = extRow(extRow(asset.imageAsset).fullSize),
+            width = Number(dimensions.widthPixels),
+            height = Number(dimensions.heightPixels);
+          if (
+            fieldType === "SQUARE_MARKETING_IMAGE" &&
+            (width !== height || width < 300)
+          )
+            extFail(
+              "google_pmax_image_dimensions_invalid",
+              "SQUARE_MARKETING_IMAGE требует квадрат минимум 300x300.",
+            );
+          if (fieldType === "MARKETING_IMAGE" && (width < 600 || height < 314))
+            extFail(
+              "google_pmax_image_dimensions_invalid",
+              "MARKETING_IMAGE требует минимум 600x314; Google validate_only проверяет landscape ratio и policy.",
+            );
+        }
+        const linksQuery = `SELECT asset_group_asset.resource_name, asset_group_asset.asset_group, asset_group_asset.asset, asset_group_asset.field_type, asset_group_asset.status FROM asset_group_asset WHERE asset_group_asset.asset_group = ${extQuote(resource)} AND asset_group_asset.status != REMOVED`,
+          links = await ctx.query(linksQuery);
+        for (const row of links) {
+          const link = extRow(row.assetGroupAsset);
+          extOwner(link.resourceName, ctx.account_id, "assetGroupAssets");
+          if (link.assetGroup !== resource)
+            extFail(
+              "google_extended_ownership_invalid",
+              "AssetGroupAsset parent mismatch.",
+            );
+          extOwner(link.asset, ctx.account_id, "assets");
+        }
+        if (
+          links.some(
+            (v) =>
+              extRow(v.assetGroupAsset).asset === assetResource &&
+              extRow(v.assetGroupAsset).fieldType === fieldType,
+          )
+        )
+          extFail(
+            "google_stage4_duplicate",
+            "PMax asset association уже существует.",
+          );
+        const maximum: Record<string, number> = {
+          HEADLINE: 15,
+          LONG_HEADLINE: 5,
+          DESCRIPTION: 5,
+          MARKETING_IMAGE: 20,
+          SQUARE_MARKETING_IMAGE: 20,
+        };
+        const planned = operations.filter(
+          (o) =>
+            o.kind === "assetGroupAssets" &&
+            o.fields.assetGroup === resource &&
+            o.fields.fieldType === fieldType,
+        ).length;
+        if (
+          links.filter((v) => extRow(v.assetGroupAsset).fieldType === fieldType)
+            .length +
+            planned >=
+          maximum[fieldType]!
+        )
+          extFail(
+            "google_pmax_asset_limit",
+            "PMax field type asset limit превышен; данные не обрезаны.",
+          );
+        const fields = {
+          assetGroup: resource,
+          asset: assetResource,
+          fieldType,
+          status: "PAUSED",
+        };
+        add(
+          index,
+          "assetGroupAssets",
+          "create",
+          null,
+          fields,
+          null,
+          fields,
+          linksQuery,
+          "assetGroupAsset",
+        );
+        item.warnings.push(
+          "Связь создаётся PAUSED без activation родителя. Google validate_only проверяет minimum-assets/ratio/brand/policy eligibility. Автоматический detach/rollback запрещён до minimum remaining asset proof.",
         );
       } else {
         const fields: ExtendedRow = { assetGroup: resource };
@@ -1052,5 +1208,7 @@ export const stage4CapabilityMatrix = {
   pmax_existing_search_theme_audience_signal_add: "IMPLEMENTED",
   pmax_asset_group_create_full_minimum_assets: "UNSUPPORTED",
   pmax_brand_exclusions_negatives: "UNSUPPORTED_PROFILE",
-  pmax_image_text_attachment: "UNSUPPORTED_ASSET_GROUP_PROFILE",
+  pmax_image_text_attachment:
+    "IMPLEMENTED_EXISTING_REFERENCES_PAUSED_LINK_ONLY",
+  pmax_asset_detach: "UNSUPPORTED_MINIMUM_REMAINING_ASSETS_PROFILE",
 } as const;

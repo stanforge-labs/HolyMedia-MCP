@@ -23,6 +23,8 @@ export const stage4Actions = [
   "asset_group_update",
   "pmax_search_theme_add",
   "pmax_audience_signal_add",
+  "pmax_asset_attach",
+  "pmax_asset_detach",
   "pmax_create",
 ] as const;
 const string = (maxLength = 255): BriefSchema => ({
@@ -76,6 +78,11 @@ export const stage4RowSchema = object({
     "AD_IMAGE",
     "BUSINESS_LOGO",
     "BUSINESS_NAME",
+    "HEADLINE",
+    "LONG_HEADLINE",
+    "DESCRIPTION",
+    "MARKETING_IMAGE",
+    "SQUARE_MARKETING_IMAGE",
   ]),
   start_date: campaignBriefSchema.properties!.start_date!,
   end_date: campaignBriefSchema.properties!.end_date!,
