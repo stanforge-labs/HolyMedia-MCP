@@ -25,6 +25,11 @@ import type {
   ProviderMetricSummary,
 } from "@holymedia/contracts";
 import { ProviderService } from "../providers/provider.service.js";
+import {
+  GOOGLE_TRACKING_AUDIT_TOOLS,
+  trackingAuditToolSchema,
+  trackingAuditToolArguments,
+} from "./mcp-google-tracking-audit-schema.js";
 import type { McpPrincipal as ServiceTokenPrincipal } from "./mcp-principal.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ReportService } from "../reports/report.service.js";
@@ -564,6 +569,8 @@ export class McpService {
         stage2AdvancedToolSchema(name) ??
         stage3ToolSchema(name) ??
         (stage4ToolSchema(name) as Record<string, unknown> | undefined) ??
+        (trackingAuditToolSchema(name) as
+          Record<string, unknown> | undefined) ??
         (name === "preview_change_campaign_budget"
           ? {
               oneOf: [
@@ -656,6 +663,20 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (
+      (GOOGLE_TRACKING_AUDIT_TOOLS as readonly string[]).includes(name) &&
+      args.provider === "GOOGLE_ADS"
+    ) {
+      const { action, options } = trackingAuditToolArguments(name, args);
+      const account = await this.account(principal, args);
+      return this.providers.googleTrackingAudit(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        action,
+        options,
+      );
+    }
     if (
       args.provider === "GOOGLE_ADS" &&
       (GOOGLE_WRITE_GENERIC_TOOLS as readonly string[]).includes(name)

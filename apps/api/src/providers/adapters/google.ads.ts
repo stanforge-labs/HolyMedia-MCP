@@ -15,6 +15,10 @@ import {
 } from "../google-ads-stage3.js";
 import { buildStage4Plan } from "../google-ads-stage4.js";
 import {
+  getGoogleTrackingSpecs,
+  auditGoogleLinksAndUtms,
+} from "../google-ads-tracking-audit.js";
+import {
   assertStage2Gate,
   assertStage2Plan,
   buildStage2Plan,
@@ -677,6 +681,16 @@ export class GoogleAdsAdapter
       intent,
       this.stage1Reader(context),
     );
+  }
+  public async trackingAudit(
+    context: ProviderReadContext,
+    action: "specs" | "audit",
+    options: unknown,
+  ) {
+    const read = this.stage1Reader(context);
+    return action === "specs"
+      ? getGoogleTrackingSpecs(context.accountId, options, read)
+      : auditGoogleLinksAndUtms(context.accountId, options, read);
   }
   public async stage2(
     context: ProviderReadContext,

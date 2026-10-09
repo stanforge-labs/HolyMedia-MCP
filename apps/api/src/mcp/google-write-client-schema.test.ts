@@ -13,6 +13,13 @@ type Row = Record<string, unknown>;
 const account = { provider: "GOOGLE_ADS", account_id: "8590146099" };
 const campaign = { ...account, campaign_id: "24324170853" };
 const samples: Record<string, Row> = {
+  get_tracking_specs: { ...account, campaign_ids: ["24324170853"], limit: 10 },
+  audit_links_and_utms: {
+    ...account,
+    campaign_ids: ["24324170853"],
+    ad_group_ids: ["206587491811"],
+    limit: 20,
+  },
   list_accounts: { provider: "GOOGLE_ADS" },
   get_provider_capabilities: { provider: "GOOGLE_ADS" },
   list_campaigns: {
@@ -171,6 +178,12 @@ describe("Google-only closed client profile: actual registry, no provider calls"
     },
   );
   it.each([
+    ["get_tracking_specs", { ...account, limit: 1.5 }, "arguments.limit"],
+    [
+      "audit_links_and_utms",
+      { ...account, campaign_ids: ["1", "1"] },
+      "arguments.campaign_ids",
+    ],
     ["list_campaigns", { ...account, limit: 501 }, "arguments.limit"],
     ["list_campaigns", { ...account, limit: 1.1 }, "arguments.limit"],
     ["list_campaigns", { ...account, limit: 0 }, "arguments.limit"],

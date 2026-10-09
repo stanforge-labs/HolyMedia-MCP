@@ -30,6 +30,11 @@ import {
   stage4ToolSchema,
 } from "./mcp-google-stage4-schema.js";
 import { keywordStatusToolSchema } from "./mcp-google-keyword-schema.js";
+import {
+  GOOGLE_TRACKING_AUDIT_TOOLS,
+  trackingAuditToolSchema,
+  trackingAuditToolArguments,
+} from "./mcp-google-tracking-audit-schema.js";
 import { GoogleAdsWriteError } from "../providers/google-ads-write.js";
 import { parseStage4Intent } from "../providers/google-ads-stage4.js";
 import { normalizeBrief } from "../providers/google-ads-stage0.js";
@@ -42,6 +47,7 @@ export const GOOGLE_WRITE_GENERIC_TOOLS = [
 ] as const;
 
 const readTools = [
+  ...GOOGLE_TRACKING_AUDIT_TOOLS,
   "list_accounts",
   "list_campaigns",
   "get_campaign",
@@ -511,6 +517,7 @@ export function googleWriteProfileInputSchema(
   const name = typeof tool === "string" ? tool : tool.name;
   if (!GOOGLE_WRITE_PROFILE_TOOLS.includes(name)) return undefined;
   let schema: ClientSchema | undefined = googleClientReadSchema(name);
+  schema ??= trackingAuditToolSchema(name) as ClientSchema | undefined;
   if (name === "commit_preview")
     schema = clientObject(
       {
@@ -543,6 +550,11 @@ export function googleWriteProfileInputSchema(
     ? structuredClone(schema)
     : googleOnlySchema(schema);
   const properties = result.properties as Record<string, ClientSchema>;
+  if ((GOOGLE_TRACKING_AUDIT_TOOLS as readonly string[]).includes(name)) {
+    properties.limit = { ...properties.limit, type: "integer" };
+    for (const field of ["campaign_ids", "ad_group_ids"])
+      properties[field] = { ...properties[field], uniqueItems: true };
+  }
   if (properties?.account_id)
     properties.account_id = structuredClone(clientAccount);
   if (properties?.provider)
@@ -773,6 +785,8 @@ export function validateGoogleWriteProfileArguments(
   const issue = schemaIssue(args, schema, "arguments");
   if (issue) reject(issue.path, issue.reason);
   const row = args as Record<string, unknown>;
+  if ((GOOGLE_TRACKING_AUDIT_TOOLS as readonly string[]).includes(name))
+    trackingAuditToolArguments(name, row);
   const ownedResources = (value: unknown, path: string, depth = 0): void => {
     if (depth > 40) reject(path, "Превышена допустимая вложенность.");
     if (
