@@ -16,6 +16,7 @@ import { loadConfig, type AppConfig } from "@holymedia/config";
 import { AuditService } from "../audit/audit.service.js";
 import type { Stage1Plan, Stage1MutationResult } from "./google-ads-stage1.js";
 import type { GoogleAdsAdapter } from "./adapters/google.ads.js";
+import type { GoogleTrackingAuditReadAdapter } from "./google-ads-tracking-audit.js";
 import { SessionService } from "../auth/session.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { BillingService } from "../billing/billing.service.js";
@@ -1265,6 +1266,27 @@ export class ProviderService {
       );
     const adapter = ctx.adapter as unknown as GoogleAdsAdapter;
     return adapter.stage0(ctx.read, action, input, results);
+  }
+  public async googleTrackingAudit(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action: "specs" | "audit",
+    options: unknown,
+  ) {
+    const ctx = await this.readContext(workspaceId, connectionId, accountId);
+    if (ctx.account.provider !== "GOOGLE_ADS")
+      throw new ProviderError(
+        "invalid_account",
+        "Tracking audit требует Google Ads аккаунт.",
+      );
+    const adapter = ctx.adapter as unknown as GoogleTrackingAuditReadAdapter;
+    if (typeof adapter.trackingAudit !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Google tracking READ adapter недоступен.",
+      );
+    return adapter.trackingAudit(ctx.read, action, options);
   }
   public async readGoogleKeywordStates(
     workspaceId: string,
