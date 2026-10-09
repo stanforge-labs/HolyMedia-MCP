@@ -355,6 +355,33 @@ export async function runLivePreview() {
     stage = "fixture_before";
     const before = await snapshot();
     assertFixture(before);
+    stage = "I_read_only_catalog_eligibility";
+    const eligibleAudiences = await read(queries.eligibleAudiences);
+    if (
+      eligibleAudiences.some(
+        (r) =>
+          !["IN_MARKET", "AFFINITY"].includes(r.userInterest?.taxonomyType) ||
+          r.userInterest?.launchedToAll !== true ||
+          !new RegExp(
+            `^customers/${target.customer}/userInterests/[0-9]+$`,
+          ).test(r.userInterest?.resourceName ?? ""),
+      )
+    )
+      fail("stage234_audience_catalog_owner_or_taxonomy_invalid");
+    save("acceptance-I-catalog-readiness.json", {
+      acceptance_test: "I",
+      status: eligibleAudiences.length
+        ? "CATALOG_CANDIDATES_LIVE_ACCEPTANCE_PENDING"
+        : "BLOCKED_NO_ELIGIBLE_CATALOG",
+      test_customer_id: target.customer,
+      candidate_count: eligibleAudiences.length,
+      candidates: eligibleAudiences.map((r) => r.userInterest),
+      note: "Read-only catalog proof is not criterion eligibility or add/remove LIVE PASS; validate_only and human approval remain required.",
+      provider_read_call_count: 1,
+      validate_only_call_count: 0,
+      real_provider_write_call_count: 0,
+      timestamp: new Date().toISOString(),
+    });
     save("proof.json", {
       customer_id: target.customer,
       mcc_id: target.mcc,
