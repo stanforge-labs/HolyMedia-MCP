@@ -12,7 +12,7 @@
   "N": {
     "approval": "PERSISTED_VALID_AT_PREFLIGHT",
     "commit": "NOT_SENT_API_READINESS_TIMEOUT",
-    "verification": "FRESH_READ_ORIGINAL_CPC100000_AND_UNCHANGED_FIXTURE",
+    "verification": "READ_UNCHANGED_CPC100000",
     "rollback": "NOT_CREATED_NOT_NEEDED_NO_MUTATION",
     "live": "BLOCKED",
     "recovery_fix": "Bounded45s health-only wait, no child/provider/MCP retries, exact approval recheck after ready and immutable helper manifest.",
@@ -51,7 +51,7 @@
   },
   "PMax": {
     "code_mock": "PASS_SUPPORTED_NON_RETAIL",
-    "live": "BLOCKED_REAL_MEDIA_AND_GOAL_PREREQUISITES",
+    "live": "BLOCKED_MEDIA_GOAL",
     "goals_proven": 0,
     "eligible_images_proven": 0,
     "bounded_sample_only": true,
