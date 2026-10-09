@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
 import { timestampMillis } from "./timestamp.mjs";
+import { assertScopedIPreviewKey } from "./audience-preview-runner.mjs";
 import {
   assertApprovedI,
   validateCommitRequest,
@@ -182,8 +183,13 @@ test("I Prisma Date retains 677ms, exact ISO binding and subsecond audit orderin
   f.stored.confirmedAt = new Date(at - 500 + 177);
   f.approval.createdAt = new Date(at - 500 + 178);
   assertApprovedI(f, id, at);
+  assertScopedIPreviewKey(f, at);
   f.context.expires_at = "2026-10-10T12:51:17.678Z";
   assert.throws(() => assertApprovedI(f, id, at), /account_owner_invalid/);
+  assert.throws(
+    () => assertScopedIPreviewKey(f, at),
+    /owned_account_or_scoped_key_invalid/,
+  );
   f.context.expires_at = expiry;
   f.approval.createdAt = new Date(at - 500 + 176);
   assert.throws(() => assertApprovedI(f, id, at), /session_audit_invalid/);
@@ -207,6 +213,7 @@ test("I precise expiry boundaries reject exactly expired Date or ISO without tol
     if (kind === "session") f.session.expiresAt = new Date(at);
     if (kind === "preview") f.stored.expiresAt = new Date(at);
     assert.throws(() => assertApprovedI(f, id, at));
+    if (kind === "key") assert.throws(() => assertScopedIPreviewKey(f, at));
     if (kind === "key") {
       f.key.expiresAt = new Date(at + 1);
       f.context.expires_at = f.key.expiresAt.toISOString();
@@ -214,6 +221,7 @@ test("I precise expiry boundaries reject exactly expired Date or ISO without tol
     if (kind === "session") f.session.expiresAt = new Date(at + 1);
     if (kind === "preview") f.stored.expiresAt = new Date(at + 1);
     assertApprovedI(f, id, at);
+    assertScopedIPreviewKey(f, at);
   }
 });
 test("I timestamps reject invalid, missing, numeric and rollover dates", () => {
@@ -245,6 +253,22 @@ test("I timestamps reject invalid, missing, numeric and rollover dates", () => {
     ),
   );
   assert.ok(!previewSource.includes("Date.parse(key.expiresAt)"));
+  assert.ok(
+    previewSource.includes(
+      "assertScopedIPreviewKey({ context, key, account });",
+    ),
+  );
+  for (const value of [
+    null,
+    undefined,
+    1791636677677,
+    "invalid",
+    new Date(Number.NaN),
+  ]) {
+    const f = fixture();
+    f.key.expiresAt = value;
+    assert.throws(() => assertScopedIPreviewKey(f, now));
+  }
 });
 test("I identity, finite expiry, exact scopes, session, audit, immutable and freshness fail closed", () => {
   const edits = [

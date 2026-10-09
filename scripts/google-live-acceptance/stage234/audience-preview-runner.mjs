@@ -31,6 +31,33 @@ const fetch = (...args) => globalThis.fetch(...args);
 const fail = (code) => {
   throw new Error(code);
 };
+export function assertScopedIPreviewKey(
+  { context, key, account },
+  now = Date.now(),
+) {
+  if (
+    !account ||
+    account.provider !== "GOOGLE_ADS" ||
+    account.externalAccountId !== target.customer ||
+    !account.enabled ||
+    !key ||
+    context?.key_id !== key.id ||
+    key.revokedAt ||
+    !key.serviceIdentity ||
+    key.serviceIdentity.revokedAt ||
+    !Number.isFinite(timestampMillis(key.expiresAt)) ||
+    timestampMillis(key.expiresAt) !== timestampMillis(context.expires_at) ||
+    timestampMillis(key.expiresAt) <= now ||
+    timestampMillis(key.expiresAt) > now + 24 * 60 * 60 * 1000 ||
+    key.serviceIdentity.workspaceId !== account.workspaceId ||
+    key.resourceAccessMode !== "STATIC_ALLOWLIST" ||
+    canonical(key.accountIds) !== canonical([account.id]) ||
+    !Array.isArray(key.scopes) ||
+    canonical([...key.scopes].sort()) !==
+      canonical(["adforge:mcp:read", "adforge:mcp:write"])
+  )
+    fail("stage234_owned_account_or_scoped_key_invalid");
+}
 export async function runIPreview() {
   await installIGuard();
   const env = process.env,
@@ -91,27 +118,7 @@ export async function runIPreview() {
       where: { tokenDigest: digest(context.service_token ?? "") },
       include: { serviceIdentity: true },
     });
-    if (
-      !account ||
-      account.provider !== "GOOGLE_ADS" ||
-      account.externalAccountId !== target.customer ||
-      !account.enabled ||
-      !key ||
-      context.key_id !== key.id ||
-      key.revokedAt ||
-      key.serviceIdentity?.revokedAt ||
-      !Number.isFinite(timestampMillis(key.expiresAt)) ||
-      timestampMillis(key.expiresAt) !== timestampMillis(context.expires_at) ||
-      timestampMillis(key.expiresAt) <= Date.now() ||
-      timestampMillis(key.expiresAt) > Date.now() + 24 * 60 * 60 * 1000 ||
-      key.serviceIdentity.workspaceId !== account.workspaceId ||
-      key.resourceAccessMode !== "STATIC_ALLOWLIST" ||
-      canonical(key.accountIds) !== canonical([account.id]) ||
-      !Array.isArray(key.scopes) ||
-      canonical([...key.scopes].sort()) !==
-        canonical(["adforge:mcp:read", "adforge:mcp:write"])
-    )
-      fail("stage234_owned_account_or_scoped_key_invalid");
+    assertScopedIPreviewKey({ context, key, account });
     const enabled = await db.client.providerAccount.findMany({
       where: {
         workspaceId: account.workspaceId,
