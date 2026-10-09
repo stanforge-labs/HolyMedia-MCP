@@ -20,6 +20,7 @@ export type ExtendedKind =
   | "ads"
   | "campaigns"
   | "adGroups"
+  | "adGroupBidModifiers"
   | "adGroupCriteria"
   | "campaignCriteria"
   | "adGroupAds"
@@ -31,7 +32,10 @@ export type ExtendedKind =
   | "biddingStrategies"
   | "assetGroups"
   | "assetGroupAssets"
-  | "assetGroupSignals";
+  | "assetGroupSignals"
+  | "campaignConversionGoals"
+  | "customConversionGoals"
+  | "conversionGoalCampaignConfigs";
 export type ExtendedOperation = {
   kind: ExtendedKind;
   method: "create" | "update" | "remove";
@@ -206,6 +210,7 @@ const kinds: ExtendedKind[] = [
   "ads",
   "campaigns",
   "adGroups",
+  "adGroupBidModifiers",
   "adGroupCriteria",
   "campaignCriteria",
   "adGroupAds",
@@ -218,6 +223,9 @@ const kinds: ExtendedKind[] = [
   "assetGroups",
   "assetGroupAssets",
   "assetGroupSignals",
+  "campaignConversionGoals",
+  "customConversionGoals",
+  "conversionGoalCampaignConfigs",
 ];
 export function assertExtendedPlan(plan: ExtendedPlan, account: string) {
   if (
@@ -249,7 +257,27 @@ export function assertExtendedPlan(plan: ExtendedPlan, account: string) {
         "Неподдерживаемая операция immutable plan.",
       );
     if (o.resource_name) {
-      extOwner(o.resource_name, plan.account_id, o.kind, o.method === "create");
+      const derivedNewCampaignGoal =
+        plan.atomic &&
+        o.method === "update" &&
+        ["campaignConversionGoals", "conversionGoalCampaignConfigs"].includes(
+          o.kind,
+        ) &&
+        typeof o.expected.campaign === "string" &&
+        plan.operations.some(
+          (candidate) =>
+            candidate.kind === "campaigns" &&
+            candidate.method === "create" &&
+            candidate.resource_name === o.expected.campaign &&
+            candidate.resource_name ===
+              `customers/${plan.account_id}/campaigns/${o.resource_name!.split("/").at(-1)!.split("~")[0]}`,
+        );
+      extOwner(
+        o.resource_name,
+        plan.account_id,
+        o.kind,
+        o.method === "create" || derivedNewCampaignGoal,
+      );
       if (seen.has(o.resource_name))
         extFail(
           "google_extended_duplicate",
@@ -337,6 +365,7 @@ export function extendedProviderOperation(o: ExtendedOperation) {
     ads: "ad",
     campaigns: "campaign",
     adGroups: "adGroup",
+    adGroupBidModifiers: "adGroupBidModifier",
     adGroupCriteria: "adGroupCriterion",
     campaignCriteria: "campaignCriterion",
     adGroupAds: "adGroupAd",
@@ -349,6 +378,9 @@ export function extendedProviderOperation(o: ExtendedOperation) {
     assetGroups: "assetGroup",
     assetGroupAssets: "assetGroupAsset",
     assetGroupSignals: "assetGroupSignal",
+    campaignConversionGoals: "campaignConversionGoal",
+    customConversionGoals: "customConversionGoal",
+    conversionGoalCampaignConfigs: "conversionGoalCampaignConfig",
   };
   return {
     [`${singular[o.kind]}Operation`]:
@@ -629,6 +661,41 @@ export async function verifyExtendedMutation(
           enhancedCpcEnabled:
             extRow(comparisonEntity.manualCpc).enhancedCpcEnabled ?? false,
         };
+      // A cleared optional bidding limit is an explicit zero in the exact plan,
+      // but protobuf JSON may omit it. Require independently selected scheme type.
+      const actualStrategyType =
+        comparisonEntity?.biddingStrategyType ?? comparisonEntity?.type;
+      const expectedStrategyType =
+        expected.biddingStrategyType ?? expected.type;
+      const optionalLimitPaths: Record<string, [string, string[]]> = {
+        TARGET_SPEND: ["targetSpend", ["cpcBidCeilingMicros"]],
+        MAXIMIZE_CONVERSIONS: [
+          "maximizeConversions",
+          ["targetCpaMicros", "cpcBidFloorMicros", "cpcBidCeilingMicros"],
+        ],
+        TARGET_CPA: ["targetCpa", ["cpcBidFloorMicros", "cpcBidCeilingMicros"]],
+        TARGET_ROAS: [
+          "targetRoas",
+          ["cpcBidFloorMicros", "cpcBidCeilingMicros"],
+        ],
+      };
+      const clearProfile = optionalLimitPaths[String(actualStrategyType)];
+      if (
+        comparisonEntity &&
+        actualStrategyType === expectedStrategyType &&
+        clearProfile
+      ) {
+        const [scheme, fields] = clearProfile;
+        for (const field of fields)
+          if (
+            extRow(expected[scheme])[field] === "0" &&
+            extRow(comparisonEntity[scheme])[field] === undefined
+          )
+            comparisonEntity[scheme] = {
+              ...extRow(comparisonEntity[scheme]),
+              [field]: "0",
+            };
+      }
       if (
         comparisonEntity &&
         expected.biddingStrategy === "" &&
