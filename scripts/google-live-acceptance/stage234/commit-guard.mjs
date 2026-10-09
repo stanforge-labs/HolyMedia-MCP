@@ -325,6 +325,18 @@ export function installCommitGuard({
   const root = env.STAGE234_RUN_DIR;
   if (!/^\/acceptance-state\/stage234-[A-Za-z0-9_-]+$/.test(root ?? ""))
     fail("stage234_commit_directory_invalid");
+  const identity = canonical({
+    root,
+    source: env.STAGE234_SOURCE_HEAD,
+    harness: env.STAGE234_HARNESS_HEAD,
+    image: env.STAGE234_IMAGE_DIGEST,
+  });
+  if (globalThis.__holyMediaNCommitGuard) {
+    if (globalThis.__holyMediaNCommitGuard !== identity)
+      fail("stage234_commit_guard_identity_changed");
+    return;
+  }
+  globalThis.__holyMediaNCommitGuard = identity;
   globalThis.fetch = async (input, init = {}) => {
     const context = protectedJson(join(root, "protected-preview-context.json"));
     let authority, proof;
