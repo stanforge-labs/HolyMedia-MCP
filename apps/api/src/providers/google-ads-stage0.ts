@@ -53,6 +53,10 @@ export type Stage0Plan = {
   operations: Stage0Operation[];
   items: Stage1Plan["items"];
   summary: JsonRow;
+  provider_managed_defaults?: {
+    kind: "campaign_default_devices";
+    campaign_resource: string;
+  }[];
 };
 export type GoogleWritePlan =
   Stage0Plan | Stage1Plan | Stage2Plan | ExtendedPlan;
@@ -87,7 +91,7 @@ const resources = {
     "campaign_criterion",
     "campaignCriterion",
     "campaignCriteria",
-    "campaign_criterion.resource_name, campaign_criterion.type, campaign_criterion.campaign, campaign_criterion.negative, campaign_criterion.keyword.text, campaign_criterion.keyword.match_type, campaign_criterion.location.geo_target_constant, campaign_criterion.proximity.geo_point.latitude_in_micro_degrees, campaign_criterion.proximity.geo_point.longitude_in_micro_degrees, campaign_criterion.proximity.radius, campaign_criterion.proximity.radius_units, campaign_criterion.language.language_constant, campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute, campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute",
+    "campaign_criterion.resource_name, campaign_criterion.criterion_id, campaign_criterion.type, campaign_criterion.campaign, campaign_criterion.negative, campaign_criterion.device.type, campaign_criterion.bid_modifier, campaign_criterion.keyword.text, campaign_criterion.keyword.match_type, campaign_criterion.location.geo_target_constant, campaign_criterion.proximity.geo_point.latitude_in_micro_degrees, campaign_criterion.proximity.geo_point.longitude_in_micro_degrees, campaign_criterion.proximity.radius, campaign_criterion.proximity.radius_units, campaign_criterion.language.language_constant, campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute, campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute",
   ],
   adGroup: [
     "ad_group",
@@ -1360,16 +1364,65 @@ export async function verifyStage0Mutation(
       success: verified,
     });
   }
+  const postconditions: JsonRow[] = [];
+  for (const condition of plan.provider_managed_defaults ?? []) {
+    const resource = String(
+      replaceTemps(condition.campaign_resource, references),
+    );
+    let rows: JsonRow[] = [],
+      verified: boolean;
+    try {
+      if (
+        condition.kind !== "campaign_default_devices" ||
+        !new RegExp(
+          `^customers/${plan.account_id}/campaigns/[1-9][0-9]*$`,
+        ).test(resource) ||
+        !plan.operations.some(
+          (op, index) =>
+            op.kind === "campaign" &&
+            op.method === "create" &&
+            op.resource_name === condition.campaign_resource &&
+            results[index]?.success &&
+            results[index]?.resource_name === resource,
+        )
+      )
+        throw new Error("Invalid provider-managed campaign binding");
+      rows = (await read(defaultDevicesQuery(resource))).map((r) =>
+        row(r.campaignCriterion),
+      );
+      verified = defaultDevicesMatch(rows, resource);
+    } catch {
+      verified = false;
+    }
+    postconditions.push({
+      kind: condition.kind,
+      campaign_resource: resource,
+      expected_devices: defaultDeviceKinds,
+      actual: rows,
+      success: verified,
+      error: verified
+        ? null
+        : googleWriteFailure(
+            "OUTCOME_UNCERTAIN",
+            "Provider-managed DEVICE defaults не подтверждены полным target reread.",
+          ),
+    });
+  }
   return {
     items,
     actual,
-    status: items.every((i) => i.success)
-      ? "VERIFIED"
-      : results.every(
-            (r) => !r.success && r.error?.google_code !== "OUTCOME_UNCERTAIN",
-          )
-        ? "FAILED"
-        : "UNVERIFIED",
+    ...(postconditions.length
+      ? { provider_managed_defaults: postconditions }
+      : {}),
+    status:
+      items.every((i) => i.success) &&
+      postconditions.every((c) => c.success === true)
+        ? "VERIFIED"
+        : results.every(
+              (r) => !r.success && r.error?.google_code !== "OUTCOME_UNCERTAIN",
+            )
+          ? "FAILED"
+          : "UNVERIFIED",
   };
 }
 export type LandingProbe = (
@@ -1814,6 +1867,49 @@ export async function buildResumePlan(
   };
 }
 /** Clone is deliberately fail-closed outside the explicitly supported Search surface. */
+const defaultDeviceKinds = {
+  "30000": "DESKTOP",
+  "30001": "MOBILE",
+  "30002": "TABLET",
+} as const;
+const neutralModifier = (value: unknown) => value === undefined || value === 1;
+const defaultDevicesQuery = (campaign: string) =>
+  `SELECT campaign_criterion.resource_name, campaign_criterion.criterion_id, campaign_criterion.campaign, campaign_criterion.type, campaign_criterion.status, campaign_criterion.negative, campaign_criterion.device.type, campaign_criterion.bid_modifier FROM campaign_criterion WHERE campaign_criterion.campaign = ${quote(campaign)} AND campaign_criterion.type = DEVICE AND campaign_criterion.status != REMOVED`;
+function defaultDevicesMatch(rows: JsonRow[], campaign: string): boolean {
+  const prefix = campaign.replace("/campaigns/", "/campaignCriteria/");
+  return (
+    rows.length === 3 &&
+    Object.entries(defaultDeviceKinds).every(([id, type]) => {
+      const matches = rows.filter((r) => r.resourceName === `${prefix}~${id}`);
+      return (
+        matches.length === 1 &&
+        matches[0]!.campaign === campaign &&
+        String(matches[0]!.criterionId) === id &&
+        matches[0]!.type === "DEVICE" &&
+        matches[0]!.status === "ENABLED" &&
+        (matches[0]!.negative === undefined ||
+          matches[0]!.negative === false) &&
+        row(matches[0]!.device).type === type &&
+        neutralModifier(matches[0]!.bidModifier) &&
+        [
+          "keyword",
+          "location",
+          "proximity",
+          "language",
+          "adSchedule",
+          "ageRange",
+          "gender",
+          "incomeRange",
+          "parentalStatus",
+          "userList",
+          "userInterest",
+          "customAudience",
+          "extendedDemographic",
+        ].every((field) => Object.keys(row(matches[0]![field])).length === 0)
+      );
+    })
+  );
+}
 export async function buildClonePlan(
   account: string,
   input: unknown,
@@ -2008,6 +2104,9 @@ export async function buildClonePlan(
     languages: string[] = [],
     schedule: JsonRow[] = [],
     negatives: JsonRow[] = [];
+  const devices = criteria.filter(
+    (c) => c.type === "DEVICE" || Object.keys(row(c.device)).length > 0,
+  );
   for (const c of criteria) {
     owned(c.resourceName, "campaignCriteria");
     if (
@@ -2018,6 +2117,12 @@ export async function buildClonePlan(
       error(
         "google_clone_reference_invalid",
         "Source campaign criterion parent/status не подтверждён.",
+      );
+    if (c.type === "DEVICE") continue;
+    if (!neutralModifier(c.bidModifier))
+      error(
+        "google_clone_unsupported_components",
+        "Source criterion bid modifier не neutral: typed clone не переносит custom geo/schedule adjustments молча.",
       );
     if (row(c.location).geoTargetConstant) {
       const resource = String(row(c.location).geoTargetConstant);
@@ -2117,6 +2222,11 @@ export async function buildClonePlan(
         "Source содержит неподдерживаемый criterion (audience/device и т.п.). Ничего не опущено молча.",
       );
   }
+  if (!defaultDevicesMatch(devices, String(campaign.resourceName)))
+    error(
+      "google_clone_device_defaults_unproven",
+      "Clone требует ровно три owned positive ENABLED default devices DESKTOP/MOBILE/TABLET без custom bid adjustment; missing/override не опускаются.",
+    );
   if (proximities.length && raw.new_locations)
     error(
       "google_clone_geo_override_requires_radius",
@@ -2141,6 +2251,28 @@ export async function buildClonePlan(
       error(
         "google_clone_unsupported_components",
         "Неподдерживаемый тип source ad group.",
+      );
+    const groupModifiers = await q(
+      `SELECT ad_group_bid_modifier.resource_name, ad_group_bid_modifier.ad_group, ad_group_bid_modifier.device.type, ad_group_bid_modifier.bid_modifier, ad_group_bid_modifier.bid_modifier_source FROM ad_group_bid_modifier WHERE ad_group_bid_modifier.ad_group = ${quote(String(g.resourceName))}`,
+    );
+    for (const record of groupModifiers) {
+      const modifier = row(record.adGroupBidModifier);
+      owned(modifier.resourceName, "adGroupBidModifiers");
+      if (
+        modifier.adGroup !== g.resourceName ||
+        !String(modifier.resourceName).startsWith(
+          `${prefix}/adGroupBidModifiers/${g.id}~`,
+        )
+      )
+        error(
+          "google_clone_reference_invalid",
+          "Source ad-group bid modifier owner/parent не подтверждён.",
+        );
+    }
+    if (groupModifiers.length)
+      error(
+        "google_clone_unsupported_components",
+        "Source ad-group bid modifiers не поддерживаются clone profile; inherited/custom adjustments не опущены.",
       );
     const keys = await fetchKind(
         "adGroupCriterion",
@@ -2455,6 +2587,23 @@ export async function buildClonePlan(
       "Clone builder не вернул единственную новую PAUSED campaign выбранного account.",
     );
   const targetResource = targetCampaign!.resource_name!;
+  plan.provider_managed_defaults = [
+    { kind: "campaign_default_devices", campaign_resource: targetResource },
+  ];
+  plan.summary.provider_managed_default_devices = {
+    expected: defaultDeviceKinds,
+    bid_modifier: 1,
+    source: "provider-generated neutral devices",
+    target_verification_required: true,
+    provider_operations: 0,
+  };
+  plan.items
+    .find((i) =>
+      i.provider_operations.includes(plan.operations.indexOf(targetCampaign!)),
+    )
+    ?.warnings.push(
+      "DEVICE defaults DESKTOP/MOBILE/TABLET provider-managed: отсутствующий modifier означает neutral 1; device mutations не отправляются. Полный target inventory должен подтвердиться reread.",
+    );
   const append = (
     kind: "campaignSharedSet" | "campaignAsset",
     fields: JsonRow,

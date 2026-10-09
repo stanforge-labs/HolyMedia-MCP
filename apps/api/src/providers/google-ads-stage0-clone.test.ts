@@ -110,6 +110,20 @@ function fixture() {
       language: { languageConstant: "languageConstants/1031" },
     },
   ];
+  for (const [id, type] of Object.entries({
+    "30000": "DESKTOP",
+    "30001": "MOBILE",
+    "30002": "TABLET",
+  }))
+    criteria.push({
+      resourceName: `${prefix}/campaignCriteria/1~${id}`,
+      criterionId: id,
+      campaign: campaign.resourceName,
+      type: "DEVICE",
+      status: "ENABLED",
+      negative: false,
+      device: { type },
+    });
   const lists: JsonRow[] = [],
     links: JsonRow[] = [],
     members: JsonRow[] = [],
@@ -324,11 +338,36 @@ function mockCreated(plan: Stage0Plan) {
     actual.set(name, { [op.kind]: entity });
     return { success: true, resource_name: name, error: null };
   });
+  const campaignResult =
+    results[plan.operations.findIndex((op) => op.kind === "campaign")]
+      ?.resource_name;
+  if (campaignResult)
+    for (const [id, type] of Object.entries({
+      "30000": "DESKTOP",
+      "30001": "MOBILE",
+      "30002": "TABLET",
+    })) {
+      const resourceName = `${campaignResult.replace("/campaigns/", "/campaignCriteria/")}~${id}`;
+      actual.set(resourceName, {
+        campaignCriterion: {
+          resourceName,
+          criterionId: id,
+          campaign: campaignResult,
+          type: "DEVICE",
+          status: "ENABLED",
+          negative: false,
+          device: { type },
+        },
+      });
+    }
   const read = async (q: string) =>
     [...actual.values()].filter((v) =>
-      q.includes(
-        `'${Object.values(v)[0] && row(Object.values(v)[0]).resourceName}'`,
-      ),
+      q.includes("FROM campaign_criterion") && q.includes("type = DEVICE")
+        ? row(v.campaignCriterion).type === "DEVICE" &&
+          q.includes(`'${row(v.campaignCriterion).campaign}'`)
+        : q.includes(
+            `'${Object.values(v)[0] && row(Object.values(v)[0]).resourceName}'`,
+          ),
     );
   return { results, actual, read };
 }
@@ -624,4 +663,192 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
       expect(f.build).not.toHaveBeenCalled();
     }
   });
+  it("default devices are explicit immutable postconditions and cause no device mutations", async () => {
+    const f = fixture(),
+      p = await f.clone();
+    expect(p.provider_managed_defaults).toEqual([
+      {
+        kind: "campaign_default_devices",
+        campaign_resource: p.operations.find((o) => o.kind === "campaign")!
+          .resource_name,
+      },
+    ]);
+    expect(
+      p.operations.some(
+        (o) => o.fields.device || o.fields.bidModifier !== undefined,
+      ),
+    ).toBe(false);
+    expect(
+      p.checks.some(
+        (c) =>
+          c.query.includes("campaign_criterion.device.type") &&
+          c.query.includes("campaign_criterion.bid_modifier"),
+      ),
+    ).toBe(true);
+    const source = f.criteria.find((c) => c.type === "DEVICE")!;
+    source.bidModifier = 1.2;
+    expect(canonical(await rereadStage0Checks(p, f.read))).not.toBe(
+      canonical(p.checks),
+    );
+  });
+  it.each([
+    "zero",
+    "custom",
+    "null",
+    "string",
+    "missing",
+    "none",
+    "duplicate",
+    "foreign",
+    "wrong_type",
+    "paused",
+    "negative",
+    "id",
+    "extra",
+  ])("source device %s fails closed before typed create", async (failure) => {
+    const f = fixture(),
+      d = f.criteria.find((c) => c.type === "DEVICE")!;
+    if (failure === "zero") d.bidModifier = 0;
+    if (failure === "custom") d.bidModifier = 1.2;
+    if (failure === "null") d.bidModifier = null;
+    if (failure === "string") d.bidModifier = "1";
+    if (failure === "missing") f.criteria.splice(f.criteria.indexOf(d), 1);
+    if (failure === "none") f.criteria.splice(2);
+    if (failure === "duplicate") f.criteria.push(structuredClone(d));
+    if (failure === "foreign") d.campaign = "customers/1234567890/campaigns/1";
+    if (failure === "wrong_type") d.device = { type: "MOBILE" };
+    if (failure === "paused") d.status = "PAUSED";
+    if (failure === "negative") d.negative = true;
+    if (failure === "id") d.criterionId = "30001";
+    if (failure === "extra")
+      f.criteria.push({
+        ...d,
+        resourceName: `${prefix}/campaignCriteria/1~30004`,
+        criterionId: "30004",
+        device: { type: "CONNECTED_TV" },
+      });
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode:
+        failure === "foreign" || failure === "paused"
+          ? "google_clone_reference_invalid"
+          : "google_clone_device_defaults_unproven",
+    });
+    expect(f.build).not.toHaveBeenCalled();
+  });
+  it("explicit neutral source/target1 is safe but target missing/custom/read failure never verifies", async () => {
+    const f = fixture();
+    f.criteria
+      .filter((c) => c.type === "DEVICE")
+      .forEach((c) => (c.bidModifier = 1));
+    const p = await f.clone(),
+      created = mockCreated(p);
+    const deviceRows = [...created.actual.values()].filter(
+      (c) => row(c.campaignCriterion).type === "DEVICE",
+    );
+    deviceRows.forEach((c) => (row(c.campaignCriterion).bidModifier = 1));
+    expect(
+      (await verifyStage0Mutation(p, created.results, created.read)).status,
+    ).toBe("VERIFIED");
+    row(deviceRows[0]!.campaignCriterion).bidModifier = 0;
+    expect(
+      (await verifyStage0Mutation(p, created.results, created.read)).status,
+    ).toBe("UNVERIFIED");
+    row(deviceRows[0]!.campaignCriterion).bidModifier = 1;
+    created.actual.delete(
+      String(row(deviceRows[0]!.campaignCriterion).resourceName),
+    );
+    expect(
+      (await verifyStage0Mutation(p, created.results, created.read)).status,
+    ).toBe("UNVERIFIED");
+    const readFailure = (q: string) => {
+      if (q.includes("type = DEVICE")) throw new Error("mock unavailable");
+      return created.read(q);
+    };
+    expect(
+      (await verifyStage0Mutation(p, created.results, readFailure)).status,
+    ).toBe("UNVERIFIED");
+  });
+  it("non-neutral source geo and any ad-group bid modifiers are not silently dropped", async () => {
+    const f = fixture();
+    f.criteria[0]!.bidModifier = 1.2;
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode: "google_clone_unsupported_components",
+    });
+    f.criteria[0]!.bidModifier = 1;
+    const customRead = async (q: string) =>
+      q.includes("FROM ad_group_bid_modifier")
+        ? [
+            {
+              adGroupBidModifier: {
+                resourceName: `${prefix}/adGroupBidModifiers/2~30001`,
+                adGroup: f.group.resourceName,
+                device: { type: "MOBILE" },
+                bidModifier: 1.2,
+                bidModifierSource: "AD_GROUP",
+              },
+            },
+          ]
+        : f.read(q);
+    await expect(
+      buildClonePlan(account, f.input, customRead, f.build),
+    ).rejects.toMatchObject({
+      writeCode: "google_clone_unsupported_components",
+    });
+    expect(f.build).not.toHaveBeenCalled();
+  });
+  it.each([
+    "foreign",
+    "wrong_id",
+    "wrong_type",
+    "paused",
+    "negative",
+    "extra",
+    "duplicate",
+    "oneof",
+  ])(
+    "target device %s keeps all mutation results but blocks VERIFIED post-state",
+    async (failure) => {
+      const f = fixture(),
+        p = await f.clone(),
+        created = mockCreated(p);
+      const targetRead = async (q: string) => {
+        const rows = structuredClone(await created.read(q));
+        if (!q.includes("type = DEVICE")) return rows;
+        const first = row(rows[0]!.campaignCriterion);
+        if (failure === "foreign")
+          first.campaign = "customers/1234567890/campaigns/1";
+        if (failure === "wrong_id") first.criterionId = "30001";
+        if (failure === "wrong_type") first.device = { type: "MOBILE" };
+        if (failure === "paused") first.status = "PAUSED";
+        if (failure === "negative") first.negative = true;
+        if (failure === "extra")
+          rows.push({
+            campaignCriterion: {
+              ...first,
+              resourceName: String(first.resourceName).replace(
+                "~30000",
+                "~30004",
+              ),
+              criterionId: "30004",
+              device: { type: "CONNECTED_TV" },
+            },
+          });
+        if (failure === "duplicate") rows.push(structuredClone(rows[0]!));
+        if (failure === "oneof")
+          first.location = { geoTargetConstant: "geoTargetConstants/1" };
+        return rows;
+      };
+      const verified = await verifyStage0Mutation(
+        p,
+        created.results,
+        targetRead,
+      );
+      expect(verified.items.every((i) => i.success)).toBe(true);
+      expect(verified.status).toBe("UNVERIFIED");
+      expect(verified.provider_managed_defaults![0]).toMatchObject({
+        success: false,
+        error: { google_code: "OUTCOME_UNCERTAIN" },
+      });
+    },
+  );
 });

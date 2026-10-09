@@ -30,11 +30,17 @@ the preview explicitly warns about that shared impact.
 
 ## Explicit profile limits
 
-There is no silent omission of unsupported targeting or ads. Audience/device
+There is no silent omission of unsupported targeting or ads. Audience/custom device
 criteria, non-RSA ads, non-Search channels, custom goals and unsupported bidding
 parameters are rejected. Enhanced manual CPC and Maximize Conversions with a
 non-zero target CPA are outside this basic clone profile. These are local profile
 limits, not claims that Google API lacks those capabilities.
+
+The exact three provider-managed neutral Search devices are now supported through
+an explicit source proof and mandatory full target reread, with zero device
+mutations; see [default-device boundary](google-ads-clone-default-devices.md).
+Custom campaign/device/geo/schedule or ad-group adjustments are not silently
+normalized away.
 
 Negative radii and address-only proximity cannot be cloned by this coordinate
 profile. `new_locations` with existing radii is rejected: without an explicit
