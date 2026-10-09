@@ -570,6 +570,12 @@ export function buildTargetingReadinessEvidence({
     mcc_id: target.mcc,
     fixture_unchanged: unchanged,
     fixture_digest: digest(snapshot),
+    // Safe fixed-field projection for diagnosing a historical fixture baseline;
+    // never dump the adapter response or encrypted context into evidence.
+    fixture_campaign_criteria: criteria(
+      snapshot.campaignCriteria,
+      "campaignCriterion",
+    ),
     I,
     J,
     PMax,

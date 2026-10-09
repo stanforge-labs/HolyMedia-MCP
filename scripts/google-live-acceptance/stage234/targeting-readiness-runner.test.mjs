@@ -351,11 +351,13 @@ async function mockedRun({
   foreign = false,
   refresh = false,
   badDirectory = false,
+  campaignCriteria = [],
 } = {}) {
   const a = authority(),
     rows = fixtureRows(),
     saved = [],
     calls = [];
+  rows.campaignCriteria = campaignCriteria;
   let keywordReads = 0,
     vaultUpdates = 0;
   const oldFetch = globalThis.fetch;
@@ -470,6 +472,7 @@ test("READ runner emits one sanitized evidence, readiness blockers independent o
   assert.equal(r.result.real_writes, 0);
   assert.equal(r.saved.length, 1);
   assert.equal(r.saved[0].value.fixture_unchanged, true);
+  assert.deepEqual(r.saved[0].value.fixture_campaign_criteria, []);
   assert.equal(Object.keys(r.saved[0].value.inventory_read_errors).length, 3);
   assert.equal(r.result.I, "BLOCKED");
   assert.equal(r.result.J, "BLOCKED");
@@ -488,6 +491,27 @@ test("fresh customer proof prevents any inventory query; fixture drift blocks wi
   assert.equal(changed.result.result, "BLOCKED");
   assert.equal(changed.result.code, "readiness_fixture_changed_during_READs");
   assert.equal(changed.result.real_writes, 0);
+});
+test("targeting diagnostics select only safe criterion fields, never arbitrary response metadata", async () => {
+  const criterion = {
+    resourceName: `${prefix}/campaignCriteria/${target.campaign}~90001`,
+    campaign,
+    criterionId: "90001",
+    type: "LOCATION",
+    status: "ENABLED",
+    location: { geoTargetConstant: "geoTargetConstants/90002" },
+    unknownMetadata: "mock-hidden-marker",
+  };
+  const r = await mockedRun({
+    campaignCriteria: [{ campaignCriterion: criterion }],
+  });
+  assert.equal(r.result.result, "PASS_READ_ONLY");
+  const diagnostic = r.saved[0].value.fixture_campaign_criteria;
+  assert.equal(diagnostic.length, 1);
+  assert.equal(diagnostic[0].resourceName, criterion.resourceName);
+  assert.deepEqual(diagnostic[0].location, criterion.location);
+  assert.ok(!JSON.stringify(diagnostic).includes("mock-hidden-marker"));
+  assert.equal(r.result.real_writes, 0);
 });
 test("failed directory never writes evidence to an unverified path", async () => {
   const r = await mockedRun({ badDirectory: true });

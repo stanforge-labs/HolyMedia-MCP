@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "acceptance_phase": "FINAL_GH_IJ_KL_N_READ_ONLY_PREFLIGHT",
+  "result": "READ_ONLY_CONDITIONAL",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "product_fix_head": "71f2b732286e2c47a59284c20e0f006852d456f2",
+  "attempts": [
+    {
+      "kind": "stage234_targeting_readiness_fixed_READ_only",
+      "result": "BLOCKED",
+      "source_head": "86a073d3809a8842c21ef7f84d89c358a0200ab8",
+      "failure_stage": "fixture_before",
+      "error": {
+        "source": "GOOGLE_API",
+        "code": "provider_response_invalid",
+        "http_status": null,
+        "google_code": "INVALID_ARGUMENT",
+        "error_class": "ProviderError"
+      },
+      "counts": {
+        "read": 7,
+        "oauth_refresh": 1,
+        "failed_http": 1,
+        "validate_only": 0,
+        "write": 0
+      },
+      "provider_read_call_count": 7,
+      "validate_only_call_count": 0,
+      "real_provider_write_call_count": 0,
+      "approval_performed": false,
+      "committed": false,
+      "production_changed": false,
+      "main_changed": false,
+      "timestamp": "2026-10-09T13:22:25.272Z"
+    },
+    {
+      "kind": "stage234_targeting_readiness_fixed_READ_only",
+      "source_head": "86a073d3809a8842c21ef7f84d89c358a0200ab8",
+      "harness_head": "4d35aae5b09356f9f06bee6e6721d483c612221e",
+      "image_digest": "sha256:2edc1e9678bd9b192dd4e724417362200d038c1617bbfa76aa53b405c2fe85de",
+      "result": "PASS_READ_ONLY",
+      "test_customer_id": "8590146099",
+      "mcc_id": "4378327049",
+      "fixture_unchanged": true,
+      "fixture_digest": "4e71ccfa6913ab4f8deee5a2e0aa486c6ad30e2593408bdfdfaa08c4f992e97a",
+      "I": {
+        "acceptance_test": "I",
+        "real_provider_calls": 0,
+        "real_provider_writes": 0,
+        "production_changed": false,
+        "main_changed": false,
+        "result": "BLOCKED",
+        "blockers": [
+          {
+            "source": "HOLYMEDIA",
+            "code": "audience_eligibility_not_proven",
+            "field_path": "I.catalog",
+            "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+          }
+        ],
+        "catalog_observed_count": 101,
+        "catalog_coverage": "BOUNDED_SAMPLE_ONLY",
+        "absence_of_eligible_catalog_proven": false,
+        "catalog_results": {
+          "eligibleInterests": {
+            "result": "BLOCKED",
+            "observed_count": 101,
+            "blockers": [
+              {
+                "source": "HOLYMEDIA",
+                "code": "audience_eligibility_not_proven",
+                "field_path": "I.catalog",
+                "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+              }
+            ]
+          },
+          "userLists": {
+            "result": "BLOCKED",
+            "observed_count": 0,
+            "blockers": [
+              {
+                "source": "HOLYMEDIA",
+                "code": "audience_eligibility_not_proven",
+                "field_path": "I.catalog",
+                "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+              }
+            ]
+          },
+          "detailedDemographics": {
+            "result": "BLOCKED",
+            "observed_count": 34,
+            "blockers": [
+              {
+                "source": "HOLYMEDIA",
+                "code": "audience_eligibility_not_proven",
+                "field_path": "I.catalog",
+                "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+              }
+            ]
+          }
+        }
+      },
+      "J": {
+        "acceptance_test": "J",
+        "real_provider_calls": 0,
+        "real_provider_writes": 0,
+        "production_changed": false,
+        "main_changed": false,
+        "result": "BLOCKED",
+        "blockers": [
+          {
+            "source": "HOLYMEDIA",
+            "code": "scenario_district_parent_unproven",
+            "field_path": "J.district_candidates",
+            "message": "TEST proof/typed inventory отсутствуют или не прошли guard; preview/commit не выполнялись."
+          }
+        ]
+      },
+      "PMax": {
+        "acceptance_test": "PMAX_PREREQUISITES",
+        "real_provider_calls": 0,
+        "real_provider_writes": 0,
+        "production_changed": false,
+        "main_changed": false,
+        "result": "BLOCKED",
+        "source_head": "86a073d3809a8842c21ef7f84d89c358a0200ab8",
+        "blockers": [
+          {
+            "source": "HOLYMEDIA",
+            "code": "pmax_existing_enabled_goal_missing",
+            "field_path": "PMax.conversion_actions",
+            "message": "Нет доказанного existing same-account ENABLED conversion action. Новую цель/конверсию этот readiness-пакет не создаёт."
+          },
+          {
+            "source": "HOLYMEDIA",
+            "code": "pmax_existing_media_missing",
+            "field_path": "PMax.assets.MARKETING_IMAGE",
+            "message": "Не доказан usable existing MARKETING_IMAGE; media/brand assets не генерируются и не загружаются автоматически."
+          },
+          {
+            "source": "HOLYMEDIA",
+            "code": "pmax_existing_media_missing",
+            "field_path": "PMax.assets.SQUARE_MARKETING_IMAGE",
+            "message": "Не доказан usable existing SQUARE_MARKETING_IMAGE; media/brand assets не генерируются и не загружаются автоматически."
+          },
+          {
+            "source": "HOLYMEDIA",
+            "code": "pmax_existing_media_missing",
+            "field_path": "PMax.assets.LOGO",
+            "message": "Не доказан usable existing LOGO; media/brand assets не генерируются и не загружаются автоматически."
+          }
+        ],
+        "same_account_goals": [],
+        "existing_media_by_role": {
+          "MARKETING_IMAGE": [],
+          "SQUARE_MARKETING_IMAGE": [],
+          "LOGO": [],
+          "BUSINESS_NAME": ["428412289294", "428412289297", "428412289300"]
+        },
+        "existing_brand_guidelines": [],
+        "inventory_coverage": "BOUNDED_SAMPLE_ONLY",
+        "no_inventory_absence_claim": true,
+        "live_acceptance": "NOT_RUN",
+        "remaining": "Read exact selected resources again, prove asset associations/branding minima, launch checklist and Google validate_only via stock PMax preview. No new goals/uploads or live create are authorized by this artifact."
+      },
+      "inventory_read_errors": {},
+      "inventory_row_counts": {
+        "eligibleInterests": 101,
+        "userLists": 0,
+        "detailedDemographics": 34,
+        "city": 1,
+        "districts": 101,
+        "conversions": 0,
+        "assets": 5,
+        "pmaxCampaigns": 0
+      },
+      "catalog_sample_policy": "Bounded samples only; no zero-inventory global claims. No silent truncation may authorize a write.",
+      "cross_client": {
+        "Q": "NOT_RUN_NO_CLIENT_PROOF",
+        "R": "NOT_RUN_NO_CLIENT_PROOF",
+        "S": "NOT_RUN_HUMAN_CONSENT_REQUIRED"
+      },
+      "counts": {
+        "read": 34,
+        "oauth_refresh": 0,
+        "failed_http": 0,
+        "validate_only": 0,
+        "write": 0
+      },
+      "provider_read_call_count": 34,
+      "validate_only_call_count": 0,
+      "real_provider_write_call_count": 0,
+      "approval_performed": false,
+      "committed": false,
+      "production_changed": false,
+      "main_changed": false,
+      "timestamp": "2026-10-09T13:28:42.649Z"
+    }
+  ],
+  "root_cause": {
+    "first_attempt": "GAQL requested a nonexistent v24 CriterionType EXTENDED_DEMOGRAPHIC enum; the extendedDemographic oneof itself is supported.",
+    "granular_google_code": "NOT_OBSERVED_IN_FIRST_MAPPER_OUTPUT",
+    "http_status": 400,
+    "targeted_fixes": [
+      "READ harness removes fake type restriction and retains parent-scoped raw snapshot.",
+      "Stage3 product uses actual numeric oneof selector and typed local projection; no invented provider enum.",
+      "Google streaming array failures now retain bounded safe GoogleAdsFailure details."
+    ],
+    "guards_weakened": false
+  },
+  "accounting": {
+    "google_ads_read": 41,
+    "oauth_refresh": 1,
+    "validate_only": 0,
+    "real_write": 0,
+    "historical_stage01_calls_excluded": true,
+    "child_pure_preparation_call_counts_are_not_transport_totals": true
+  },
+  "final_fixture": {
+    "customer_id": "8590146099",
+    "test_account": true,
+    "hierarchy_through": "4378327049",
+    "currency": "USD",
+    "campaigns": {
+      "24324170853": "PAUSED",
+      "24339483523": "PAUSED"
+    },
+    "ad_groups_paused": 3,
+    "rsa_paused": 3,
+    "original_keywords_enabled": 20,
+    "residual_phrase": {
+      "criterion_id": "11479221",
+      "status": "PAUSED"
+    },
+    "ad_group_cpc_micros": "100000",
+    "shared_set": {
+      "id": "12261567996",
+      "members": 3,
+      "active_attachments": 0
+    },
+    "unchanged": true
+  },
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T13:28:42.649Z"
+}
