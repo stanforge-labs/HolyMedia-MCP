@@ -177,6 +177,15 @@ export function validateLiveRequest(
     ["/health", "/ready"].includes(url.pathname)
   )
     return "health";
+  if (
+    url.origin === "http://127.0.0.1:4001" &&
+    url.pathname === "/acceptance/session" &&
+    method === "POST" &&
+    new Headers(init.headers).get("origin") === "http://localhost:4402" &&
+    !new Headers(init.headers).has("authorization") &&
+    init.body === "{}"
+  )
+    return "local_session_precheck";
   if (url.origin === "http://127.0.0.1:4000") {
     if (method === "GET" && ["/health", "/ready"].includes(url.pathname))
       return "health";

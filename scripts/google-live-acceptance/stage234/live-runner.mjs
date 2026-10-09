@@ -429,6 +429,25 @@ export async function runLivePreview() {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       if (!approvalReady) fail("stage234_stock_approval_gateway_not_ready");
+      // Only local TEST identity bootstrap, never an approval POST. Verify the
+      // human UI can obtain its own session before starting the preview TTL.
+      const sessionCheck = await fetch(
+        "http://127.0.0.1:4001/acceptance/session",
+        {
+          method: "POST",
+          headers: {
+            origin: "http://localhost:4402",
+            "content-type": "application/json",
+          },
+          body: "{}",
+          signal: AbortSignal.timeout(15000),
+        },
+      );
+      if (
+        !sessionCheck.ok ||
+        typeof (await sessionCheck.json()).csrfToken !== "string"
+      )
+        fail("stage234_human_session_bootstrap_not_ready");
     }
     // K uses the stock MCP schema rejection before the Stage 4 gate/provider.
     // No provider read/validate/mutation and no preview may be created by K.

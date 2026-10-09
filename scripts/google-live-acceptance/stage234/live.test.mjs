@@ -61,6 +61,27 @@ const req = (body) => ({
 const check = (url, body, opts = {}) =>
   validateLiveRequest(url, req(body), { env, proof, now, ...opts });
 
+test("local TEST session readiness is not approval and cannot carry auth or another origin", () => {
+  const url = "http://127.0.0.1:4001/acceptance/session";
+  const init = {
+    method: "POST",
+    headers: { origin: "http://localhost:4402" },
+    body: "{}",
+  };
+  assert.equal(validateLiveRequest(url, init), "local_session_precheck");
+  for (const headers of [
+    { origin: "http://evil.invalid" },
+    { origin: "http://localhost:4402", authorization: "synthetic" },
+  ])
+    assert.throws(() => validateLiveRequest(url, { ...init, headers }));
+  assert.throws(() =>
+    validateLiveRequest(
+      url.replace("acceptance/session", "api/v1/mcp/public/approval"),
+      init,
+    ),
+  );
+});
+
 test("K allows only the exact invalid RSA stock MCP input, never a valid/raw write", () => {
   const rpc = {
     jsonrpc: "2.0",
