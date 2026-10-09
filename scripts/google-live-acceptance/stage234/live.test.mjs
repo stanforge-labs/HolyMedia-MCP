@@ -59,6 +59,30 @@ const req = (body) => ({
 const check = (url, body, opts = {}) =>
   validateLiveRequest(url, req(body), { env, proof, now, ...opts });
 
+test("authoritative USD unit read is exact, TEST-scoped and cannot enumerate other currencies/accounts", () => {
+  const url = `https://googleads.googleapis.com/v24/customers/${target.customer}/googleAds:searchStream`;
+  assert.equal(check(url, { query: queries.currencyUnit }), "read");
+  for (const query of [
+    queries.currencyUnit.replace("'USD'", "'EUR'"),
+    queries.currencyUnit.split(" WHERE ")[0],
+    queries.currencyUnit + " OR currency_constant.code = 'EUR'",
+    queries.currencyUnit.replace("billable_unit_micros", "name"),
+  ])
+    assert.throws(
+      () => check(url, { query }),
+      /foreign_customer_or_query_blocked/,
+    );
+  for (const customer of [target.mcc, "1111111111"])
+    assert.throws(() =>
+      check(url.replace(target.customer, customer), {
+        query: queries.currencyUnit,
+      }),
+    );
+  assert.throws(() =>
+    check(url, { query: queries.currencyUnit, pageSize: 100 }),
+  );
+});
+
 test("exact CPC preview and validateOnly=true allowed; real write never reaches transport", () => {
   assert.equal(check(endpoint, validationPayload), "validate_only");
   for (const value of [false, undefined, "true", 1])

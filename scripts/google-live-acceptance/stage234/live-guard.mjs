@@ -44,6 +44,8 @@ export const queries = Object.freeze({
   customer:
     "SELECT customer.id, customer.test_account, customer.currency_code, customer.time_zone FROM customer",
   currency: "SELECT customer.id, customer.currency_code FROM customer",
+  currencyUnit:
+    "SELECT currency_constant.resource_name, currency_constant.code, currency_constant.billable_unit_micros FROM currency_constant WHERE currency_constant.code = 'USD'",
   hierarchy:
     "SELECT customer_client.id, customer_client.level, customer_client.test_account FROM customer_client WHERE customer_client.id = 8590146099",
   campaign:
