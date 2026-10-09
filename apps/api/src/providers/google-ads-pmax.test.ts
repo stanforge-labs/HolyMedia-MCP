@@ -310,6 +310,54 @@ describe("v24 non-retail PMax exact atomic provider plans (mock only)", () => {
     });
     expect(c.read_query).toContain("campaign.start_date_time");
   });
+  it("omitted targets are explicit provider-semantic zero expectations, never accepts unexpected automatic targets", async () => {
+    const p = await buildPmaxCreatePlan(account, brief(), reader()),
+      c = p.operations.find((o) => o.kind === "campaigns")!;
+    expect(c.fields.maximizeConversions).toEqual({});
+    expect(c.expected.maximizeConversions).toEqual({ targetCpaMicros: "0" });
+    const value = await buildPmaxCreatePlan(
+        account,
+        { ...brief(), bidding_strategy: "MAXIMIZE_CONVERSION_VALUE" },
+        reader(),
+      ),
+      v = value.operations.find((o) => o.kind === "campaigns")!;
+    expect(v.fields.maximizeConversionValue).toEqual({});
+    expect(v.expected.maximizeConversionValue).toEqual({ targetRoas: 0 });
+    const only = {
+      ...p,
+      checks: [],
+      operations: [
+        {
+          ...c,
+          method: "update" as const,
+          resource_name: campaign.resourceName,
+          fields: { resourceName: campaign.resourceName },
+          expected: {
+            resourceName: campaign.resourceName,
+            biddingStrategyType: "MAXIMIZE_CONVERSIONS",
+            maximizeConversions: { targetCpaMicros: "0" },
+          },
+          read_query: "SELECT campaign.resource_name FROM campaign",
+        },
+      ],
+      items: [{ ...p.items[0]!, provider_operations: [0] }],
+    };
+    const read = async () => [
+      {
+        campaign: {
+          resourceName: campaign.resourceName,
+          biddingStrategyType: "MAXIMIZE_CONVERSIONS",
+          maximizeConversions: { targetCpaMicros: "1000000" },
+        },
+      },
+    ];
+    const result = await verifyExtendedMutation(
+      only,
+      [{ success: true, resource_name: campaign.resourceName, error: null }],
+      read,
+    );
+    expect(result.status).toBe("NOT_VERIFIED");
+  });
   it("31 headline, unknown/raw API fields, wrong date, private URL, duplicates reject before provider reads", async () => {
     const cases = [
       { ...brief(), retail_feed_id: "42" },

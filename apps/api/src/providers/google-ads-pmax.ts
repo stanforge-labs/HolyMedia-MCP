@@ -1028,13 +1028,20 @@ export async function buildPmaxCreatePlan(
     campaignCreate,
     null,
     {
-      ...Object.fromEntries(
-        Object.entries(campaignCreate).filter(
-          ([key, value]) =>
-            !["maximizeConversions", "maximizeConversionValue"].includes(key) ||
-            Object.keys(extRow(value)).length > 0,
-        ),
-      ),
+      ...campaignCreate,
+      ...(strategy === "MAXIMIZE_CONVERSIONS"
+        ? {
+            maximizeConversions: {
+              targetCpaMicros: "0",
+              ...extRow(extRow(campaignCreate).maximizeConversions),
+            },
+          }
+        : {
+            maximizeConversionValue: {
+              targetRoas: 0,
+              ...extRow(extRow(campaignCreate).maximizeConversionValue),
+            },
+          }),
       biddingStrategyType: strategy,
     },
     "SELECT " +
