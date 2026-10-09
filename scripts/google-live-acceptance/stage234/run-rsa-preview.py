@@ -13,7 +13,7 @@ base = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(base)
 
 def manifest(head, directory):
-    names = ["rsa-preview-guard.mjs", "rsa-preview-runner.mjs", "rsa-approval-gateway.mjs", "scenario-preparation.mjs", "live-guard.mjs", "live-runner.mjs", "context-vault.mjs", "approval-gateway.mjs"]
+    names = ["rsa-preview-guard.mjs", "rsa-preview-runner.mjs", "rsa-approval-gateway.mjs", "scenario-preparation.mjs", "live-guard.mjs", "live-runner.mjs", "context-vault.mjs", "approval-gateway.mjs", "startup-diagnostics.mjs"]
     result = {}
     for name in names:
         path = directory / name

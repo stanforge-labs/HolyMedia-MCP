@@ -27,5 +27,13 @@ class LPreviewSupervisor(unittest.TestCase):
         self.assertNotIn("commit_preview",text)
         self.assertIn('state.mkdir(mode=0o700)',text)
         self.assertIn('os.O_CREAT|os.O_EXCL|os.O_WRONLY',text)
+class StartupCaptureTests(unittest.TestCase):
+    def test_l_retains_only_allowlisted_startup_evidence(self):
+        source=Path(__file__).with_name('rsa-preview-runner.mjs').read_text()
+        self.assertIn('startupDiagnostics(server)',source)
+        self.assertIn('stdio: ["ignore", "pipe", "pipe"]',source)
+        self.assertIn('startup: startupEvidence?.() ?? null',source)
+        self.assertIn('"startup-diagnostics.mjs"',Path(__file__).with_name('run-rsa-preview.py').read_text())
+
 if __name__=="__main__":unittest.main()
 

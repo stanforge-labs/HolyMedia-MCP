@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
+import { startupDiagnostics } from "./startup-diagnostics.mjs";
 import {
   readAcceptanceContext,
   sealAcceptanceContext,
@@ -88,7 +89,8 @@ export async function runLPreview() {
     gateway,
     stage = "runtime_preflight",
     evidence,
-    preview;
+    preview,
+    startupEvidence;
   try {
     if ((statSync(root).mode & 0o077) !== 0)
       fail("stage234_state_directory_permissions_invalid");
@@ -272,7 +274,7 @@ export async function runLPreview() {
       ],
       {
         cwd: "/workspace",
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...env,
           STAGE234_GUARD_PRELOAD: "0",
@@ -281,6 +283,7 @@ export async function runLPreview() {
         },
       },
     );
+    startupEvidence = startupDiagnostics(server);
     let ready = false;
     for (let attempt = 0; attempt < 35; attempt++) {
       if (server.exitCode !== null)
@@ -461,6 +464,7 @@ export async function runLPreview() {
       persisted_preview_immutable: true,
       historical_evidence_unchanged: true,
       approval_url_ready: approvalReady,
+      startup: startupEvidence(),
     };
     save("evidence.json", evidence);
     console.log(
@@ -495,6 +499,7 @@ export async function runLPreview() {
     const result = {
       result: "BLOCKED",
       failure_stage: stage,
+      startup: startupEvidence?.() ?? null,
       code: safeError(error),
       provider_read_call_count: calls.filter((e) =>
         ["read", "read_mcc"].includes(e.type),
