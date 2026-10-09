@@ -8,6 +8,7 @@ import {
   extendedProviderOperation,
 } from "./google-ads-extended-plan.js";
 import { stage4ToolIntent } from "../mcp/mcp-google-stage4-schema.js";
+import { type Stage1MutationResult } from "./google-ads-stage1.js";
 const script = (name: string) =>
   new URL(
     "../../../../scripts/google-live-acceptance/stage234/" + name,
@@ -143,6 +144,148 @@ async function setup() {
   };
 }
 describe("Acceptance L exact production adapter contract — mock transport only", () => {
+  it("one exact stock commit plus production verification preserves old inventory and accepts ONE new PAUSED RSA", async () => {
+    const f = await setup();
+    const plan = (await f.adapter.extended(
+      f.context,
+      4,
+      "build",
+      f.intent,
+    )) as ExtendedPlan;
+    const commitGuard = await import(script("rsa-commit-guard.mjs"));
+    const env = {
+      NODE_ENV: "test",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false",
+      PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false",
+      PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID: "4378327049",
+      PROVIDER_GOOGLE_API_VERSION: "v24",
+      V2_PREVIEW_ONLY: "false",
+      V2_CONFIRMED_WRITE_ENABLED: "true",
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false",
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false",
+      STAGE234_EXPLICIT_COMMIT_AUTHORIZED: "true",
+      API_PORT: "4000",
+      STAGE234_GUARD_PRELOAD: "0",
+      STAGE234_L_GUARD_PRELOAD: "0",
+      STAGE234_EXPECTED_L_PREVIEW: commitGuard.exactPreview,
+      STAGE234_SOURCE_HEAD: "c11f14c263b8e3a27418d87146b1894c7d9107dc",
+      STAGE234_IMAGE_DIGEST:
+        "sha256:8f6af88c3ab81a162ae63d3c862c614884388410ea0610f40b800cb16fd3bfba",
+      STAGE234_HARNESS_HEAD: "b".repeat(40),
+    };
+    const now = Date.now();
+    const context = {
+      preview: {
+        preview_id: commitGuard.exactPreview,
+        preview_token: "synthetic-opaque",
+      },
+    };
+    const authority = {
+      phase: "commit",
+      preview_id: commitGuard.exactPreview,
+      snapshot_digest: f.guard.digest(plan),
+      expires_at: new Date(now + 600000).toISOString(),
+      customer_id: "8590146099",
+      approval_persisted: true,
+      approval_session_valid: true,
+      approval_audit_valid: true,
+    };
+    const proof = {
+      customer_id: "8590146099",
+      mcc_id: "4378327049",
+      test_account: true,
+      hierarchy: true,
+      currency: "USD",
+      group_resource: f.group.resourceName,
+      group_cpc_micros: "100000",
+      fixture_paused: true,
+      fixture_sha256: "c".repeat(64),
+      source_head: env.STAGE234_SOURCE_HEAD,
+      verified_at: new Date(now).toISOString(),
+    };
+    const id = "12345",
+      resource = "customers/8590146099/adGroupAds/206587491811~12345";
+    const created = {
+      ...f.guard.createFields,
+      resourceName: resource,
+      ad: {
+        ...f.guard.createFields.ad,
+        id,
+        resourceName: "customers/8590146099/ads/12345",
+      },
+    };
+    let writes = 0;
+    const oldInventory = structuredClone(f.inventory);
+    vi.stubGlobal(
+      "fetch",
+      async (input: string | URL, init: RequestInit = {}) => {
+        const kind = commitGuard.validateCommitRequest(input, init, {
+          env,
+          context,
+          authority,
+          proof,
+          now,
+        });
+        if (kind === "write") {
+          writes++;
+          return new Response(
+            JSON.stringify({
+              mutateOperationResponses: [
+                { adGroupAdResult: { resourceName: resource } },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+        const query = JSON.parse(String(init.body)).query;
+        const rows =
+          query === f.guard.rsaQueries.customer
+            ? [
+                {
+                  customer: {
+                    id: "8590146099",
+                    resourceName: "customers/8590146099",
+                    currencyCode: "USD",
+                    timeZone: "Asia/Almaty",
+                    testAccount: true,
+                  },
+                },
+              ]
+            : query === f.guard.rsaQueries.campaign
+              ? [{ campaign: f.campaign }]
+              : query === f.guard.rsaQueries.group
+                ? [{ adGroup: f.group }]
+                : query === f.guard.rsaQueries.inventory
+                  ? [...oldInventory, { adGroupAd: created }]
+                  : null;
+        if (!rows) throw Error("unexpected fixed read");
+        return new Response(JSON.stringify([{ results: rows }]), {
+          status: 200,
+        });
+      },
+    );
+    const adapter = new GoogleAdsAdapter(loadConfig(env));
+    const result = (await adapter.extended(
+      f.context,
+      4,
+      "commit",
+      plan,
+    )) as Stage1MutationResult[];
+    expect(result).toMatchObject([{ success: true, resource_name: resource }]);
+    const verified = await adapter.extended(
+      f.context,
+      4,
+      "verify",
+      plan,
+      result,
+    );
+    expect(verified).toMatchObject({ status: "VERIFIED" });
+    expect(writes).toBe(1);
+    expect(f.inventory).toEqual(oldInventory);
+  });
   it("stock build emits the exact guard-approved four ownership/inventory reads and PAUSED create", async () => {
     const f = await setup();
     const plan = (await f.adapter.extended(
