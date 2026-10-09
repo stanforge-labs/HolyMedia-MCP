@@ -435,17 +435,35 @@ describe("Stage 0 coordinate-radius profile — mock only, no external calls", (
     ).rejects.toBeInstanceOf(Error);
     expect(f.writes()).toBe(0);
   });
-  it("clone explicitly rejects source proximity rather than silently dropping it", async () => {
+  it("clone explicitly rejects negative source radius rather than silently dropping it", async () => {
     const read = vi.fn(async (q: string) =>
       q.includes("FROM campaign_budget")
-        ? [{ campaignBudget: { amountMicros: "2000000" } }]
+        ? [
+            {
+              campaignBudget: {
+                resourceName: `${prefix}/campaignBudgets/2`,
+                amountMicros: "2000000",
+              },
+            },
+          ]
         : q.includes("FROM customer")
-          ? [{ customer: { currencyCode: "KZT" } }]
+          ? [
+              {
+                customer: {
+                  resourceName: prefix,
+                  id: customer,
+                  currencyCode: "KZT",
+                },
+              },
+            ]
           : q.includes("FROM campaign_criterion")
             ? [
                 {
                   campaignCriterion: {
+                    resourceName: `${prefix}/campaignCriteria/1~6`,
+                    campaign: `${prefix}/campaigns/1`,
                     type: "PROXIMITY",
+                    negative: true,
                     proximity: stage0ProximityFields(radius()),
                   },
                 },
