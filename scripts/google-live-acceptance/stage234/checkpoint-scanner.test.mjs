@@ -29,3 +29,32 @@ test("checkpoint labels are scanner-safe without exempting new evidence or real 
     true,
   );
 });
+
+test("L closeout checkpoint stays scan-safe and has no credential exemption", () => {
+  const path =
+    "artifacts/google-full-scope/L-closeout-I-readiness-checkpoint-20261010.json";
+  const content = readFileSync(
+    new URL("../../../" + path, import.meta.url),
+    "utf8",
+  );
+  assert.equal(hasForbiddenValue(path, content, pattern), false);
+  const unsafeLabel = [
+    "BLOCKED",
+    "REAL",
+    "CLIENT",
+    "AND",
+    "PRIVATE",
+    "NATIVE",
+    "TRANSPORT",
+    "NOT",
+    "CONNECTED",
+  ].join("_");
+  assert.equal(
+    hasForbiddenValue(path, JSON.stringify({ Q_R: unsafeLabel }), pattern),
+    true,
+  );
+  assert.equal(
+    hasForbiddenValue(path, content + "\n" + "EA" + "a".repeat(40), pattern),
+    true,
+  );
+});

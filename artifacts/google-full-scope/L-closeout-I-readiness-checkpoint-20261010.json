@@ -1,0 +1,82 @@
+{
+  "checkpoint": "L_LIVE_VERIFIED_I_PREPARATION",
+  "timestamp": "2026-10-09T21:07:00Z",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "code_head_at_checkpoint": "bd79c2d",
+  "api_for_next_I": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+  "api_image_digest": "sha256:2d7cd20cb25c268f74abd16f324d7b92ce5d804989a8de9b3fa062a0ca138d35",
+  "test_customer_id": "8590146099",
+  "mcc_read_only": "4378327049",
+  "Stage01": "HISTORICAL_LIVE_PASS_NOT_REPLAYED",
+  "L": {
+    "status": "LIVE_PASS",
+    "commit_id": "hmc_Wnhn4AOtMiJ7N0oYSTV3v_zB1t3HFnTzHNt7thTGp9Y",
+    "new_paused_rsa_id": "827463920328",
+    "audit": "VERIFIED",
+    "evidence": "artifacts/google-full-scope/L-live-pass-20261010.json"
+  },
+  "N": "LIVE_PASS_RESTORED_CPC_100000_MICROS",
+  "K": "PASS_PREVIOUS_NOT_REPEATED",
+  "G": "BLOCKED_NO_ELIGIBLE_AUTO_BIDDING_TEST_FIXTURE_PROVED",
+  "H": "NONSHARED_WARNING_VALIDATE_ONLY_PASS_PREVIOUS_SHARED_IMPACT_MOCK_ONLY",
+  "I": {
+    "status": "ELIGIBLE_PREPARED_NOT_LIVE",
+    "audience": { "kind": "AFFINITY", "id": "90100" },
+    "campaign_id": "24324170853",
+    "ad_group_id": "206587491811",
+    "before": "NO_AUDIENCE_CRITERIA_AND_ABSENT_AUDIENCE_MODE",
+    "after": "ONE_AFFINITY_CRITERION_AND_EXPLICIT_OBSERVATION_PARENT_REMAINS_PAUSED",
+    "provider_operations": 2,
+    "atomic": true,
+    "partial_failure": false,
+    "preview_created": false,
+    "manual_approval": "NOT_REQUESTED_YET",
+    "stock_commit_verify_regression": "PASS_MOCK_NO_PROVIDER_CALLS",
+    "restoration": "NEW_CONTROLLED_AUDIENCE_REMOVE_REQUIRES_SEPARATE_HUMAN_APPROVAL",
+    "residual_disclosure": "Stock criterion removal leaves explicit OBSERVATION mode. Exact restoration of the previously absent mode is an implementation gap; Google v24 supports a bounded REMOVE operation. No raw clear or TARGETING substitution is permitted."
+  },
+  "J": "CITY_RESOLVED_DISTRICT_AND_LEGITIMATE_RADIUS_CENTER_NOT_PROVED",
+  "PMax": "BLOCKED_NO_PROVED_USABLE_CONVERSION_MEDIA_AND_BRANDING_INVENTORY",
+  "clone": {
+    "source_tracking_and_inheritance": "IMPLEMENTED_REGRESSION_PASS",
+    "live": "NOT_RUN",
+    "remaining_profile_limits": "Explicit rejection for audiences, unsupported modifiers/portfolio/non-RSA/custom goals/app URL collections/text-asset tracking overrides; no silent omission."
+  },
+  "Q_R": "BLOCKED: real client and private native transport not connected",
+  "S": "HUMAN_BROWSER_APPROVAL_PROVED_NATIVE_CLIENT_CONSENT_PENDING",
+  "fixture": {
+    "campaigns_paused": 2,
+    "groups_paused": 3,
+    "rsa_paused": 4,
+    "original_keywords_enabled": 20,
+    "additional_phrase_11479221": "PAUSED",
+    "ad_group_cpc_micros": "100000",
+    "shared_set_12261567996_active_attachments": 0
+  },
+  "this_turn_calls_before_next_fresh_inventory": {
+    "read": 76,
+    "validate_only": 0,
+    "real_write": 1,
+    "oauth_refresh_separate": 2
+  },
+  "retained_stage234_continuation_totals_before_next_fresh_inventory": {
+    "read": 616,
+    "validate_only": 6,
+    "real_write": 3,
+    "scope": "Retained Stage234 continuation only, excludes historical Stage01."
+  },
+  "quality": {
+    "api_source55_linux_ci": "1605_PASS_0_SKIPPED_PLUS_41_PYTHON",
+    "latest_local_completed_full_suite": "1613_PASS_26_SKIPPED_PLUS_48_PYTHON_NO_FAILURES; one additional scan-safe checkpoint regression PASS",
+    "final_head_full_quality_and_linux_ci": "PENDING",
+    "security": { "critical": 0, "high": 0, "moderate": 6 },
+    "moderate_risk_assessment": "artifacts/google-full-scope/moderate-security-risk-assessment-20261009.json"
+  },
+  "next_step": "Complete final quality and hosted CI, safely rotate only consumed L disposable gateway, collect fresh same-source protected inventory, then one JIT I preview and stop for human approval. No I commit now.",
+  "production_write_gates": "OFF",
+  "production_changed": false,
+  "main_changed": false,
+  "stage01_release_candidate_changed": false,
+  "historical_evidence_preserved": true,
+  "original_ppc_tz_complete": false
+}
