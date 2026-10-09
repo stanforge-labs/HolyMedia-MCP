@@ -91,6 +91,16 @@ const brief = () => ({
 });
 function reader(opts: ExtendedRow = {}) {
   return vi.fn(async (q: string): Promise<ExtendedRow[]> => {
+    if (q.includes(" FROM currency_constant"))
+      return (opts.currencyRows ?? [
+        {
+          currencyConstant: {
+            resourceName: "currencyConstants/USD",
+            code: "USD",
+            billableUnitMicros: "10000",
+          },
+        },
+      ]) as ExtendedRow[];
     if (q.includes(" FROM customer_conversion_goal"))
       return [
         {
@@ -357,6 +367,96 @@ describe("v24 non-retail PMax exact atomic provider plans (mock only)", () => {
       read,
     );
     expect(result.status).toBe("NOT_VERIFIED");
+  });
+  it("daily budget and positive CPA are exact half-up quantized to provider-proven Google billable units", async () => {
+    const p = await buildPmaxCreatePlan(
+      account,
+      {
+        ...brief(),
+        daily_budget: { amount: "2.005", currency: "USD" },
+        target_cpa: { amount: "0.025", currency: "USD" },
+      },
+      reader(),
+    );
+    expect(
+      p.operations.find((o) => o.kind === "campaignBudgets")!.fields
+        .amountMicros,
+    ).toBe("2010000");
+    expect(
+      p.operations.find((o) => o.kind === "campaigns")!.fields
+        .maximizeConversions,
+    ).toEqual({ targetCpaMicros: "30000" });
+    expect(
+      p.items[0]!.warnings.filter((w) => w.includes("Округление")),
+    ).toHaveLength(2);
+    expect(p.items[0]!.after).toHaveProperty(
+      "money_unit.resource_name",
+      "currencyConstants/USD",
+    );
+    expect(
+      p.checks.find((c) => c.query.includes(" FROM currency_constant"))!.rows,
+    ).toEqual([
+      {
+        currencyConstant: {
+          resourceName: "currencyConstants/USD",
+          code: "USD",
+          billableUnitMicros: "10000",
+        },
+      },
+    ]);
+    expect(p.atomic).toBe(true);
+    expect(
+      p.operations
+        .filter((o) => ["campaigns", "assetGroups"].includes(o.kind))
+        .every((o) => o.fields.status === "PAUSED"),
+    ).toBe(true);
+  });
+  it("unproven units and positive money rounded to zero fail closed; no FX or hardcoded currency fallback", async () => {
+    for (const currencyRows of [
+      [],
+      [
+        {
+          currencyConstant: {
+            resourceName: "currencyConstants/EUR",
+            code: "EUR",
+            billableUnitMicros: "10000",
+          },
+        },
+      ],
+      [
+        {
+          currencyConstant: {
+            resourceName: "currencyConstants/USD",
+            code: "USD",
+            billableUnitMicros: "0",
+          },
+        },
+      ],
+    ])
+      await expect(
+        buildPmaxCreatePlan(account, brief(), reader({ currencyRows })),
+      ).rejects.toThrow(/currency|Google|billable/);
+    await expect(
+      buildPmaxCreatePlan(
+        account,
+        { ...brief(), daily_budget: { amount: "0.004999", currency: "USD" } },
+        reader(),
+      ),
+    ).rejects.toThrow(/нуля/);
+    await expect(
+      buildPmaxCreatePlan(
+        account,
+        { ...brief(), target_cpa: { amount: "0.000001", currency: "USD" } },
+        reader(),
+      ),
+    ).rejects.toThrow(/нуля/);
+    await expect(
+      buildPmaxCreatePlan(
+        account,
+        { ...brief(), daily_budget: { amount: "2", currency: "EUR" } },
+        reader(),
+      ),
+    ).rejects.toThrow(/валют|Валют|currency/);
   });
   it("31 headline, unknown/raw API fields, wrong date, private URL, duplicates reject before provider reads", async () => {
     const cases = [

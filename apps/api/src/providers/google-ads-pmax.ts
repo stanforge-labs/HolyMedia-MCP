@@ -1,5 +1,10 @@
 import { validateBriefSchema } from "../mcp/mcp-google-stage0-schema.js";
 import {
+  resolveGoogleMoneyUnit,
+  quantizePositiveMicros,
+  moneyUnitWarnings,
+} from "./google-ads-money.js";
+import {
   pmaxBriefSchema,
   pmaxAssetGroupSchema,
 } from "../mcp/mcp-google-stage4-schema.js";
@@ -904,14 +909,38 @@ export async function buildPmaxCreatePlan(
       "google_pmax_duplicate",
       "Campaign name уже существует; новый atomic graph не сформирован.",
     );
+  const moneyUnit = await resolveGoogleMoneyUnit(ctx.currency, ctx.query);
   const money = extRow(brief.daily_budget),
-    amount = currencyMicros(
+    requestedAmount = currencyMicros(
       String(money.amount),
       String(money.currency),
       ctx.currency,
     ),
+    amount = quantizePositiveMicros(requestedAmount, moneyUnit),
     strategy = String(brief.bidding_strategy ?? "MAXIMIZE_CONVERSIONS"),
     tracking = validateTracking(extRow(brief.utm));
+  item.warnings.push(
+    ...moneyUnitWarnings(requestedAmount, amount, moneyUnit).map(
+      (w) => "Daily budget: " + w,
+    ),
+  );
+  const requestedCPA = brief.target_cpa
+    ? currencyMicros(
+        String(extRow(brief.target_cpa).amount),
+        String(extRow(brief.target_cpa).currency),
+        ctx.currency,
+      )
+    : undefined;
+  const targetCPA =
+    requestedCPA === undefined
+      ? undefined
+      : quantizePositiveMicros(requestedCPA, moneyUnit);
+  if (requestedCPA !== undefined && targetCPA !== undefined)
+    item.warnings.push(
+      ...moneyUnitWarnings(requestedCPA, targetCPA, moneyUnit).map(
+        (w) => "Target CPA: " + w,
+      ),
+    );
   const custRows = await ctx.query(
       "SELECT customer.resource_name, customer.id, customer.conversion_tracking_setting.google_ads_conversion_customer FROM customer",
     ),
@@ -986,11 +1015,7 @@ export async function buildPmaxCreatePlan(
           maximizeConversions: {
             ...(brief.target_cpa
               ? {
-                  targetCpaMicros: currencyMicros(
-                    String(extRow(brief.target_cpa).amount),
-                    String(extRow(brief.target_cpa).currency),
-                    ctx.currency,
-                  ),
+                  targetCpaMicros: targetCPA,
                 }
               : {}),
           },
@@ -1283,6 +1308,7 @@ export async function buildPmaxCreatePlan(
     asset_groups: rows(brief.asset_groups).length,
     operation_count: operations.length,
     brand_guidelines_enabled: brand,
+    money_unit: moneyUnit,
     media: media.summaries,
   };
   item.warnings.push(
