@@ -997,7 +997,54 @@ export async function buildStage4Plan(
             "google_stage4_noop",
             "Provider state уже совпадает с изменением.",
           );
-        if (
+        if (intent.action === "tracking_update") {
+          const previous: ExtendedRow = { ...row };
+          const mapping = {
+            final_url_suffix: "finalUrlSuffix",
+            tracking_url_template: "trackingUrlTemplate",
+          } as const;
+          const missing = masks.some((mask) => {
+            const old = before[mapping[mask as keyof typeof mapping]];
+            if (typeof old !== "string" || !old.length) return true;
+            previous[mask] = old;
+            return false;
+          });
+          let reason = missing
+            ? "google_tracking_rollback_clear_unsupported"
+            : "";
+          if (!reason) {
+            try {
+              // Only the captured changed fields are inverse input. Validation
+              // never writes its default UTM into an untouched neighboring field.
+              reusableValidation(ctx.account_id, ctx.currency, {
+                utm: Object.fromEntries(
+                  masks.map((mask) => [mask, previous[mask]]),
+                ),
+              });
+            } catch {
+              reason = "google_tracking_rollback_previous_invalid";
+            }
+          }
+          if (!reason) {
+            inverse.push(previous);
+            Object.assign(item, {
+              rollback: { supported: true, source: "HOLYMEDIA", fields: masks },
+            });
+          } else {
+            const message = missing
+              ? "Tracking rollback к missing/empty BEFORE требует отдельно проверенный clear contract; пустое значение не подменяется default UTM."
+              : "Tracking BEFORE не проходит поддерживаемую typed URL/UTM validation; автоматический inverse не обещан.";
+            item.warnings.push(`${reason}: ${message}`);
+            Object.assign(item, {
+              rollback: {
+                supported: false,
+                source: "HOLYMEDIA",
+                code: reason,
+                message,
+              },
+            });
+          }
+        } else if (
           intent.action === "ad_group_update" ||
           (intent.action === "campaign_update" &&
             masks.every((m) => m === "name" || m === "status") &&
