@@ -7,6 +7,8 @@ describe("v2 configuration", () => {
     const config = loadConfig({ NODE_ENV: "test" });
     expect(config.providerGoogleAdsWriteEnabled).toBe(false);
     expect(config.providerGoogleAdsStage2WriteEnabled).toBe(false);
+    expect(config.providerGoogleAdsStage3WriteEnabled).toBe(false);
+    expect(config.providerGoogleAdsStage4WriteEnabled).toBe(false);
     expect(config.googleAdsWriteAccountAllowlist).toEqual([]);
     expect(
       loadConfig({
