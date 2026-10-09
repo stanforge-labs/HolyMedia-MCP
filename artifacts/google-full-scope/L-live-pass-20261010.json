@@ -1,0 +1,103 @@
+{
+  "acceptance_test": "L",
+  "result": "LIVE_PASS",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "harness_head": "9f267cf73d43047aef050a5e54006b6431fa6496",
+  "running_source": "c11f14c263b8e3a27418d87146b1894c7d9107dc",
+  "image_digest": "sha256:8f6af88c3ab81a162ae63d3c862c614884388410ea0610f40b800cb16fd3bfba",
+  "test_customer_id": "8590146099",
+  "test_account": true,
+  "test_mcc_read_only": "4378327049",
+  "campaign_id": "24324170853",
+  "ad_group_id": "206587491811",
+  "preview_id": "49e76856-b8a9-451a-a240-207d8bf7fa40",
+  "approval": {
+    "confirmed_at": "2026-10-09T20:00:30.123Z",
+    "expires_at": "2026-10-09T20:25:22.976Z",
+    "session_valid": true,
+    "human_audit_valid": true,
+    "immutable_digest": "13b7821e8fbbba5c7d2668a4c84eef9763f5aac6e868808358f6171e0c38907f",
+    "self_approval": false
+  },
+  "commit_id": "hmc_Wnhn4AOtMiJ7N0oYSTV3v_zB1t3HFnTzHNt7thTGp9Y",
+  "commit_status": "VERIFIED",
+  "operation_count": 1,
+  "partial_failure": true,
+  "atomic": false,
+  "new_rsa": {
+    "ad_id": "827463920328",
+    "resource_name": "customers/8590146099/adGroupAds/206587491811~827463920328",
+    "status": "PAUSED",
+    "final_urls": ["https://mcp.holymedia.kz/"],
+    "headlines": [
+      "HolyMedia MCP Test",
+      "Paused TEST Acceptance",
+      "Stage 4 Safe Test"
+    ],
+    "descriptions": [
+      "Controlled TEST account. Ad is created paused.",
+      "No customer advertising. Manual approval required."
+    ],
+    "residual_object": true,
+    "automatic_removal": false
+  },
+  "provider_verification": {
+    "exact_new_paused_rsa": true,
+    "old_fixture_snapshot_unchanged": true,
+    "original_keywords_enabled": 20,
+    "additional_phrase_11479221_status": "PAUSED",
+    "campaigns_paused": 2,
+    "ad_groups_paused": 3,
+    "rsa_paused": 4,
+    "ad_group_cpc_micros": "100000",
+    "currency": "USD"
+  },
+  "audit": [
+    {
+      "type": "mcp_google_stage1_preview_created",
+      "timestamp": "2026-10-09T19:55:23.031Z",
+      "success": true
+    },
+    {
+      "type": "mcp_preview_web_approved",
+      "timestamp": "2026-10-09T20:00:30.151Z",
+      "success": true
+    },
+    {
+      "type": "mcp_google_commit_attempted",
+      "timestamp": "2026-10-09T20:21:36.085Z",
+      "success": true
+    },
+    {
+      "type": "mcp_google_stage1_operation",
+      "timestamp": "2026-10-09T20:21:37.866Z",
+      "success": true
+    },
+    {
+      "type": "mcp_google_stage1_operation",
+      "timestamp": "2026-10-09T20:21:41.769Z",
+      "success": true
+    },
+    {
+      "type": "mcp_google_commit_result",
+      "timestamp": "2026-10-09T20:21:41.788Z",
+      "success": true
+    }
+  ],
+  "call_accounting": {
+    "scope": "this L approved continuation only; original preview validation counted in previous checkpoint",
+    "provider_read_call_count": 30,
+    "validate_only_call_count": 0,
+    "real_provider_write_call_count": 1,
+    "semantic_write_operations": 1,
+    "automatic_retries": 0,
+    "other_account_writes": 0,
+    "mcc_writes": 0
+  },
+  "protected_vps_evidence": "/opt/holymedia-google-acceptance/state/stage234-l-commit-20261009T202050Z-lc1/l-verified-evidence.json",
+  "historical_evidence_preserved": true,
+  "original_approval_gateway_unchanged": true,
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T20:21:42.848Z"
+}

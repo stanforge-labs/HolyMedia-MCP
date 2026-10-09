@@ -113,6 +113,12 @@ custom/cross-account goals, unknown asset details и неподдерживае�
 Полный clone coverage остаётся REQUIREDGAP, не «Google API не умеет»; новые пути mock-tested,
 но dedicated LIVE clone ещё не выполнялся.
 
+Пакет 10.10.2026 также сохраняет source-derived tracking/suffix/custom parameters и
+single desktop/mobile URL на исходных group/positive keyword/RSA уровнях. Campaign
+custom parameters теперь явно читаются и копируются; stale guard и expected reread
+охватывают эти поля. App/URL collections и неподдерживаемые text-asset overrides
+читаются и отклоняются явно. Это code/mock evidence, не LIVE clone PASS.
+
 ### Stage 1 — P134–164
 
 Keyword lifecycle/status/create, match replacement, URLs/clear, irreversible remove,
@@ -228,8 +234,17 @@ explicit write consent; existing read-only OAuth не повышается ав�
 
 Q — actual ChatGPT, R — actual second MCP client, S — explicit client consent before commit
 не закрываются REST/mock tests. Q/R BLOCKED до подключения клиентов; stock human approval
-PASS не превращается в cross-client S LIVE PASS. G/H/I/J/K/L/N также имеют только mock
-equivalents; новые Stage 2–4 real mutations требуют отдельных approvals.
+PASS не превращается в cross-client S LIVE PASS. Актуальные дополнительные результаты:
+N — verified change + approved rollback LIVE PASS, group CPC восстановлен до 0.10 USD;
+L — approved RSA create + provider reread/journal LIVE PASS, RSA `827463920328` PAUSED.
+H — non-shared warning/Google validation diagnostic PASS, shared impact MOCK only.
+G/I/J LIVE ещё не закрыты. Старый I availability diagnostic использовал неверные enum
+names; исправлены реальные v24 channel/`ALL_LOCALES` values, требуется fresh READ на
+корректном профиле. Country/language-specific eligibility остаётся fail-closed.
+Новые реальные mutations требуют отдельных approvals. Подробные доказательства:
+[N](../artifacts/google-full-scope/N-restored-pass-20261010.json),
+[L](../artifacts/google-full-scope/L-live-pass-20261010.json),
+[prerequisite/recovery plan](google-ads-prerequisite-setup-recovery-20261010.md).
 
 ## Quality, release и оставшиеся шаги
 
@@ -250,3 +265,19 @@ residual test assets/lists, без irreversible cleanup. History сохраня�
 restore — новый preview/validation/human approval/immutable commit/reread/audit.
 
 FULL PPC SCOPE DONE и production RELEASE READY этим отчётом не объявляются.
+
+## Дополнение 10.10.2026 — безопасное продолжение после L
+
+L исполнялся stock API `c11f14c263b8e3a27418d87146b1894c7d9107dc`, exact approved
+preview `49e76856-b8a9-451a-a240-207d8bf7fa40`, one-shot harness
+`9f267cf73d43047aef050a5e54006b6431fa6496`. Commit
+`hmc_Wnhn4AOtMiJ7N0oYSTV3v_zB1t3HFnTzHNt7thTGp9Y` VERIFIED; calls 30 READ /
+0 повторных VALIDATE_ONLY / 1 WRITE. Существующая fixture не изменена. Новый RSA
+остаётся PAUSED; необратимое удаление не выполнялось. Stage 0/1 release candidate и
+running approval gateway не менялись. Source fixes после L не выдаются за hot-deployed
+API: новый runtime требует отдельного exact source/image/quality readiness proof.
+
+Оригинальная датированная requirements matrix сохраняется как audit snapshot. Новые
+LIVE результаты и code gaps фиксируются отдельными continuation evidence, а не
+переписывают исторические commit/audit records. Q/R onboarding и точный transport
+blocker: [private client next actions](google-ads-private-client-next-actions-20261010.md).
