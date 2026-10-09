@@ -140,6 +140,8 @@ export const STAGE3_AUDIENCE_TYPES = [
   "DETAILED_DEMOGRAPHIC",
 ];
 const audienceTypes = STAGE3_AUDIENCE_TYPES;
+// EXTENDED_DEMOGRAPHIC is a local oneof selector, NOT CriterionTypeEnum v24.
+// The provider exposes extendedDemographicId but no enum value with this name.
 const audienceCriterionTypes = [
   "USER_LIST",
   "USER_INTEREST",
@@ -537,7 +539,48 @@ function criterionQuery(
     "bid_modifier",
     ...types.flatMap((t) => typeFields[t] ?? []),
   ];
-  return `SELECT ${[...new Set(fields)].map((f) => `${table}.${f}`).join(", ")} FROM ${table} WHERE ${table}.${parentField} = ${extQuote(parent)} AND ${table}.status != 'REMOVED' AND ${table}.type IN (${types.map(extQuote).join(", ")})`;
+  const enumTypes = types.filter((type) => type !== "EXTENDED_DEMOGRAPHIC"),
+    extended = types.includes("EXTENDED_DEMOGRAPHIC"),
+    // GAQL has AND only, not OR. Mixed inventory must freeze all criteria
+    // belonging to this exact parent and classify oneofs locally, not guess a
+    // provider enum or drop extended demographic siblings.
+    filter = extended
+      ? enumTypes.length
+        ? ""
+        : ` AND ${table}.extended_demographic.extended_demographic_id > 0`
+      : ` AND ${table}.type IN (${enumTypes.map(extQuote).join(", ")})`;
+  return `SELECT ${[...new Set(fields)].map((f) => `${table}.${f}`).join(", ")} FROM ${table} WHERE ${table}.${parentField} = ${extQuote(parent)} AND ${table}.status != 'REMOVED'${filter}`;
+}
+function matchesCriterionSelector(value: ExtendedRow, types: string[]) {
+  if (
+    types.includes("EXTENDED_DEMOGRAPHIC") &&
+    /^[1-9][0-9]{0,19}$/u.test(
+      String(extRow(value.extendedDemographic).extendedDemographicId),
+    )
+  ) {
+    // A provider oneof cannot simultaneously represent a keyword or another
+    // targeting family; reject contradictory/mock/unsafe responses explicitly.
+    if (
+      [
+        "keyword",
+        ...Object.keys(typeFields)
+          .filter((t) => t !== "EXTENDED_DEMOGRAPHIC")
+          .map((t) =>
+            t
+              .toLowerCase()
+              .replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()),
+          ),
+      ].some((field) => Object.keys(extRow(value[field])).length)
+    )
+      extFail(
+        "google_stage3_criterion_invalid",
+        "Provider criterion содержит противоречивые oneof targeting fields; mutation запрещена.",
+      );
+    return true;
+  }
+  return types
+    .filter((t) => t !== "EXTENDED_DEMOGRAPHIC")
+    .includes(String(value.type));
 }
 function audienceQuery(
   kind: string,
@@ -967,7 +1010,10 @@ export async function buildStage3Plan(
             "Criterion parent не совпадает с selected parent.",
           );
       }
-      return { query, rows };
+      return {
+        query,
+        rows: rows.filter((r) => matchesCriterionSelector(r, types)),
+      };
     };
     const create = async (
       type: string,

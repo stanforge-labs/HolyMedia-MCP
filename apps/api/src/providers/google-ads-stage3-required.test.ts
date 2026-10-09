@@ -84,6 +84,12 @@ function mock() {
     } as ExtendedRow,
   };
   const read = vi.fn(async (q: string): Promise<ExtendedRow[]> => {
+    const selected = (x: ExtendedRow) =>
+      (!q.includes(".type IN (") &&
+        !q.includes("extended_demographic.extended_demographic_id > 0")) ||
+      q.includes(`'${x.type}'`) ||
+      (q.includes("extended_demographic.extended_demographic_id > 0") &&
+        Number(extRow(x.extendedDemographic).extendedDemographicId) > 0);
     if (q.includes(" FROM customer"))
       return [{ customer: structuredClone(s.customer) }];
     if (q.includes(" FROM campaign "))
@@ -92,11 +98,11 @@ function mock() {
       return [{ adGroup: structuredClone(s.group) }];
     if (q.includes(" FROM campaign_criterion "))
       return s.criteria
-        .filter((x) => q.includes(`'${x.type}'`))
+        .filter(selected)
         .map((x) => ({ campaignCriterion: structuredClone(x) }));
     if (q.includes(" FROM ad_group_criterion "))
       return s.groupCriteria
-        .filter((x) => q.includes(`'${x.type}'`))
+        .filter(selected)
         .map((x) => ({ adGroupCriterion: structuredClone(x) }));
     if (q.includes(" FROM detailed_demographic "))
       return [{ detailedDemographic: structuredClone(s.catalog) }];
@@ -424,6 +430,12 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
       extendedDemographicId: "6",
     });
     expect(p.operations[0]!.fields).not.toHaveProperty("userInterest");
+    expect(p.operations[0]!.fields).not.toHaveProperty("type");
+    expect(p.operations[0]!.expected).not.toHaveProperty("type");
+    expect(p.operations[0]!.read_query).not.toContain("'EXTENDED_DEMOGRAPHIC'");
+    expect(p.operations[0]!.read_query).toContain(
+      "extended_demographic.extended_demographic_id > 0",
+    );
     expect(
       p.checks.some((x) => x.query.includes(" FROM detailed_demographic ")),
     ).toBe(true);
@@ -557,7 +569,7 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
   it("Detailed demographic remove and observation modifier use exact extended criterion, never ad keyword", async () => {
     const f = mock();
     f.s.groupCriteria.push(
-      criterion("EXTENDED_DEMOGRAPHIC", {
+      criterion("UNKNOWN", {
         extendedDemographic: { extendedDemographicId: "6" },
       }),
     );
@@ -572,6 +584,25 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
       f.read,
     );
     expect(p.operations[0]!.update_mask).toBe("bid_modifier");
+    expect(p.operations[0]!.read_query).not.toContain("'EXTENDED_DEMOGRAPHIC'");
+    expect(p.operations[0]!.read_query).not.toContain(".type IN (");
+    expect(p.operations[0]!.read_query).not.toContain(" OR ");
+    f.s.groupCriteria[0]!.bidModifier = 1.2;
+    expect(
+      (
+        await verifyExtendedMutation(
+          p,
+          [
+            {
+              success: true,
+              resource_name: `${prefix}/adGroupCriteria/2~7`,
+              error: null,
+            },
+          ],
+          f.read,
+        )
+      ).status,
+    ).toBe("VERIFIED");
     const remove = await buildStage3Plan(
       account,
       intent({
@@ -586,6 +617,128 @@ describe("Original DOCX P194–225 REQUIRED Stage 3 mock profiles", () => {
       `${prefix}/adGroupCriteria/2~7`,
     );
     expect(remove.irreversible).toBe(true);
+  });
+  it("v24 oneof post-reread verifies without fabricated CriterionType and rejects wrong taxonomy", async () => {
+    const f = mock();
+    const p = await buildStage3Plan(
+      account,
+      intent({
+        ...group,
+        operation: "audience_add",
+        audience: { kind: "DETAILED_DEMOGRAPHIC", id: "6" },
+        mode: "OBSERVATION",
+      }),
+      f.read,
+    );
+    const actual = criterion("UNKNOWN", {
+      extendedDemographic: { extendedDemographicId: "6" },
+    });
+    f.s.groupCriteria.push(actual);
+    const results = [
+      { success: true, resource_name: actual.resourceName, error: null },
+    ];
+    expect((await verifyExtendedMutation(p, results, f.read)).status).toBe(
+      "VERIFIED",
+    );
+    actual.extendedDemographic = { extendedDemographicId: "999" };
+    expect((await verifyExtendedMutation(p, results, f.read)).status).toBe(
+      "NOT_VERIFIED",
+    );
+  });
+  it("audience inventory cannot turn a keyword ID into detailed demographic remove/modifier", async () => {
+    const f = mock(),
+      kw = criterion("KEYWORD", {
+        keyword: { text: "synthetic", matchType: "EXACT" },
+      });
+    const rawRead = async (q: string) =>
+      q.includes("FROM ad_group_criterion")
+        ? [{ adGroupCriterion: kw }]
+        : f.read(q);
+    await rejects(
+      buildStage3Plan(
+        account,
+        intent({
+          ...group,
+          operation: "audience_remove",
+          criterion_id: "7",
+          acknowledge_irreversible: true,
+        }),
+        rawRead,
+      ),
+      "google_stage3_criterion_unavailable",
+    );
+    kw.extendedDemographic = { extendedDemographicId: "6" };
+    await rejects(
+      buildStage3Plan(
+        account,
+        intent({
+          ...group,
+          operation: "audience_bid_modifier",
+          criterion_id: "7",
+          bid_modifier: 1.2,
+        }),
+        rawRead,
+      ),
+      "google_stage3_criterion_invalid",
+    );
+    kw.resourceName = "customers/0000000000/adGroupCriteria/2~7";
+    await rejects(
+      buildStage3Plan(
+        account,
+        intent({
+          ...group,
+          operation: "audience_remove",
+          criterion_id: "7",
+          acknowledge_irreversible: true,
+        }),
+        rawRead,
+      ),
+      "google_extended_ownership_invalid",
+    );
+  });
+  it("campaign detailed criterion selector uses the real leaf, never an invented provider enum", async () => {
+    const f = mock();
+    f.s.criteria.push(
+      criterion(
+        "UNKNOWN",
+        { extendedDemographic: { extendedDemographicId: "6" } },
+        false,
+      ),
+    );
+    const p = await buildStage3Plan(
+      account,
+      intent({
+        ...campaign,
+        operation: "criterion_remove",
+        criterion_type: "EXTENDED_DEMOGRAPHIC",
+        criterion_id: "7",
+        acknowledge_irreversible: true,
+      }),
+      f.read,
+    );
+    expect(p.operations[0]!.read_query).toContain(
+      "campaign_criterion.extended_demographic.extended_demographic_id > 0",
+    );
+    expect(p.operations[0]!.read_query).not.toContain("'EXTENDED_DEMOGRAPHIC'");
+    expect(p.operations[0]!.read_query).not.toContain(" OR ");
+    expect(p.operations[0]!.resource_name).toBe(
+      `${prefix}/campaignCriteria/1~7`,
+    );
+    f.s.criteria[0]!.extendedDemographic = undefined;
+    f.s.criteria[0]!.type = "EXTENDED_DEMOGRAPHIC";
+    await rejects(
+      buildStage3Plan(
+        account,
+        intent({
+          ...campaign,
+          operation: "audience_remove",
+          criterion_id: "7",
+          acknowledge_irreversible: true,
+        }),
+        f.read,
+      ),
+      "google_stage3_criterion_unavailable",
+    );
   });
   it("P219–221 schedule modifier preserves interval, uses account timezone and has exact inverse", async () => {
     const f = mock(),

@@ -102,11 +102,11 @@ function fixture() {
       return [{ adGroup: structuredClone(state.group) }];
     if (q.includes(" FROM campaign_criterion "))
       return state.criteria
-        .filter((r) => q.includes(`'${r.type}'`))
+        .filter((r) => !q.includes(".type IN (") || q.includes(`'${r.type}'`))
         .map((r) => ({ campaignCriterion: structuredClone(r) }));
     if (q.includes(" FROM ad_group_criterion "))
       return state.groupCriteria
-        .filter((r) => q.includes(`'${r.type}'`))
+        .filter((r) => !q.includes(".type IN (") || q.includes(`'${r.type}'`))
         .map((r) => ({ adGroupCriterion: structuredClone(r) }));
     if (q.includes(" FROM user_list "))
       return [{ userList: structuredClone(state.audience) }];
