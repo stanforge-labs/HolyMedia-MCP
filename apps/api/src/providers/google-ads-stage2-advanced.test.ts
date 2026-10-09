@@ -94,6 +94,11 @@ function fixture() {
       },
     ],
     bulkRows: [] as Record<string, unknown>[],
+    moneyUnit: {
+      resourceName: "currencyConstants/USD",
+      code: "USD",
+      billableUnitMicros: "10000",
+    } as Record<string, unknown>,
     calls: [] as string[],
   };
   state.bulkRows = [
@@ -114,6 +119,8 @@ function fixture() {
   ];
   const read: Stage1Reader = async (q) => {
     state.calls.push(q);
+    if (q.includes(" FROM currency_constant"))
+      return [{ currencyConstant: structuredClone(state.moneyUnit) }];
     if (q.includes(" FROM customer"))
       return [
         {
@@ -212,6 +219,142 @@ const bulk = (extra: Record<string, unknown> = {}) => ({
   change: { mode: "percent", percent: "10", currency: "USD" },
   max_items: 100,
   ...extra,
+});
+describe("Stage 2 advanced authoritative billable-unit rounding", () => {
+  it("strategy target CPA rounds half-up with frozen provider unit and visible warning", async () => {
+    const f = fixture(),
+      plan = await buildStage2AdvancedPlan(
+        account,
+        advanced(
+          campaignStrategy({ type: "TARGET_CPA", target_cpa: money("1.005") }),
+        ),
+        f.read,
+      );
+    expect(extRow(plan.operations[0]?.fields.targetCpa).targetCpaMicros).toBe(
+      "1010000",
+    );
+    expect(plan.items[0]?.warnings.join(" ")).toContain(
+      "requested micros=1005000 → 1010000",
+    );
+    expect(
+      plan.checks.some((c) =>
+        c.query.includes("currency_constant.billable_unit_micros"),
+      ),
+    ).toBe(true);
+    f.state.moneyUnit.billableUnitMicros = "100000";
+    expect(canonical(await rereadExtendedChecks(plan, f.read))).not.toBe(
+      canonical(plan.checks),
+    );
+  });
+  it("portfolio floor/ceiling also quantized, but explicit clear zero remains zero", async () => {
+    const f = fixture();
+    const plan = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "portfolio_update",
+        strategy_id: "3",
+        strategy: {
+          type: "TARGET_CPA",
+          target_cpa: money("1.005"),
+          cpc_floor: money("0.005"),
+          cpc_ceiling: money("0.015"),
+        },
+      }),
+      f.read,
+    );
+    expect(plan.operations[0]?.fields.targetCpa).toEqual({
+      targetCpaMicros: "1010000",
+      cpcBidFloorMicros: "10000",
+      cpcBidCeilingMicros: "20000",
+    });
+    f.state.b.targetCpa = {
+      targetCpaMicros: "1000000",
+      cpcBidFloorMicros: "10000",
+      cpcBidCeilingMicros: "20000",
+    };
+    const clear = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "portfolio_update",
+        strategy_id: "3",
+        strategy: {
+          type: "TARGET_CPA",
+          target_cpa: money("1"),
+          clear_fields: ["cpc_floor"],
+        },
+      }),
+      f.read,
+    );
+    expect(
+      extRow(clear.operations[0]?.fields.targetCpa).cpcBidFloorMicros,
+    ).toBe("0");
+    expect(
+      extRow(clear.operations[0]?.expected.targetCpa).cpcBidCeilingMicros,
+    ).toBe("20000");
+    expect(clear.inverse_intent).toBeDefined();
+  });
+  it("nonaligned historical strategy money never gets a silently rounded inverse", async () => {
+    const f = fixture();
+    f.state.b.targetCpa = {
+      targetCpaMicros: "1000000",
+      cpcBidFloorMicros: "10001",
+    };
+    const plan = await buildStage2AdvancedPlan(
+      account,
+      advanced({
+        operation: "portfolio_update",
+        strategy_id: "3",
+        strategy: {
+          type: "TARGET_CPA",
+          target_cpa: money("1.2"),
+          cpc_floor: money("0.02"),
+        },
+      }),
+      f.read,
+    );
+    expect(plan.inverse_intent).toBeUndefined();
+  });
+  it("CPA performance thresholds remain exact micro filters, not billable write values", async () => {
+    const f = fixture();
+    f.state.bulkRows[0]!.metrics = {
+      costMicros: "1000000",
+      conversions: 1000000,
+      clicks: "30",
+    };
+    const plan = await buildStage2AdvancedPlan(
+      account,
+      bulk({
+        filters: [
+          {
+            metric: "cpa",
+            operator: "GTE",
+            value: "0.000001",
+            currency: "USD",
+          },
+        ],
+      }),
+      f.read,
+    );
+    expect(plan.operations).toHaveLength(1);
+    expect(plan.operations[0]?.fields.cpcBidMicros).toBe("1100000");
+    expect(plan.items[0]?.warnings.join(" ")).toContain("not rounded CPA");
+  });
+  it("foreign/malformed currency proof fails before strategy operations", async () => {
+    const f = fixture();
+    f.state.moneyUnit.code = "KZT";
+    await expect(
+      buildStage2AdvancedPlan(
+        account,
+        advanced(
+          campaignStrategy({ type: "TARGET_CPA", target_cpa: money("2") }),
+        ),
+        f.read,
+      ),
+    ).rejects.toMatchObject({ writeCode: "google_currency_unit_mismatch" });
+    expect(f.state.calls.some((q) => q.includes(" FROM campaign "))).toBe(
+      false,
+    );
+  });
 });
 describe("Stage 2 advanced v24 plans: mocked readers only", () => {
   it.each([

@@ -5,6 +5,13 @@ import {
 } from "./google-ads-stage1.js";
 import { GoogleAdsWriteError } from "./google-ads-write.js";
 import {
+  resolveGoogleMoneyUnit,
+  quantizePositiveMicros,
+  moneyUnitWarnings,
+  alignedMoneyMicros,
+  type GoogleMoneyUnit,
+} from "./google-ads-money.js";
+import {
   buildStage2Plan,
   parseStage2Intent,
   stage2RollbackIntent,
@@ -72,7 +79,24 @@ const portfolioSelect =
 const criterionSelect =
   "SELECT campaign.id, campaign_criterion.resource_name, campaign_criterion.criterion_id, campaign_criterion.campaign, campaign_criterion.type, campaign_criterion.status, campaign_criterion.negative, campaign_criterion.bid_modifier, campaign_criterion.device.type, campaign_criterion.location.geo_target_constant, campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute, campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute FROM campaign_criterion";
 const audienceSelect =
-  "SELECT campaign.id, ad_group.id, ad_group_criterion.resource_name, ad_group_criterion.ad_group, ad_group_criterion.type, ad_group_criterion.status, ad_group_criterion.negative, ad_group_criterion.bid_modifier, ad_group_criterion.user_list.user_list, ad_group_criterion.user_interest.user_interest FROM ad_group_criterion";
+  "SELECT campaign.id, ad_group.id, ad_group_criterion.resource_name, ad_group_criterion.ad_group, ad_group_criterion.type, ad_group_criterion.status, ad_group_criterion.negative, ad_group_criterion.bid_modifier, ad_group_criterion.user_list.user_list, ad_group_criterion.user_interest.user_interest_category FROM ad_group_criterion";
+const groupSelect =
+  "SELECT campaign.id, ad_group.resource_name, ad_group.id, ad_group.name, ad_group.status, ad_group.targeting_setting.target_restrictions FROM ad_group";
+const groupDeviceSelect =
+  "SELECT campaign.id, ad_group.id, ad_group_bid_modifier.resource_name, ad_group_bid_modifier.criterion_id, ad_group_bid_modifier.ad_group, ad_group_bid_modifier.bid_modifier, ad_group_bid_modifier.bid_modifier_source, ad_group_bid_modifier.device.type FROM ad_group_bid_modifier";
+const clearable: Record<StrategyName, string[]> = {
+  MANUAL_CPC: [],
+  MAXIMIZE_CLICKS: ["cpc_ceiling"],
+  MAXIMIZE_CONVERSIONS: ["target_cpa", "cpc_floor", "cpc_ceiling"],
+  TARGET_CPA: ["cpc_floor", "cpc_ceiling"],
+  TARGET_ROAS: ["cpc_floor", "cpc_ceiling"],
+  TARGET_IMPRESSION_SHARE: [],
+};
+const parameterFields: Record<string, string> = {
+  target_cpa: "targetCpaMicros",
+  cpc_floor: "cpcBidFloorMicros",
+  cpc_ceiling: "cpcBidCeilingMicros",
+};
 const decimal = (
   v: unknown,
   min: number,
@@ -116,7 +140,7 @@ function parseStrategy(raw: unknown): Strategy {
   };
   extClosed(
     raw,
-    ["type", ...options[type]],
+    ["type", ...options[type], "clear_fields"],
     [
       "type",
       ...(type === "TARGET_CPA"
@@ -130,6 +154,24 @@ function parseStrategy(raw: unknown): Strategy {
   );
   for (const k of ["target_cpa", "cpc_floor", "cpc_ceiling"])
     if (r[k] !== undefined) moneyInput(r[k]);
+  if (r.clear_fields !== undefined) {
+    if (
+      !Array.isArray(r.clear_fields) ||
+      !r.clear_fields.length ||
+      r.clear_fields.length > 3 ||
+      new Set(r.clear_fields).size !== r.clear_fields.length ||
+      r.clear_fields.some(
+        (k) =>
+          typeof k !== "string" ||
+          !clearable[type].includes(k) ||
+          r[k] !== undefined,
+      )
+    )
+      extFail(
+        "google_stage2_clear_invalid",
+        "clear_fields: unique optional parameters этой стратегии; нельзя одновременно set и clear либо очистить обязательную цель.",
+      );
+  }
   if (r.target_roas !== undefined)
     decimal(r.target_roas, 0.01, 1000, "target_roas");
   if (r.share_percent !== undefined) {
@@ -159,6 +201,8 @@ function strategyPayload(
   strategy: Strategy,
   currency: string,
   portfolio: boolean,
+  unit: GoogleMoneyUnit,
+  warnings: string[],
 ) {
   const type = strategy.type,
     field = strategyFields[type],
@@ -178,6 +222,19 @@ function strategyPayload(
       "google_stage2_parameter_unsupported",
       "CPC floor/ceiling этой стратегии доступны только portfolio; параметры не отброшены.",
     );
+  if (
+    !portfolio &&
+    (strategy.clear_fields as string[] | undefined)?.some(
+      (k) =>
+        k === "cpc_floor" ||
+        (k === "cpc_ceiling" &&
+          ["TARGET_CPA", "TARGET_ROAS", "MAXIMIZE_CONVERSIONS"].includes(type)),
+    )
+  )
+    extFail(
+      "google_stage2_parameter_unsupported",
+      "Clearing CPC floor/ceiling этой стратегии доступен только portfolio; неподдерживаемые поля не отбрасываются.",
+    );
   for (const [input, output] of [
     ["target_cpa", "targetCpaMicros"],
     ["cpc_floor", "cpcBidFloorMicros"],
@@ -185,15 +242,25 @@ function strategyPayload(
   ])
     if (strategy[input!] !== undefined) {
       const m = moneyInput(strategy[input!]);
-      value[output!] = currencyMicros(
+      const requested = currencyMicros(
         String(m.amount),
         String(m.currency),
         currency,
       );
+      const rounded = quantizePositiveMicros(requested, unit);
+      value[output!] = rounded;
+      warnings.push(
+        ...moneyUnitWarnings(requested, rounded, unit).map(
+          (w) => `${input}: ${w}`,
+        ),
+      );
     }
+  for (const key of (strategy.clear_fields as string[]) ?? [])
+    value[parameterFields[key]!] = "0";
   if (
     value.cpcBidFloorMicros &&
     value.cpcBidCeilingMicros &&
+    BigInt(String(value.cpcBidCeilingMicros)) > 0n &&
     BigInt(String(value.cpcBidFloorMicros)) >
       BigInt(String(value.cpcBidCeilingMicros))
   )
@@ -223,6 +290,12 @@ function parseAdvancedRow(raw: unknown) {
     portfolio_update: ["strategy_id", "strategy"],
     portfolio_attach: ["campaign_id", "strategy_id"],
     portfolio_detach: ["campaign_id", "strategy"],
+    ad_group_device_modifier: [
+      "campaign_id",
+      "ad_group_id",
+      "device",
+      "multiplier",
+    ],
     modifier: [
       "campaign_id",
       "criterion_id",
@@ -240,7 +313,10 @@ function parseAdvancedRow(raw: unknown) {
   extClosed(
     raw,
     ["operation", ...keys],
-    ["operation", ...keys.filter((k) => k !== "ad_group_id")],
+    [
+      "operation",
+      ...keys.filter((k) => (op === "modifier" ? k !== "ad_group_id" : true)),
+    ],
   );
   for (const k of ["campaign_id", "strategy_id", "criterion_id", "ad_group_id"])
     if (r[k] !== undefined) extId(r[k], k);
@@ -292,6 +368,19 @@ function parseAdvancedRow(raw: unknown) {
       extFail(
         "google_stage2_modifier_unsupported",
         "Audience modifier требует ad_group_id; campaign modifiers не принимают ad_group_id.",
+      );
+  }
+  if (op === "ad_group_device_modifier") {
+    if (!["MOBILE", "DESKTOP", "TABLET"].includes(String(r.device)))
+      extFail(
+        "google_stage2_device_unsupported",
+        "Device: MOBILE, DESKTOP либо TABLET; hotel/TV/OTHER не поддерживаются Search profile.",
+      );
+    decimal(r.multiplier, 0, 10, "multiplier");
+    if (Number(r.multiplier) > 0 && Number(r.multiplier) < 0.1)
+      extFail(
+        "google_stage2_parameter_invalid",
+        "Google device modifier: только 0 (-100%) либо 0.1–10 (-90%–+900%).",
       );
   }
   return r;
@@ -379,15 +468,20 @@ export function parseStage2AdvancedIntent(raw: unknown): Stage2AdvancedIntent {
         "Bulk: 1–8 filters и max_items 1–500; truncation запрещён.",
       );
     for (const f of r.filters) {
+      const isCpa = extRow(f).metric === "cpa";
       const x = extClosed(
         f,
-        ["metric", "operator", "value"],
-        ["metric", "operator", "value"],
+        ["metric", "operator", "value", ...(isCpa ? ["currency"] : [])],
+        ["metric", "operator", "value", ...(isCpa ? ["currency"] : [])],
       );
       if (
-        !["clicks", "impressions", "conversions", "cost_micros"].includes(
-          String(x.metric),
-        ) ||
+        ![
+          "clicks",
+          "impressions",
+          "conversions",
+          "cost_micros",
+          "cpa",
+        ].includes(String(x.metric)) ||
         !["LT", "LTE", "GT", "GTE", "EQ"].includes(String(x.operator))
       )
         extFail(
@@ -395,6 +489,7 @@ export function parseStage2AdvancedIntent(raw: unknown): Stage2AdvancedIntent {
           "Unsupported typed performance filter.",
         );
       decimal(x.value, 0, 9999999999, "filter value");
+      if (isCpa) moneyInput({ amount: x.value, currency: x.currency });
     }
     parseStage2Intent({
       action: "bid_budget_update",
@@ -427,9 +522,11 @@ export function parseStage2AdvancedIntent(raw: unknown): Stage2AdvancedIntent {
         ? "name:" + x.name
         : x.operation === "portfolio_update"
           ? "portfolio:" + x.strategy_id
-          : x.operation === "modifier"
-            ? `criterion:${x.campaign_id}:${x.ad_group_id ?? ""}:${x.criterion_id}`
-            : "campaign:" + x.campaign_id,
+          : x.operation === "ad_group_device_modifier"
+            ? `group-device:${x.campaign_id}:${x.ad_group_id}:${x.device}`
+            : x.operation === "modifier"
+              ? `criterion:${x.campaign_id}:${x.ad_group_id ?? ""}:${x.criterion_id}`
+              : "campaign:" + x.campaign_id,
     );
   if (new Set(keys).size !== keys.length)
     extFail(
@@ -501,6 +598,95 @@ function strategyMask(payload: ReturnType<typeof strategyPayload>) {
 function conversionStrategy(s: Strategy) {
   return ["MAXIMIZE_CONVERSIONS", "TARGET_CPA", "TARGET_ROAS"].includes(s.type);
 }
+function inverseParameters(
+  before: ExtendedRow,
+  payload: ReturnType<typeof strategyPayload>,
+  currency: string,
+  unit: GoogleMoneyUnit,
+): Strategy | undefined {
+  const old = oldStrategy(before, currency);
+  if (!old) return undefined;
+  for (const key of ["target_cpa", "cpc_floor", "cpc_ceiling"]) {
+    const money = old[key];
+    if (
+      money &&
+      !alignedMoneyMicros(
+        currencyMicros(
+          String(extRow(money).amount),
+          String(extRow(money).currency),
+          currency,
+        ),
+        unit,
+      )
+    )
+      return undefined;
+  }
+  if ((before.biddingStrategyType ?? before.type) === payload.providerType) {
+    const cleared = Object.entries(parameterFields)
+      .filter(
+        ([, field]) =>
+          payload.value[field] !== undefined &&
+          !microsMoney(extRow(before[payload.field])[field], currency),
+      )
+      .map(([input]) => input);
+    if (cleared.some((k) => !clearable[old.type].includes(k))) return undefined;
+    if (cleared.length) old.clear_fields = cleared;
+  }
+  return parseStrategy(old);
+}
+function mergedScheme(
+  before: ExtendedRow,
+  payload: ReturnType<typeof strategyPayload>,
+) {
+  const value = { ...extRow(before[payload.field]), ...payload.value };
+  const floor = String(value.cpcBidFloorMicros ?? "0"),
+    ceiling = String(value.cpcBidCeilingMicros ?? "0");
+  if (
+    /^[0-9]+$/.test(floor) &&
+    /^[0-9]+$/.test(ceiling) &&
+    BigInt(ceiling) > 0n &&
+    BigInt(floor) > BigInt(ceiling)
+  )
+    extFail(
+      "google_stage2_parameter_invalid",
+      "New CPC floor превышает preserved ceiling; neighboring parameters не сбрасываются.",
+    );
+  return value;
+}
+function modifierCompatibility(
+  campaign: ExtendedRow,
+  criterionType: string,
+  multiplier: number,
+  warnings: string[],
+) {
+  const type = String(campaign.biddingStrategyType);
+  if (["MANUAL_CPC", "TARGET_SPEND"].includes(type)) return;
+  if (criterionType === "DEVICE" && type === "TARGET_CPA") {
+    warnings.push(
+      "TARGET_CPA device adjustment меняет CPA target, не keyword CPC; conversion goal и strategy не заменяются.",
+    );
+    return;
+  }
+  if (
+    criterionType === "DEVICE" &&
+    [
+      "MAXIMIZE_CONVERSIONS",
+      "TARGET_ROAS",
+      "MAXIMIZE_CONVERSION_VALUE",
+      "TARGET_IMPRESSION_SHARE",
+    ].includes(type) &&
+    [0, 1].includes(multiplier)
+  ) {
+    warnings.push(
+      "Smart Bidding: только device exclusion (0) либо neutral eligibility restore (1); положительная/отрицательная ручная корректировка ставки этой стратегии не применяется.",
+    );
+    return;
+  }
+  extFail(
+    "google_stage2_modifier_strategy_incompatible",
+    "Google strategy игнорирует такую bid adjustment; операция явно отклонена, targeting/status не меняются.",
+  );
+}
 export async function buildStage2AdvancedPlan(
   account: string,
   raw: unknown,
@@ -510,6 +696,7 @@ export async function buildStage2AdvancedPlan(
   if (intent.action !== "stage2_advanced")
     return buildBulk(account, intent, read);
   const ctx = await extContext(account, read),
+    unit = await resolveGoogleMoneyUnit(ctx.currency, ctx.query),
     operations: ExtendedOperation[] = [],
     items: ExtendedPlan["items"] = [],
     inverse: ExtendedRow[] = [],
@@ -580,6 +767,34 @@ export async function buildStage2AdvancedPlan(
       );
     return { q, b };
   };
+  const group = async (campaign_id: string, group_id: string) => {
+    const q =
+        groupSelect +
+        ` WHERE campaign.id = ${campaign_id} AND ad_group.id = ${group_id}`,
+      rows = await ctx.query(q);
+    if (rows.length !== 1)
+      extFail(
+        "google_stage2_object_unavailable",
+        "Ad group не найдена однозначно в selected campaign.",
+      );
+    const g = extRow(rows[0]!.adGroup);
+    extOwner(g.resourceName, ctx.account_id, "adGroups");
+    if (
+      g.resourceName !== `customers/${ctx.account_id}/adGroups/${group_id}` ||
+      String(g.id) !== group_id ||
+      String(extRow(rows[0]!.campaign).id) !== campaign_id
+    )
+      extFail(
+        "google_extended_ownership_invalid",
+        "Ad group resource/parent proof mismatch.",
+      );
+    if (g.status === "REMOVED")
+      extFail(
+        "google_stage2_object_unavailable",
+        "Removed ad group не изменяется.",
+      );
+    return g;
+  };
   for (const [index, r] of (intent.items as ExtendedRow[]).entries()) {
     const item = extItem(
       index,
@@ -592,10 +807,15 @@ export async function buildStage2AdvancedPlan(
       let o: ExtendedOperation, revert: ExtendedRow | undefined;
       if (r.operation === "portfolio_create") {
         const s = parseStrategy(r.strategy),
-          p = strategyPayload(s, ctx.currency, true),
+          p = strategyPayload(s, ctx.currency, true, unit, item.warnings),
           q =
             portfolioSelect +
             ` WHERE bidding_strategy.name = ${extQuote(String(r.name))}`;
+        if (s.clear_fields !== undefined)
+          extFail(
+            "google_stage2_clear_invalid",
+            "Create portfolio не принимает clear_fields; до создания нечего очищать.",
+          );
         if ((await ctx.query(q)).length)
           extFail(
             "google_stage2_name_conflict",
@@ -619,12 +839,25 @@ export async function buildStage2AdvancedPlan(
       } else if (r.operation === "portfolio_update") {
         const { q, b } = await portfolio(String(r.strategy_id)),
           s = parseStrategy(r.strategy),
-          p = strategyPayload(s, ctx.currency, true),
-          old = oldStrategy(b, ctx.currency);
+          p = strategyPayload(s, ctx.currency, true, unit, item.warnings),
+          old = inverseParameters(b, p, ctx.currency, unit);
         if (String(b.type) !== p.providerType)
           extFail(
             "google_stage2_portfolio_type_immutable",
             "Смена portfolio scheme type не поддерживается; создайте отдельную portfolio и explicit attach.",
+          );
+        if (
+          Object.entries(p.value).length > 0 &&
+          Object.entries(p.value).every(
+            ([key, value]) =>
+              canonical(
+                extRow(b[p.field])[key] ?? (value === "0" ? "0" : undefined),
+              ) === canonical(value),
+          )
+        )
+          extFail(
+            "google_stage2_noop",
+            "Requested portfolio parameters уже установлены; clearing default не создает mutation.",
           );
         const affected = await ctx.query(
           campaignSelect +
@@ -669,30 +902,175 @@ export async function buildStage2AdvancedPlan(
           fields: { resourceName: b.resourceName, [p.field]: p.value },
           update_mask: strategyMask(p),
           before: b,
-          expected: { ...b, [p.field]: { ...extRow(b[p.field]), ...p.value } },
+          expected: { ...b, [p.field]: mergedScheme(b, p) },
           row: index,
           read_query: q,
           response_key: "biddingStrategy",
         };
-        if (
-          old &&
-          Object.keys(p.value).every((k) => extRow(b[p.field])[k] !== undefined)
-        )
+        if (old)
           revert = {
             operation: "portfolio_update",
             strategy_id: r.strategy_id,
             strategy: old,
           };
+      } else if (r.operation === "ad_group_device_modifier") {
+        const { c } = await campaign(String(r.campaign_id)),
+          g = await group(String(r.campaign_id), String(r.ad_group_id));
+        const multiplier = decimal(r.multiplier, 0, 10, "multiplier");
+        modifierCompatibility(c, "DEVICE", multiplier, item.warnings);
+        if (c.biddingStrategy) {
+          extOwner(c.biddingStrategy, ctx.account_id, "biddingStrategies");
+          const strategy = await portfolio(
+            String(c.biddingStrategy).split("/").at(-1)!,
+          );
+          if (strategy.b.type !== c.biddingStrategyType)
+            extFail(
+              "google_extended_ownership_invalid",
+              "Portfolio/campaign effective type proof mismatch.",
+            );
+        }
+        const q =
+            groupDeviceSelect +
+            ` WHERE campaign.id = ${r.campaign_id} AND ad_group.id = ${r.ad_group_id} AND ad_group_bid_modifier.device.type = ${r.device}`,
+          rows = await ctx.query(q);
+        if (rows.length > 1)
+          extFail(
+            "google_stage2_object_unavailable",
+            "Device bid modifier неоднозначен; не выбирается произвольно.",
+          );
+        const b = rows.length ? extRow(rows[0]!.adGroupBidModifier) : null;
+        if (b) {
+          extOwner(b.resourceName, ctx.account_id, "adGroupBidModifiers");
+          const id = extId(String(b.criterionId));
+          if (
+            b.resourceName !==
+              `customers/${ctx.account_id}/adGroupBidModifiers/${r.ad_group_id}~${id}` ||
+            b.adGroup !== g.resourceName ||
+            extRow(b.device).type !== r.device ||
+            String(extRow(rows[0]!.campaign).id) !== r.campaign_id ||
+            String(extRow(rows[0]!.adGroup).id) !== r.ad_group_id
+          )
+            extFail(
+              "google_extended_ownership_invalid",
+              "AdGroupBidModifier device/resource/parent mismatch.",
+            );
+          if (
+            b.bidModifierSource !== "AD_GROUP" &&
+            b.bidModifierSource !== "CAMPAIGN"
+          )
+            extFail(
+              "google_stage2_modifier_source_unsupported",
+              "Источник device modifier неизвестен; local override не создаётся без доказанного источника.",
+            );
+          if (
+            b.bidModifierSource === "AD_GROUP" &&
+            Number(b.bidModifier) === multiplier
+          )
+            extFail(
+              "google_stage2_noop",
+              "Group device multiplier уже установлен.",
+            );
+        }
+        const local = b?.bidModifierSource === "AD_GROUP";
+        o = {
+          kind: "adGroupBidModifiers",
+          method: local ? "update" : "create",
+          resource_name: local ? String(b!.resourceName) : null,
+          fields: local
+            ? { resourceName: b.resourceName, bidModifier: multiplier }
+            : {
+                adGroup: g.resourceName,
+                device: { type: r.device },
+                bidModifier: multiplier,
+              },
+          update_mask: local ? "bid_modifier" : null,
+          before: b,
+          expected: local
+            ? { ...b, bidModifier: multiplier }
+            : {
+                adGroup: g.resourceName,
+                device: { type: r.device },
+                bidModifier: multiplier,
+                bidModifierSource: "AD_GROUP",
+              },
+          row: index,
+          read_query: q,
+          response_key: "adGroupBidModifier",
+        };
+        if (local && typeof b!.bidModifier === "number")
+          revert = { ...r, multiplier: String(b.bidModifier) };
+        item.warnings.push(
+          `Device ${r.device}: ${((multiplier - 1) * 100)
+            .toFixed(4)
+            .replace(/\.?(0+)$/, " ")
+            .trim()}% (${multiplier}×); campaign/group status unchanged.`,
+        );
+        if (!local)
+          item.warnings.push(
+            "Create group device override: automatic deletion/inherited-state rollback unsupported; use a new approved supported operation.",
+          );
+        if (b?.bidModifierSource === "CAMPAIGN")
+          item.warnings.push(
+            `BEFORE inherits CAMPAIGN device multiplier ${String(b.bidModifier)}; CREATE independent AD_GROUP override, not UPDATE of inherited criterion.`,
+          );
+        const campaignDevices = await ctx.query(
+          criterionSelect +
+            ` WHERE campaign.id = ${r.campaign_id} AND campaign_criterion.type = DEVICE AND campaign_criterion.device.type = ${r.device} AND campaign_criterion.status != REMOVED`,
+        );
+        for (const row of campaignDevices) {
+          const d = extRow(row.campaignCriterion);
+          extOwner(d.resourceName, ctx.account_id, "campaignCriteria");
+          if (
+            d.campaign !== c.resourceName ||
+            extRow(d.device).type !== r.device
+          )
+            extFail(
+              "google_extended_ownership_invalid",
+              "Campaign device exclusion proof mismatch.",
+            );
+          if (d.bidModifier === 0)
+            item.warnings.push(
+              "Campaign device exclusion -100% имеет приоритет; ad group modifier не включает excluded устройство.",
+            );
+        }
       } else if (r.operation === "modifier") {
         const { c } = await campaign(String(r.campaign_id));
-        if (
-          c.biddingStrategyType !== "MANUAL_CPC" ||
-          Boolean(c.biddingStrategy)
-        )
-          extFail(
-            "google_stage2_modifier_strategy_incompatible",
-            "Bid modifiers поддерживаются только standard Manual CPC в этом profile; automated/portfolio strategy может игнорировать их, операция явно отклонена.",
+        modifierCompatibility(
+          c,
+          String(r.criterion_type),
+          Number(r.multiplier),
+          item.warnings,
+        );
+        if (c.biddingStrategy) {
+          extOwner(c.biddingStrategy, ctx.account_id, "biddingStrategies");
+          const b = await portfolio(
+            String(c.biddingStrategy).split("/").at(-1)!,
           );
+          if (b.b.type !== c.biddingStrategyType)
+            extFail(
+              "google_extended_ownership_invalid",
+              "Effective portfolio type mismatch.",
+            );
+        }
+        if (r.ad_group_id) {
+          const g = await group(String(r.campaign_id), String(r.ad_group_id));
+          const restrictions = extRow(g.targetingSetting).targetRestrictions;
+          if (
+            !Array.isArray(restrictions) ||
+            !restrictions.some(
+              (v) =>
+                extRow(v).targetingDimension === "AUDIENCE" &&
+                extRow(v).bidOnly === true,
+            )
+          )
+            extFail(
+              "google_stage2_audience_observation_required",
+              "Audience bid modifier требует явно доказанный OBSERVATION; TARGETING/unknown mode не изменяется.",
+            );
+          item.warnings.push(
+            "Audience targeting mode: OBSERVATION (bid_only=true); mode не меняется.",
+          );
+        }
         const audience = Boolean(r.ad_group_id),
           key = audience ? "adGroupCriterion" : "campaignCriterion",
           kind = audience ? "adGroupCriteria" : "campaignCriteria",
@@ -834,7 +1212,7 @@ export async function buildStage2AdvancedPlan(
               "Campaign не использует portfolio; detach не создаётся.",
             );
           const s = parseStrategy(r.strategy),
-            p = strategyPayload(s, ctx.currency, false);
+            p = strategyPayload(s, ctx.currency, false, unit, item.warnings);
           await goals(c, s);
           if (
             c.biddingStrategyType === p.providerType &&
@@ -853,7 +1231,9 @@ export async function buildStage2AdvancedPlan(
             !c.biddingStrategy &&
             Object.entries(p.value).every(
               ([key, value]) =>
-                canonical(extRow(c[p.field])[key]) === canonical(value),
+                canonical(
+                  extRow(c[p.field])[key] ?? (value === "0" ? "0" : undefined),
+                ) === canonical(value),
             )
           )
             extFail(
@@ -863,7 +1243,7 @@ export async function buildStage2AdvancedPlan(
           fields = { resourceName: c.resourceName, [p.field]: p.value };
           expected = expectedStrategy(c, p, false);
           if (c.biddingStrategyType === p.providerType && !c.biddingStrategy)
-            expected[p.field] = { ...extRow(c[p.field]), ...p.value };
+            expected[p.field] = mergedScheme(c, p);
           mask = strategyMask(p);
           if (conversionStrategy(s))
             item.warnings.push(
@@ -878,16 +1258,20 @@ export async function buildStage2AdvancedPlan(
             strategy_id: String(c.biddingStrategy).split("/").at(-1),
           };
         } else {
-          const old = oldStrategy(c, ctx.currency);
           const providerField = Object.keys(fields).find(
             (key) => key !== "resourceName",
           )!;
-          const newlyAdded =
-            c.biddingStrategyType === expected.biddingStrategyType &&
-            Object.keys(extRow(fields[providerField])).some(
-              (key) => extRow(c[providerField])[key] === undefined,
-            );
-          if (old && !newlyAdded)
+          const old = inverseParameters(
+            c,
+            {
+              field: providerField,
+              value: extRow(fields[providerField]),
+              providerType: String(expected.biddingStrategyType),
+            },
+            ctx.currency,
+            unit,
+          );
+          if (old)
             revert = {
               operation: "campaign_strategy",
               campaign_id: r.campaign_id,
@@ -990,6 +1374,16 @@ async function buildBulk(
         EQ: "=",
       },
       dates = extRow(intent.date_range);
+    const cpaFilters = (intent.filters as ExtendedRow[]).filter(
+      (f) => f.metric === "cpa",
+    );
+    const thresholds = cpaFilters.map((f) => ({
+      filter: f,
+      micros: currencyMicros(String(f.value), String(f.currency), ctx.currency),
+    }));
+    const rawFilters = (intent.filters as ExtendedRow[]).filter(
+      (f) => f.metric !== "cpa",
+    );
     const q =
       select +
       ` WHERE campaign.id IN (${(intent.campaign_ids as string[]).join(",")}) AND campaign.status != REMOVED AND segments.date BETWEEN ${extQuote(String(dates.start))} AND ${extQuote(String(dates.end))}` +
@@ -998,14 +1392,56 @@ async function buildBulk(
         : group
           ? " AND ad_group.status != REMOVED"
           : "") +
-      " AND " +
-      (intent.filters as ExtendedRow[])
+      (thresholds.length ? " AND metrics.conversions > 0" : "") +
+      (rawFilters.length ? " AND " : "") +
+      rawFilters
         .map(
           (f) =>
             `metrics.${f.metric} ${operators[String(f.operator)]} ${f.value}`,
         )
         .join(" AND ");
-    const rows = await ctx.query(q);
+    const rawRows = await ctx.query(q);
+    const rawSeen = new Set<string>();
+    for (const row of rawRows) {
+      const c = extRow(row.campaign),
+        g = extRow(row.adGroup),
+        k = extRow(row.adGroupCriterion),
+        id = extId(String(c.id)),
+        resource = keyword
+          ? k.resourceName
+          : group
+            ? g.resourceName
+            : c.resourceName;
+      extOwner(
+        resource,
+        ctx.account_id,
+        keyword ? "adGroupCriteria" : group ? "adGroups" : "campaigns",
+      );
+      const expected = keyword
+        ? `${prefixFor(ctx.account_id)}/adGroupCriteria/${extId(String(g.id))}~${extId(String(k.criterionId))}`
+        : group
+          ? `${prefixFor(ctx.account_id)}/adGroups/${extId(String(g.id))}`
+          : `${prefixFor(ctx.account_id)}/campaigns/${id}`;
+      if (
+        resource !== expected ||
+        !(intent.campaign_ids as string[]).includes(id)
+      )
+        extFail(
+          "google_extended_ownership_invalid",
+          "Bulk raw inventory parent/ID mismatch, including CPA-excluded rows.",
+        );
+      if (rawSeen.has(String(resource)))
+        extFail(
+          "google_stage2_duplicate",
+          "Bulk raw inventory contains duplicate resource; CPA filtering не скрывает duplicates.",
+        );
+      rawSeen.add(String(resource));
+    }
+    const rows = rawRows.filter((row) =>
+      thresholds.every(({ filter, micros }) =>
+        cpaMatches(extRow(row.metrics), String(filter.operator), micros),
+      ),
+    );
     if (!rows.length)
       extFail(
         "google_stage2_bulk_empty",
@@ -1082,6 +1518,14 @@ async function buildBulk(
     item.warnings.push(
       "Performance selection frozen at preview; commit uses exact selected IDs, not a re-run filter. Changed snapshot требует нового preview.",
     );
+  if (
+    intent.action === "stage2_bulk" &&
+    (intent.filters as ExtendedRow[]).some((f) => f.metric === "cpa")
+  )
+    for (const item of plan.items)
+      item.warnings.push(
+        `CPA filters: cost_micros / conversions, account currency ${ctx.currency}; zero/non-positive conversions excluded. Fractional attribution compared by exact decimal cross-product, not rounded CPA.`,
+      );
   try {
     plan.inverse_intent = {
       action: "stage2_bulk_inverse",
@@ -1098,3 +1542,42 @@ async function buildBulk(
   return plan;
 }
 const prefixFor = (account: string) => `customers/${account}`;
+function cpaMatches(
+  metrics: ExtendedRow,
+  operator: string,
+  threshold: string,
+): boolean {
+  const conversionText = String(metrics.conversions ?? "0"),
+    cost = String(metrics.costMicros ?? "0");
+  const parsed =
+    /^(-?)(0|[1-9][0-9]{0,15})(?:\.([0-9]{1,16}))?(?:e([+-]?[0-9]{1,2}))?$/i.exec(
+      conversionText,
+    );
+  if (
+    !parsed ||
+    Math.abs(Number(parsed[4] ?? 0)) > 24 ||
+    !/^(?:0|[1-9][0-9]{0,18})$/.test(cost)
+  )
+    extFail(
+      "google_stage2_metrics_invalid",
+      "CPA требует достоверные cost_micros/conversions; malformed или чрезмерная precision не округляется.",
+    );
+  if (parsed[1] === "-") return false;
+  const fraction = parsed[3] ?? "",
+    scale = fraction.length - Number(parsed[4] ?? 0),
+    denominator = 10n ** BigInt(Math.max(0, scale)),
+    conversions =
+      BigInt(parsed[2]! + fraction) * 10n ** BigInt(Math.max(0, -scale));
+  if (conversions <= 0n) return false;
+  const left = BigInt(cost) * denominator,
+    right = BigInt(threshold) * conversions;
+  return operator === "LT"
+    ? left < right
+    : operator === "LTE"
+      ? left <= right
+      : operator === "GT"
+        ? left > right
+        : operator === "GTE"
+          ? left >= right
+          : left === right;
+}
