@@ -98,6 +98,8 @@ describe("Google Ads structured REST errors", () => {
       ),
     ]).catch((value: unknown) => value);
     expect(error).toBeInstanceOf(GoogleAdsApiError);
+    if (!(error instanceof GoogleAdsApiError))
+      throw new Error("Expected structured Google Ads error");
     expect(
       error.errors.map((e: { error_code: string }) => e.error_code),
     ).toEqual(["INVALID_FIELD_NAME", "REQUIRED_FIELD_MISSING"]);
