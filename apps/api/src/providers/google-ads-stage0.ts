@@ -82,7 +82,7 @@ const resources = {
     "campaign_criterion",
     "campaignCriterion",
     "campaignCriteria",
-    "campaign_criterion.resource_name, campaign_criterion.campaign, campaign_criterion.negative, campaign_criterion.keyword.text, campaign_criterion.keyword.match_type, campaign_criterion.location.geo_target_constant, campaign_criterion.language.language_constant, campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute, campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute",
+    "campaign_criterion.resource_name, campaign_criterion.type, campaign_criterion.campaign, campaign_criterion.negative, campaign_criterion.keyword.text, campaign_criterion.keyword.match_type, campaign_criterion.location.geo_target_constant, campaign_criterion.proximity.geo_point.latitude_in_micro_degrees, campaign_criterion.proximity.geo_point.longitude_in_micro_degrees, campaign_criterion.proximity.radius, campaign_criterion.proximity.radius_units, campaign_criterion.language.language_constant, campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute, campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute",
   ],
   adGroup: [
     "ad_group",
@@ -254,8 +254,22 @@ export function normalizeBrief(raw: unknown) {
     error("google_date_invalid", "end_date раньше start_date.");
   const groups = list(brief.ad_groups),
     names = new Set<string>();
+  const proximityKeys = new Set<string>();
+  for (const proximity of list(brief.proximities)) {
+    const fields = stage0ProximityFields(proximity),
+      key = canonical(fields);
+    if (proximityKeys.has(key))
+      error(
+        "google_geo_duplicate",
+        "Повторяющийся coordinate-radius target; ничего не создано.",
+      );
+    proximityKeys.add(key);
+  }
   let count =
-    2 + list(brief.locations).length + (brief.languages as string[]).length;
+    2 +
+    list(brief.locations).length +
+    list(brief.proximities).length +
+    (brief.languages as string[]).length;
   for (const group of groups) {
     const name = keyText(group.name);
     if (!name || names.has(name))
@@ -371,6 +385,31 @@ export function normalizeBrief(raw: unknown) {
   brief.ad_groups = groups;
   brief.effective_tracking = validateTracking(row(brief.utm));
   return brief;
+}
+export function stage0ProximityFields(input: JsonRow): JsonRow {
+  const schema = campaignBriefSchema.properties!.proximities!.items!;
+  validateBriefSchema(input, schema, "brief.proximities[]");
+  const microdegrees = (value: number, field: string) => {
+    if (Number(value.toFixed(6)) !== value)
+      error(
+        "google_proximity_precision_invalid",
+        `${field}: максимум шесть знаков после запятой, координаты не округляются молча.`,
+      );
+    const [whole, fraction] = Math.abs(value).toFixed(6).split(".");
+    const exact = BigInt(whole!) * 1_000_000n + BigInt(fraction!);
+    return Number(value < 0 ? -exact : exact);
+  };
+  return {
+    geoPoint: {
+      latitudeInMicroDegrees: microdegrees(Number(input.latitude), "latitude"),
+      longitudeInMicroDegrees: microdegrees(
+        Number(input.longitude),
+        "longitude",
+      ),
+    },
+    radius: input.radius,
+    radiusUnits: input.unit,
+  };
 }
 export type GeoSuggest = (name: string, country?: string) => Promise<JsonRow[]>;
 export async function buildStage0Plan(
@@ -707,6 +746,24 @@ export async function buildStage0Plan(
       negative: g.exclude,
       location: { geoTargetConstant: g.resourceName },
     });
+  for (const proximity of list(brief.proximities)) {
+    const fields = {
+      campaign: campaignName,
+      negative: false,
+      proximity: stage0ProximityFields(proximity),
+    };
+    add("campaignCriterion", fields, "create", null, null, {
+      ...fields,
+      type: "PROXIMITY",
+    });
+    items.at(-1)!.keyword =
+      `Radius ${proximity.radius} ${proximity.unit}: ${proximity.latitude}, ${proximity.longitude}`;
+    items
+      .at(-1)!
+      .warnings.push(
+        "Include only; PRESENCE. Google validate_only checks proximity/privacy eligibility; no address geocoding.",
+      );
+  }
   for (const l of languages)
     add("campaignCriterion", {
       campaign: campaignName,
@@ -944,6 +1001,17 @@ export async function buildStage0Plan(
       networks: operations[1]!.fields.networkSettings,
       dates: { start: brief.start_date ?? null, end: brief.end_date ?? null },
       locations: geo,
+      ...(brief.proximities
+        ? {
+            proximities: list(brief.proximities).map((p) => ({
+              ...p,
+              provider: stage0ProximityFields(p),
+              type: "PROXIMITY",
+              include: true,
+              presence: "PRESENCE",
+            })),
+          }
+        : {}),
       languages,
       conversion_goals: conversion,
       ad_groups_count: groups.length,
