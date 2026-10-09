@@ -507,28 +507,77 @@ W activation — отдельная операция, без скрытых grou
 
 ## Матрица PPC stages
 
-| Stage                    | Реализовано в этой ветке                                                                                                                                                        | Статус                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| W0 foundation            | Google gate/allowlist, typed status adapter, generic preview + Google validation, secure browser approval, CAS commit, reread, row audit/errors, 500 limit, isolated mock tests | DONE                                                           |
-| First vertical slice     | Keyword PAUSED/ENABLED single + batch                                                                                                                                           | DONE (mock tests; live PPC acceptance NOT RUN)                 |
-| Stage 0 builder          | Atomic PAUSED budget/Search/geo/languages/schedule/goals/groups/keywords/negatives/RSA/tracking                                                                                 | DONE (mock, supported brief profile)                           |
-| Stage 0 assets           | Sitelinks/callouts/snippets/call/business name; existing image/logo attachment                                                                                                  | DONE (mock); binary image/logo creation NOT DONE               |
-| Stage 0 checklist/resume | Actual state + safe URL probes + campaign-only activation, shared approval/commit/audit                                                                                         | DONE (mock)                                                    |
-| Stage 0 clone            | Supported Search subset, immutable source snapshots, no silent omission                                                                                                         | PARTIAL; unsupported source components listed above            |
-| Stage 0 custom goals     | Exact same-customer subset/secondary selection, atomic custom goal/config references                                                                                            | DONE (mock)                                                    |
-| Stage 0 extended scope   | Cross-account goal creation and proximity                                                                                                                                       | NOT DONE; explicit rejection                                   |
-| Stage 1 keyword add      | AdGroupCriterion creation, duplicate/conflicts, account-currency optional CPC                                                                                                   | DONE (mock)                                                    |
-| Stage 1 status           | Pause/resume W0 preserved                                                                                                                                                       | DONE (mock)                                                    |
-| Stage 1 match type       | Create new + pause old, two effects, DEGRADED reporting                                                                                                                         | DONE (mock)                                                    |
-| Stage 1 final URL        | Set/replace/clear + recorded-value rollback                                                                                                                                     | DONE (mock)                                                    |
-| Stage 1 removal          | Distinct permanent remove preview, warning, approval                                                                                                                            | DONE (mock); NOT reversible                                    |
-| Stage 1 negatives        | Campaign/ad-group add/remove, duplicate/conflicts                                                                                                                               | DONE (mock)                                                    |
-| Stage 1 shared lists     | Create/members add-remove/attach-detach, separate rereads                                                                                                                       | DONE (mock)                                                    |
-| Stage 1 conversions      | Search term → keyword/negative common builders                                                                                                                                  | DONE (mock)                                                    |
-| Stage 1 journal/rollback | Stable commit ID, journal filters/cursor, status/final URL inverse preview                                                                                                      | DONE (mock); other rollback unsupported                        |
-| Stage 2                  | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
-| Stage 3                  | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
-| Stage 4                  | Дальнейший PPC scope вне этой задачи                                                                                                                                            | NOT DONE; детализация по новому ТЗ перед отдельной реализацией |
+| Stage                    | Реализовано в этой ветке                                                                                                                                                        | Статус                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| W0 foundation            | Google gate/allowlist, typed status adapter, generic preview + Google validation, secure browser approval, CAS commit, reread, row audit/errors, 500 limit, isolated mock tests | DONE                                                          |
+| First vertical slice     | Keyword PAUSED/ENABLED single + batch                                                                                                                                           | DONE (mock tests; live PPC acceptance NOT RUN)                |
+| Stage 0 builder          | Atomic PAUSED budget/Search/geo/languages/schedule/goals/groups/keywords/negatives/RSA/tracking                                                                                 | DONE (mock, supported brief profile)                          |
+| Stage 0 assets           | Sitelinks/callouts/snippets/call/business name; existing image/logo attachment                                                                                                  | DONE (mock); binary image/logo creation NOT DONE              |
+| Stage 0 checklist/resume | Actual state + safe URL probes + campaign-only activation, shared approval/commit/audit                                                                                         | DONE (mock)                                                   |
+| Stage 0 clone            | Supported Search subset, immutable source snapshots, no silent omission                                                                                                         | PARTIAL; unsupported source components listed above           |
+| Stage 0 custom goals     | Exact same-customer subset/secondary selection, atomic custom goal/config references                                                                                            | DONE (mock)                                                   |
+| Stage 0 extended scope   | Cross-account goal creation and proximity                                                                                                                                       | NOT DONE; explicit rejection                                  |
+| Stage 1 keyword add      | AdGroupCriterion creation, duplicate/conflicts, account-currency optional CPC                                                                                                   | DONE (mock)                                                   |
+| Stage 1 status           | Pause/resume W0 preserved                                                                                                                                                       | DONE (mock)                                                   |
+| Stage 1 match type       | Create new + pause old, two effects, DEGRADED reporting                                                                                                                         | DONE (mock)                                                   |
+| Stage 1 final URL        | Set/replace/clear + recorded-value rollback                                                                                                                                     | DONE (mock)                                                   |
+| Stage 1 removal          | Distinct permanent remove preview, warning, approval                                                                                                                            | DONE (mock); NOT reversible                                   |
+| Stage 1 negatives        | Campaign/ad-group add/remove, duplicate/conflicts                                                                                                                               | DONE (mock)                                                   |
+| Stage 1 shared lists     | Create/members add-remove/attach-detach, separate rereads                                                                                                                       | DONE (mock)                                                   |
+| Stage 1 conversions      | Search term → keyword/negative common builders                                                                                                                                  | DONE (mock)                                                   |
+| Stage 1 journal/rollback | Stable commit ID, journal filters/cursor, status/final URL inverse preview                                                                                                      | DONE (mock); other rollback unsupported                       |
+| Stage 2                  | Bid/budget foundation, standard/portfolio strategies, bounded modifiers and frozen performance-filter batches                                                                   | IMPLEMENTED supported Search profile; mock PASS, live NOT RUN |
+| Stage 3                  | Typed incremental audiences/modes, custom audiences, demographics, geo/proximity, languages, schedules and devices                                                              | IMPLEMENTED supported combinations; mock PASS, live NOT RUN   |
+| Stage 4                  | RSA, assets/references, campaign/group updates, tracking, existing PMax groups/signals/bounded asset links                                                                      | PARTIAL; full PMax creation and binary ingestion NOT DONE     |
+
+### Stage 2–4 engineering checkpoint — 2026-10-09
+
+Current implementation is isolated in `codex/google-ads-write-stage234-integration`.
+The Stage 0+1 release candidate remains `bb5b8d16979a41720129243927a6c9f56e091083`.
+The diverged Stage 2 foundation `d2857c0ce19d22ec3aae0e0eb61b67ad5f6af6e9`
+was cherry-picked onto that exact base; neither source history nor main was rewritten.
+
+Detailed contracts and remaining capabilities:
+
+- [Stage 2 strategy, portfolio, modifiers and bulk profile](google-ads-write-stage2-completion.md).
+- [Stage 3 targeting capability matrix](google-ads-write-stage3.md).
+- [Stage 4 RSA/assets/PMax capability matrix](google-ads-write-stage4.md).
+- Sanitized engineering evidence: `artifacts/google-stage234/implementation-checkpoint-20261009.json`.
+
+All new private tools enter the existing McpPreviewService, browser approval,
+immutable commit, provider reread and journal architecture. No second approval
+system exists. Stage-specific gates and the Google/Public write gates default OFF.
+Account ownership, provider resource identity, token restrictions, 500-operation
+limit and stale/expired/consumed guards are rechecked at commit/rollback. No
+provider mutation retry is performed; an uncertain outcome requires reconciliation.
+
+Stage 2 batches retain `partial_failure=true` and structured HOLYMEDIA row errors;
+they never relabel local validation as a Google response. Stage 0 creation retains
+atomic `partial_failure=false`. Stage 3 targeting uses atomic batches so audience
+mode and criteria cannot diverge. Extended creation with temporary dependencies
+is atomic. CustomAudienceService is a separate supported atomic service profile,
+not an invented GoogleAdsService mutation operation.
+
+Post-state checks resolve exact temporary resource literals, preserve parent and
+sibling inventories, normalize only independently proven protobuf defaults and
+record verified real CREATE resource IDs. Rollback is a NEW preview and approval,
+only for proven reversible operations; creations/removals are not automatically
+deleted. No campaign activation can bypass the generic launch checklist.
+
+Bulk performance metrics are frozen in the preview: legitimate metric drift can
+invalidate the preview or prevent verified post-state. This conservative limitation
+must not trigger automatic retries. Stage 2 does not yet support cross-account
+manager portfolios, all strategy parameter clears or ad-group device/hotel profiles.
+Stage 3 unsupported channel/criterion combinations explicitly fail. Stage 4 full
+PMax creation/minimum asset graph, binary image/logo ingestion, unproven branding,
+brand exclusions/negative editing and minimum-assets-safe detach remain gaps;
+this is a local implementation limitation, not a claim that Google lacks the API.
+
+Acceptance G/H/I/J/K/L/N equivalents are mock/disposable only. New live TEST
+acceptance requires separate authorization and human approval. Q/R actual MCP
+client acceptance remains BLOCKED until clients are connected. Stock approval
+contract tests do not substitute for live Q/R/S evidence. No release is declared
+ready from these engineering tests alone.
 
 ## Контроль качества / evidence
 

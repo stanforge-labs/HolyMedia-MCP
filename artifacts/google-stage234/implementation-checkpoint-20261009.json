@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "checkpoint": "GOOGLE_ADS_STAGE234_ENGINEERING_20261009",
+  "timestamp": "2026-10-09T08:17:00Z",
+  "status": "SUPPORTED_PROFILES_IMPLEMENTED_FULL_PPC_SCOPE_NOT_COMPLETE",
+  "baseline": {
+    "stage01_release_branch": "codex/google-ads-stage01-integration-final",
+    "stage01_release_head": "bb5b8d16979a41720129243927a6c9f56e091083",
+    "original_stage2_foundation_head": "d2857c0ce19d22ec3aae0e0eb61b67ad5f6af6e9",
+    "reconciled_foundation_commit": "bde1f663b429883e530a2f9f20955611f7e4b5e2",
+    "method": "isolated worktrees; cherry-pick exact foundation onto exact integration; ordinary no-ff dependency merges; no history overwrite"
+  },
+  "integration": {
+    "branch": "codex/google-ads-write-stage234-integration",
+    "code_head_at_checkpoint": "8b64eedb1f617f2befbdfcbdd5a58f49e0bfef7d",
+    "shared_mcp_wiring_commit": "12fc06d",
+    "pre_final_full_linux_tested_head": "e38778b65e1edd54f02dfad87c62f469d4b6f673",
+    "note": "Final checkpoint/docs commit may advance branch without changing tested code. A fresh final Linux push run is required after the additional two acceptance tests."
+  },
+  "branches": [
+    {
+      "stage": 2,
+      "branch": "codex/google-ads-write-stage2-completion",
+      "head": "f9c5d493ab906e574ad253e1134ee2cb032cac7e",
+      "linux_ci": {
+        "stage": 2,
+        "run_id": 37903378922,
+        "job_id": 113730907374,
+        "conclusion": "success",
+        "vitest_passed": 731,
+        "vitest_skipped": 0,
+        "node_script_tests_passed": 13
+      }
+    },
+    {
+      "stage": 3,
+      "branch": "codex/google-ads-write-stage3-targeting",
+      "head": "6fffb46cc68cd7cd35b6bf475ec75ab468cd03db",
+      "linux_ci": {
+        "stage": 3,
+        "run_id": 37903450151,
+        "job_id": 113731144516,
+        "conclusion": "success",
+        "vitest_passed": 792,
+        "vitest_skipped": 0,
+        "node_script_tests_passed": 13
+      }
+    },
+    {
+      "stage": 4,
+      "branch": "codex/google-ads-write-stage4-ads-assets",
+      "head": "2bdbe62b5fac4f5b3cb5c1cb294b1f989b5a1616",
+      "linux_ci": {
+        "stage": 4,
+        "run_id": 37903506070,
+        "job_id": 113731324957,
+        "conclusion": "success",
+        "vitest_passed": 840,
+        "vitest_skipped": 0,
+        "node_script_tests_passed": 13
+      }
+    }
+  ],
+  "dependency_graph": [
+    "bb5b8d1 + d2857c0 => bde1f66 reconciled foundation",
+    "shared typed plan/gates/ownership => Stage 2 advanced package",
+    "Stage 2 package => Stage 3 targeting dependency merge",
+    "Stage 2 + Stage 3 => Stage 4 package dependency merge",
+    "all owned packages + shared controlled lifecycle => Stage 234 integration candidate"
+  ],
+  "package_branch_contract": "Stage branches contain independently tested typed plan/schema packages and their dependencies. Private MCP registration, provider dispatch and complete shared lifecycle tests live in the Stage 234 integration candidate.",
+  "stages": {
+    "stage2": {
+      "status": "Implemented supported Search profile; mock PASS; live NOT RUN",
+      "foundation": "keyword CPC, group CPC/target CPA, daily/shared budget, percentage/absolute, currency/micros, >50% and auto bidding warnings, approved inverse rollback",
+      "advanced": [
+        "six standard Search strategies",
+        "portfolio creation/same-type parameter changes/attach/detach with consumer impact",
+        "existing device/geo/schedule and supported audience modifiers",
+        "bounded frozen performance-filter batches, per-row HOLYMEDIA/provider errors, partial_failure=true"
+      ],
+      "owned_advanced_tests_passed": 67,
+      "original_foundation_tests": 42,
+      "additional_exact_G_H_integration_tests": 2,
+      "remaining": [
+        "cross-account manager-owned portfolios",
+        "all inherited/explicit strategy parameter clear cases",
+        "ad-group device/hotel and unlisted modifier profiles",
+        "non-Search strategy matrix",
+        "metric drift may stale or prevent VERIFIED bulk post-state; no automatic retry"
+      ]
+    },
+    "stage3": {
+      "status": "IMPLEMENTED_SUPPORTED_TARGETING_PROFILE_MOCK_PASS_LIVE_NOT_RUN",
+      "implemented": [
+        "eligible remarketing/in-market/affinity reference name search",
+        "audience add/exclude/remove, explicit OBSERVATION/TARGETING",
+        "incremental audience restriction operations preserve other dimensions",
+        "standalone custom audience definitions via CustomAudienceService",
+        "age/gender/parental/income supported combinations",
+        "name-resolved geo includes/excludes, positive coordinate-radius proximity",
+        "presence modes, language aliases/add/remove, timezone quarter-hour schedules",
+        "campaign device modifiers/exclusion via zero multiplier"
+      ],
+      "owned_tests_passed": 61,
+      "atomic": true,
+      "remaining": [
+        "unsupported channel/criterion combinations reject explicitly",
+        "negative custom audiences and campaign-positive parental status reject",
+        "Search custom audiences and PMax targeting not claimed equivalent",
+        "customer-match PII/uploads not implemented",
+        "ad-group device targeting and radius exclusion not implemented",
+        "atomic targeting does not promise permissive per-row partial commits"
+      ]
+    },
+    "stage4": {
+      "status": "PARTIAL_IMPLEMENTED_SUPPORTED_PROFILE_MOCK_PASS_LIVE_NOT_RUN",
+      "implemented": [
+        "RSA create PAUSED and AdService content updates, pins/paths/URLs/30-90-15 validation",
+        "ad status/removal with irreversible acknowledgement",
+        "text/call/business-name assets and existing owned image/logo references",
+        "supported-level PAUSED associations and attach/detach",
+        "campaign/group status/name/date/network incremental updates",
+        "customer/campaign/group tracking",
+        "existing PMax asset-group updates, audience/search-theme signals",
+        "existing PMax bounded text/image attachment profile"
+      ],
+      "owned_tests_passed": 48,
+      "remaining": [
+        "full PMax campaign creation and atomic minimum asset graph",
+        "asset-group minimum-assets-safe detach",
+        "binary image/logo ingestion/upload",
+        "unproven PMax branding profile and full logo/business-name relationships",
+        "PMax brand exclusions and negative editing",
+        "date/network/tracking/RSA restore requires new explicit approved operation; automatic inverse not advertised"
+      ],
+      "pmax_api_note": "These are local implementation/profile limitations, not assertions that Google v24 lacks the underlying capabilities."
+    }
+  },
+  "private_tools": [
+    "google_ads_strategy_modifier_preview",
+    "google_ads_bulk_bid_budget_preview",
+    "google_ads_targeting_preview",
+    "google_ads_audience_search",
+    "google_ads_ads_assets_preview",
+    "google_ads_pmax_preview"
+  ],
+  "shared_safety": {
+    "existing_preview_approval_commit_architecture_reused": true,
+    "manual_approval_not_bypassed": true,
+    "closed_schemas": true,
+    "canonical_account_proof": true,
+    "allowlist_ownership_scope_guards": true,
+    "stage_gates_off_by_default": [2, 3, 4],
+    "google_write_default": false,
+    "public_write_default": false,
+    "immutable_payload": true,
+    "stale_expired_consumed_guards": true,
+    "max_operations": 500,
+    "stage0_partial_failure": false,
+    "stage2_partial_failure": true,
+    "creation_paused": true,
+    "creation_remove_auto_rollback": false,
+    "uncertain_write_retry": false,
+    "provider_policy_details_redacted_and_preserved": true,
+    "real_created_resource_ids_audited": true
+  },
+  "acceptance": {
+    "G": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "keyword CPC +10% under auto bidding; explicit warning; provider unchanged"
+    },
+    "H": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "shared budget +60%; >50% warning and both consumers; provider unchanged"
+    },
+    "I": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "OBSERVATION add/remove; mode visibility and preserved sibling dimensions"
+    },
+    "J": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "Almaty include, Astana exclude, positive coordinate radius"
+    },
+    "K": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "31-character RSA headline rejected before provider reader/mutation"
+    },
+    "L": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "RSA created PAUSED and reread exact object plus unchanged siblings"
+    },
+    "N": {
+      "mock": "PASS",
+      "live": "NOT_RUN",
+      "case": "approved bid change and NEW approved inverse preview restores original value"
+    }
+  },
+  "testing": {
+    "new_extension_tests": {
+      "stage2_advanced": 67,
+      "stage3": 61,
+      "stage4": 48,
+      "shared_plan": 26,
+      "stock_mcp_lifecycle": 23,
+      "total": 225
+    },
+    "exact_additional_foundation_acceptance_tests": 2,
+    "pre_final_local_suite": {
+      "vitest_passed": 837,
+      "node_script_tests_passed": 13,
+      "total_passed": 850,
+      "skipped": 26,
+      "reason": "Local PostgreSQL/Redis infrastructure unavailable; all 26 execute in Linux CI"
+    },
+    "pre_final_linux_suite": {
+      "run_id": 37903300054,
+      "job_id": 113730657893,
+      "source_head": "e38778b65e1edd54f02dfad87c62f469d4b6f673",
+      "result": "PASS",
+      "vitest_passed": 863,
+      "node_script_tests_passed": 13,
+      "total_passed": 876,
+      "skipped": 0,
+      "url": "https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/37903300054"
+    },
+    "additional_G_H_targeted_suite": {
+      "source_head": "8b64eedb1f617f2befbdfcbdd5a58f49e0bfef7d",
+      "tests": 44,
+      "result": "PASS"
+    },
+    "stage01_meta_google_read_regressions": "PASS_IN_FULL_SUITE",
+    "web_and_testing_packages": "No test files; passWithNoTests. This does not constitute browser or client acceptance.",
+    "quality": {
+      "format_check": "PASS",
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "build": "PASS",
+      "prisma_validate": "PASS",
+      "migration_rehearsal": "PASS_LINUX_DISPOSABLE",
+      "api_worker_readiness_degradation_smokes": "PASS_LINUX_DISPOSABLE",
+      "standard_secret_scan": "PASS",
+      "secret_scanner_regressions": 7,
+      "dependency_audit": {
+        "critical": 0,
+        "high": 0,
+        "moderate": 6
+      },
+      "new_migrations": "NONE",
+      "dependency_lockfile_changed": false
+    }
+  },
+  "cross_client": {
+    "Q": "BLOCKED_ACTUAL_CHATGPT_CLIENT_NOT_EXERCISED",
+    "R": "BLOCKED_SECOND_MCP_CLIENT_NOT_EXERCISED",
+    "S": "STOCK_CONSENT_CONTRACT_MOCK_PASS_ACTUAL_CROSS_CLIENT_LIVE_NOT_RUN"
+  },
+  "provider_accounting": {
+    "real_provider_read_calls": 0,
+    "real_provider_validate_only_calls": 0,
+    "real_provider_write_calls": 0,
+    "mocked_transport_not_counted_as_real": true
+  },
+  "main_changed": false,
+  "production_changed": false,
+  "production_deployed": false,
+  "stage01_release_candidate_changed": false,
+  "historical_acceptance_evidence_modified": false,
+  "release_readiness": "Not ready: full PPC scope and live Stage 2-4 acceptance remain open",
+  "next_actions": [
+    "Review supported-profile capability matrix and integration candidate.",
+    "Obtain separate explicit TEST live acceptance authorization and one human approval per immutable operation.",
+    "Connect real ChatGPT and second MCP client for Q/R/S; do not substitute mocks.",
+    "Complete remaining PMax creation/binary-ingestion/minimum-assets/branding capability package before claiming full Stage 4.",
+    "No main merge or production deployment without separate authorization."
+  ],
+  "documentation": [
+    "docs/google-ads-write.md",
+    "docs/google-ads-write-stage2-completion.md",
+    "docs/google-ads-write-stage3.md",
+    "docs/google-ads-write-stage4.md"
+  ],
+  "skills_used": [
+    "mcp-ads-dev",
+    "review-security-errors",
+    "implementing-devsecops-security-scanning"
+  ]
+}
