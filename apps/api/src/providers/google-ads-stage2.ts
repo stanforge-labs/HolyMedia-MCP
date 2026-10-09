@@ -1,5 +1,14 @@
 import type { AppConfig } from "@holymedia/config";
 import {
+  resolveGoogleMoneyUnit,
+  quantizePositiveMicros,
+  moneyUnitWarnings,
+  moneyUnitFromRows,
+  alignedMoneyMicros,
+  currencyConstantQuery,
+  type GoogleMoneyUnit,
+} from "./google-ads-money.js";
+import {
   canonical,
   currencyMicros,
   type Stage1Reader,
@@ -154,14 +163,22 @@ export function changedMicros(
   current: string,
   change: Stage2Change,
   currency: string,
+  unit?: GoogleMoneyUnit,
 ): string {
   if (change.currency !== currency)
     fail(
       "google_currency_mismatch",
       "Валюта change должна совпадать с валютой аккаунта; FX conversion не выполняется.",
     );
-  if (change.mode === "absolute")
-    return currencyMicros(change.amount, change.currency, currency);
+  if (unit && unit.currency !== currency)
+    fail(
+      "google_currency_unit_mismatch",
+      "Currency unit не совпадает с валютой аккаунта.",
+    );
+  if (change.mode === "absolute") {
+    const micros = currencyMicros(change.amount, change.currency, currency);
+    return unit ? quantizePositiveMicros(micros, unit) : micros;
+  }
   if (!/^[0-9]+$/.test(current) || BigInt(current) <= 0n)
     fail(
       "google_stage2_percent_base_unavailable",
@@ -176,7 +193,10 @@ export function changedMicros(
       "google_stage2_percent_invalid",
       "Допустимый percent: больше -100% и не более +1000%.",
     );
-  const value = (BigInt(current) * (1000000n + signed) + 500000n) / 1000000n;
+  const numerator = BigInt(current) * (1000000n + signed);
+  if (unit)
+    return quantizePositiveMicros(numerator.toString(), unit, "1000000");
+  const value = (numerator + 500000n) / 1000000n;
   if (value <= 0n || value > 9999999999999999n)
     fail(
       "google_stage2_amount_invalid",
@@ -258,6 +278,7 @@ export async function buildStage2Plan(
       "Нельзя доказать customer/currency выбранного аккаунта.",
     );
   const currency = String(record(customers[0]!.customer).currencyCode),
+    unit = await resolveGoogleMoneyUnit(currency, query),
     operations: Stage2Operation[] = [],
     items: Stage2Plan["items"] = [],
     touched = new Set<string>();
@@ -435,7 +456,24 @@ export async function buildStage2Plan(
           "Manual CPC override при automated/portfolio bidding может не влиять на фактическую ставку; стратегия не меняется.",
         );
       const old = String(before[providerField]),
-        next = changedMicros(old, item.change, currency);
+        next = changedMicros(old, item.change, currency, unit);
+      const rawMicros = changedMicros(old, item.change, currency);
+      // Preserve the original percent rational for truthful rounding warnings.
+      if (item.change.mode === "percent") {
+        const parts = item.change.percent.replace(/^-/, "").split("."),
+          p =
+            BigInt(parts[0]!) * 10000n +
+            BigInt((parts[1] ?? "").padEnd(4, "0")),
+          factor = 1000000n + (item.change.percent.startsWith("-") ? -p : p);
+        display.warnings.push(
+          ...moneyUnitWarnings(
+            (BigInt(old) * factor).toString(),
+            next,
+            unit,
+            "1000000",
+          ),
+        );
+      } else display.warnings.push(...moneyUnitWarnings(rawMicros, next, unit));
       if (old === next)
         fail(
           "google_stage2_noop",
@@ -471,8 +509,16 @@ export async function buildStage2Plan(
         read_query: q,
         response_key: key,
       };
-      display.before = { ...before, currency };
-      display.after = { ...operation.expected, currency };
+      display.before = {
+        ...before,
+        currency,
+        billable_unit_micros: unit.unit_micros,
+      };
+      display.after = {
+        ...operation.expected,
+        currency,
+        billable_unit_micros: unit.unit_micros,
+      };
       if (before.keyword) display.keyword = String(record(before.keyword).text);
       display.provider_operations = [operations.length];
       operations.push(operation);
@@ -627,6 +673,12 @@ export function stage2RollbackIntent(
   indices: number[],
   currency: string,
 ): Stage2Intent {
+  const constant = plan.checks.find(
+    (c) => c.query === currencyConstantQuery(currency),
+  );
+  const unit = constant
+    ? moneyUnitFromRows(currency, constant.rows)
+    : undefined;
   const items = indices.map((i) => {
     const op = plan.operations[i]!,
       original = plan.intent.items[op.row]!,
@@ -638,6 +690,11 @@ export function stage2RollbackIntent(
         "Inherited/zero override нельзя безопасно восстановить этим foundation; создайте отдельный supported preview.",
       );
     const n = BigInt(old);
+    if (unit && !alignedMoneyMicros(old, unit))
+      fail(
+        "rollback_unsupported",
+        "Прежняя сумма не выровнена по доказанной billable unit; exact rollback не обещается и не округляется скрыто.",
+      );
     return {
       ...original,
       change: {

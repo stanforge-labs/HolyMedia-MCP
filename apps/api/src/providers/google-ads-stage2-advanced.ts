@@ -5,6 +5,13 @@ import {
 } from "./google-ads-stage1.js";
 import { GoogleAdsWriteError } from "./google-ads-write.js";
 import {
+  resolveGoogleMoneyUnit,
+  quantizePositiveMicros,
+  moneyUnitWarnings,
+  alignedMoneyMicros,
+  type GoogleMoneyUnit,
+} from "./google-ads-money.js";
+import {
   buildStage2Plan,
   parseStage2Intent,
   stage2RollbackIntent,
@@ -194,6 +201,8 @@ function strategyPayload(
   strategy: Strategy,
   currency: string,
   portfolio: boolean,
+  unit: GoogleMoneyUnit,
+  warnings: string[],
 ) {
   const type = strategy.type,
     field = strategyFields[type],
@@ -233,10 +242,17 @@ function strategyPayload(
   ])
     if (strategy[input!] !== undefined) {
       const m = moneyInput(strategy[input!]);
-      value[output!] = currencyMicros(
+      const requested = currencyMicros(
         String(m.amount),
         String(m.currency),
         currency,
+      );
+      const rounded = quantizePositiveMicros(requested, unit);
+      value[output!] = rounded;
+      warnings.push(
+        ...moneyUnitWarnings(requested, rounded, unit).map(
+          (w) => `${input}: ${w}`,
+        ),
       );
     }
   for (const key of (strategy.clear_fields as string[]) ?? [])
@@ -586,9 +602,25 @@ function inverseParameters(
   before: ExtendedRow,
   payload: ReturnType<typeof strategyPayload>,
   currency: string,
+  unit: GoogleMoneyUnit,
 ): Strategy | undefined {
   const old = oldStrategy(before, currency);
   if (!old) return undefined;
+  for (const key of ["target_cpa", "cpc_floor", "cpc_ceiling"]) {
+    const money = old[key];
+    if (
+      money &&
+      !alignedMoneyMicros(
+        currencyMicros(
+          String(extRow(money).amount),
+          String(extRow(money).currency),
+          currency,
+        ),
+        unit,
+      )
+    )
+      return undefined;
+  }
   if ((before.biddingStrategyType ?? before.type) === payload.providerType) {
     const cleared = Object.entries(parameterFields)
       .filter(
@@ -664,6 +696,7 @@ export async function buildStage2AdvancedPlan(
   if (intent.action !== "stage2_advanced")
     return buildBulk(account, intent, read);
   const ctx = await extContext(account, read),
+    unit = await resolveGoogleMoneyUnit(ctx.currency, ctx.query),
     operations: ExtendedOperation[] = [],
     items: ExtendedPlan["items"] = [],
     inverse: ExtendedRow[] = [],
@@ -774,7 +807,7 @@ export async function buildStage2AdvancedPlan(
       let o: ExtendedOperation, revert: ExtendedRow | undefined;
       if (r.operation === "portfolio_create") {
         const s = parseStrategy(r.strategy),
-          p = strategyPayload(s, ctx.currency, true),
+          p = strategyPayload(s, ctx.currency, true, unit, item.warnings),
           q =
             portfolioSelect +
             ` WHERE bidding_strategy.name = ${extQuote(String(r.name))}`;
@@ -806,8 +839,8 @@ export async function buildStage2AdvancedPlan(
       } else if (r.operation === "portfolio_update") {
         const { q, b } = await portfolio(String(r.strategy_id)),
           s = parseStrategy(r.strategy),
-          p = strategyPayload(s, ctx.currency, true),
-          old = inverseParameters(b, p, ctx.currency);
+          p = strategyPayload(s, ctx.currency, true, unit, item.warnings),
+          old = inverseParameters(b, p, ctx.currency, unit);
         if (String(b.type) !== p.providerType)
           extFail(
             "google_stage2_portfolio_type_immutable",
@@ -1179,7 +1212,7 @@ export async function buildStage2AdvancedPlan(
               "Campaign не использует portfolio; detach не создаётся.",
             );
           const s = parseStrategy(r.strategy),
-            p = strategyPayload(s, ctx.currency, false);
+            p = strategyPayload(s, ctx.currency, false, unit, item.warnings);
           await goals(c, s);
           if (
             c.biddingStrategyType === p.providerType &&
@@ -1236,6 +1269,7 @@ export async function buildStage2AdvancedPlan(
               providerType: String(expected.biddingStrategyType),
             },
             ctx.currency,
+            unit,
           );
           if (old)
             revert = {
