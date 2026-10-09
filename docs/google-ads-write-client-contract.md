@@ -12,7 +12,8 @@ Original source: `ТЗ запись в Google Ads для HolyMedia MCP.docx`, SH
 
 ## Required integration (common service/controller ownership)
 
-These helpers are pure descriptions/translations, not routes or authentication. Common runtime integration must:
+The pure helpers describe/translate schemas; the current common service/controller
+integrates them with the stock private routes and authentication. The integrated contract is:
 
 1. Authenticate private MCP/OpenAPI/REST with the existing principal, workspace/scope checks and rate limits. Public MCP stays read-only; no new public write exposure or flags.
 2. Keep the existing Meta schema/handler behavior in a **disjoint** provider branch. A legacy unbounded Meta fallback must explicitly exclude `GOOGLE_ADS`; Google is never inferred from IDs. Narrow generic Google profile schemas where the registry currently has a Meta `oneOf` branch.
@@ -37,7 +38,7 @@ These helpers are pure descriptions/translations, not routes or authentication. 
 
 Unit/mock tests cover strict aliases, provider requirement, closed fields, parent IDs, no hidden changes, profile bounds/uniqueness, unknown profiles, annotations, OpenAPI path/schema identity, authenticated documentation and origin validation. No live Google provider calls or mutations are part of this package.
 
-Q/R cross-client Google write acceptance and S human consent remain **NOT LIVE / pending dedicated acceptance**. Generated schemas/OpenAPI and mocks are not evidence that ChatGPT, Claude, Gemini, Cursor, VS Code, GPT Actions, n8n or Make have actually completed a write. Complete common runtime integration plus negative auth/profile/approval HTTP regression before claiming the route gate implemented end-to-end.
+Q/R cross-client Google write acceptance and S human consent remain **NOT LIVE / pending dedicated acceptance**. Generated schemas/OpenAPI and mocks are not evidence that ChatGPT, Claude, Gemini, Cursor, VS Code, GPT Actions, n8n or Make have actually completed a write. Common route/profile/native-principal integration and negative auth/approval HTTP regressions are implemented and mock-tested; real client connectivity and consent remain separate acceptance gates.
 
 Primary format reference: [OpenAPI Specification 3.1.1](https://spec.openapis.org/oas/v3.1.1.html). OpenAPI 3.1 supports JSON Schema and HTTP Bearer security; all request schemas originate from the existing authorized MCP registry.
 
@@ -55,13 +56,13 @@ The bounded pure validator evaluates trusted schema type/enum/const, object clos
 
 ## Honest READ capability gaps
 
-| Tool/profile area                | Actual source contract                                     | Not claimed                                                          |
-| -------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------- |
-| `get_campaign_structure`         | Normalized campaign list / selected campaign row           | Complete ad-group, keyword, RSA, criterion or asset structure        |
-| `get_account_object`             | Account summary                                            | Arbitrary entity/resource retrieval                                  |
-| `list_account_objects`           | Campaign listing                                           | General provider object catalog or `object_type` filter              |
-| `get_google_ads_detailed_report` | `campaign`, `campaigns`, `campaign_performance` only       | Ad-group/ad/asset performance reports                                |
-| Assets/links/UTM catalog         | No implemented general Google READ catalog in this profile | New schema fields, arbitrary GAQL, automated audit links/UTM success |
-| Cross-client Q/R/S               | Local registry/schema/mock evidence only                   | Real ChatGPT/second-client write or live human-consent acceptance    |
+| Tool/profile area                | Actual source contract                                                                        | Not claimed                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `get_campaign_structure`         | Normalized campaign list / selected campaign row                                              | Complete ad-group, keyword, RSA, criterion or asset structure                         |
+| `get_account_object`             | Account summary                                                                               | Arbitrary entity/resource retrieval                                                   |
+| `list_account_objects`           | Campaign listing                                                                              | General provider object catalog or `object_type` filter                               |
+| `get_google_ads_detailed_report` | `campaign`, `campaigns`, `campaign_performance` only                                          | Ad-group/ad/asset performance reports                                                 |
+| Assets/links/UTM catalog         | Bounded owned `get_tracking_specs` / `audit_links_and_utms`; shared preview inheritance audit | General asset catalog, arbitrary GAQL, live landing-page or serving-expansion success |
+| Cross-client Q/R/S               | Local registry/schema/mock evidence only                                                      | Real ChatGPT/second-client write or live human-consent acceptance                     |
 
 Source basis remains original PPC paragraphs P47–53 (complete client schemas, bounded profile, cross-client portability, exact private REST contract). These gaps must be tracked separately rather than inventing accepted arguments or declaring original READ catalog scope complete. Primary assertion vocabulary: [JSON Schema 2020-12 validation](https://json-schema.org/draft/2020-12/json-schema-validation).
