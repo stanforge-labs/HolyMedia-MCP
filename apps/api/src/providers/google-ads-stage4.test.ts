@@ -94,6 +94,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     groupAd,
     asset,
     assetGroup,
+    assetGroupLinks: [] as Record<string, unknown>[],
     ...overrides,
   };
   return vi.fn(async (q: string): Promise<Record<string, unknown>[]> => {
@@ -107,6 +108,8 @@ function fixture(overrides: Record<string, unknown> = {}) {
     if (q.includes(" FROM campaign ")) return [{ campaign: data.campaign }];
     if (q.includes(" FROM ad_group ")) return [{ adGroup: data.group }];
     if (q.includes(" FROM ad_group_ad ")) return [{ adGroupAd: data.groupAd }];
+    if (q.includes(" FROM asset_group_asset"))
+      return data.assetGroupLinks as Record<string, unknown>[];
     if (q.includes(" FROM asset_group_signal")) return [];
     if (q.includes(" FROM asset_group "))
       return [{ assetGroup: data.assetGroup }];
@@ -130,6 +133,298 @@ const intent = (action: string, items: Record<string, unknown>[]) => ({
   items,
 });
 describe("Stage 4 typed provider plans — mock only", () => {
+  it("campaign PAUSE cannot promise inverse that bypasses resume checklist", async () => {
+    const plan = await buildStage4Plan(
+      account,
+      intent("campaign_update", [{ campaign_id: "1", status: "PAUSED" }]),
+      fixture({ campaign: { ...campaign, status: "ENABLED" } }),
+    );
+    expect(plan.operations[0]!.expected.status).toBe("PAUSED");
+    expect(plan.inverse_intent).toBeUndefined();
+  });
+  it.each([
+    "HEADLINE",
+    "LONG_HEADLINE",
+    "DESCRIPTION",
+    "MARKETING_IMAGE",
+    "SQUARE_MARKETING_IMAGE",
+  ])(
+    "PMax existing %s reference creates PAUSED exact association",
+    async (fieldType) => {
+      const text = ["HEADLINE", "LONG_HEADLINE", "DESCRIPTION"].includes(
+          fieldType,
+        ),
+        a = text
+          ? {
+              resourceName: asset.resourceName,
+              type: "TEXT",
+              textAsset: { text: "Existing supplied copy" },
+            }
+          : {
+              ...asset,
+              imageAsset: {
+                fullSize: {
+                  widthPixels: 1200,
+                  heightPixels: fieldType === "MARKETING_IMAGE" ? 628 : 1200,
+                },
+              },
+            };
+      const plan = await buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [
+          {
+            campaign_id: "1",
+            asset_group_id: "5",
+            asset_id: "4",
+            field_type: fieldType,
+          },
+        ]),
+        fixture({
+          campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+          asset: a,
+        }),
+      );
+      expect(plan.operations).toHaveLength(1);
+      expect(plan.operations[0]!.kind).toBe("assetGroupAssets");
+      expect(plan.operations[0]!.fields).toEqual({
+        assetGroup: assetGroup.resourceName,
+        asset: asset.resourceName,
+        fieldType,
+        status: "PAUSED",
+      });
+      expect(extendedProviderOperation(plan.operations[0]!)).toEqual({
+        assetGroupAssetOperation: { create: plan.operations[0]!.fields },
+      });
+      expect(plan.inverse_intent).toBeUndefined();
+      expect(
+        plan.checks.some((c) => c.query.includes("FROM asset_group_asset")),
+      ).toBe(true);
+    },
+  );
+  it("PMax existing association duplicates, parent mismatch and foreign references rejected", async () => {
+    const row = {
+        campaign_id: "1",
+        asset_group_id: "5",
+        asset_id: "4",
+        field_type: "HEADLINE",
+      },
+      link = {
+        resourceName: `${prefix}/assetGroupAssets/5~4~HEADLINE`,
+        assetGroup: assetGroup.resourceName,
+        asset: asset.resourceName,
+        fieldType: "HEADLINE",
+        status: "ENABLED",
+      },
+      config = {
+        campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+        asset: {
+          resourceName: asset.resourceName,
+          type: "TEXT",
+          textAsset: { text: "Test" },
+        },
+      };
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({ ...config, assetGroupLinks: [{ assetGroupAsset: link }] }),
+      ),
+    ).rejects.toThrow(/уже существует/);
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({
+          ...config,
+          assetGroupLinks: [
+            {
+              assetGroupAsset: {
+                ...link,
+                assetGroup: `${prefix}/assetGroups/99`,
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/parent mismatch/);
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({
+          ...config,
+          assetGroupLinks: [
+            {
+              assetGroupAsset: {
+                ...link,
+                asset: "customers/9999999999/assets/4",
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/не принадлежит/);
+  });
+  it("PMax TEXT limits and wrong asset type rejected before mutation", async () => {
+    const row = {
+        campaign_id: "1",
+        asset_group_id: "5",
+        asset_id: "4",
+        field_type: "HEADLINE",
+      },
+      config = {
+        campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+      };
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({
+          ...config,
+          asset: {
+            resourceName: asset.resourceName,
+            type: "TEXT",
+            textAsset: { text: "x".repeat(31) },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/максимум/);
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture(config),
+      ),
+    ).rejects.toThrow(/Тип Google asset/);
+  });
+  it("PMax square metadata and minimum image dimensions guarded", async () => {
+    const row = {
+        campaign_id: "1",
+        asset_group_id: "5",
+        asset_id: "4",
+        field_type: "SQUARE_MARKETING_IMAGE",
+      },
+      config = {
+        campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+      };
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({
+          ...config,
+          asset: {
+            ...asset,
+            imageAsset: { fullSize: { widthPixels: 1200, heightPixels: 628 } },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/квадрат/);
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [
+          { ...row, field_type: "MARKETING_IMAGE" },
+        ]),
+        fixture({
+          ...config,
+          asset: {
+            ...asset,
+            imageAsset: { fullSize: { widthPixels: 599, heightPixels: 314 } },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/минимум/);
+  });
+  it("PMax active parent profile and brand role rejected without hidden activation", async () => {
+    const row = {
+      campaign_id: "1",
+      asset_group_id: "5",
+      asset_id: "4",
+      field_type: "SQUARE_MARKETING_IMAGE",
+    };
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({
+          campaign: {
+            ...campaign,
+            status: "ENABLED",
+            advertisingChannelType: "PERFORMANCE_MAX",
+          },
+          assetGroup: { ...assetGroup, status: "ENABLED" },
+        }),
+      ),
+    ).rejects.toThrow(/PAUSED/);
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [{ ...row, field_type: "BUSINESS_NAME" }]),
+        fixture({
+          campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+        }),
+      ),
+    ).rejects.toThrow(/Brand logos/);
+  });
+  it("PMax field type maximum and duplicated batch cannot be truncated", async () => {
+    const row = {
+        campaign_id: "1",
+        asset_group_id: "5",
+        asset_id: "4",
+        field_type: "HEADLINE",
+      },
+      config = {
+        campaign: { ...campaign, advertisingChannelType: "PERFORMANCE_MAX" },
+        asset: {
+          resourceName: asset.resourceName,
+          type: "TEXT",
+          textAsset: { text: "Test" },
+        },
+      };
+    const links = Array.from({ length: 15 }, (_, i) => ({
+      assetGroupAsset: {
+        resourceName: `${prefix}/assetGroupAssets/5~${100 + i}~HEADLINE`,
+        assetGroup: assetGroup.resourceName,
+        asset: `${prefix}/assets/${100 + i}`,
+        fieldType: "HEADLINE",
+        status: "ENABLED",
+      },
+    }));
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row]),
+        fixture({ ...config, assetGroupLinks: links }),
+      ),
+    ).rejects.toThrow(/asset limit/);
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_attach", [row, row]),
+        fixture(config),
+      ),
+    ).rejects.toThrow(/Duplicate/);
+  });
+  it("PMax detach refuses before provider read until minimum remaining graph proven", async () => {
+    const read = fixture();
+    await expect(
+      buildStage4Plan(
+        account,
+        intent("pmax_asset_detach", [
+          {
+            campaign_id: "1",
+            asset_group_id: "5",
+            asset_id: "4",
+            field_type: "HEADLINE",
+            acknowledge_irreversible: true,
+          },
+        ]),
+        read,
+      ),
+    ).rejects.toThrow(/minimum remaining/);
+    expect(read).not.toHaveBeenCalled();
+  });
   it("wide-character RSA and asset limits fail before any reader", async () => {
     for (const [action, items] of [
       [
