@@ -111,7 +111,11 @@ test("ciphertext/version/purpose/public tampering rejects with redacted errors",
     (e) =>
       (e.public.preview.preview_id = "00000000-0000-0000-0000-000000000000"),
     (e) => (e.public.approval_url = "synthetic"),
-    (e) => (e.ciphertext = e.ciphertext.slice(0, -2) + "ZZ"),
+    (e) => {
+      const parts = e.ciphertext.split(".");
+      parts[3] = (parts[3][0] === "A" ? "B" : "A") + parts[3].slice(1);
+      e.ciphertext = parts.join(".");
+    },
     (e) => (e.extra = true),
   ]) {
     const e = structuredClone(sealed);
@@ -184,6 +188,10 @@ test("strict private file read, encrypted roundtrip, old expired plaintext opt-i
     return;
   }
   assert.deepEqual(await readAcceptanceContext(file, { vault }), payload());
+  writeFileSync(file, '{"service_token":"synthetic-broken-json');
+  await assert.rejects(readAcceptanceContext(file, { vault }), {
+    message: "stage234_context_file_json_invalid",
+  });
   const old = payload();
   old.preview.expires_at = "2000-01-01T00:00:00.000Z";
   writeFileSync(file, JSON.stringify(old));
