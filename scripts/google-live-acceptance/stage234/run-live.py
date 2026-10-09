@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path('/opt/holymedia-google-acceptance')
 PROJECT = 'holymedia-google-acceptance'
-NETWORK = PROJECT + '_default'
+NETWORK = PROJECT + '_stage234'
 
 
 def require(condition, code):
@@ -83,6 +83,7 @@ def inspect_ready(head, image):
     require(all(values.get(key) == 'false' for key in ['PUBLIC_MCP_WRITE_SCOPE_ENABLED', 'PUBLIC_MCP_CONTROLLED_WRITE_ENABLED']), 'stage234_public_write_must_remain_off')
     network = json.loads(capture(['docker', 'network', 'inspect', NETWORK]))[0]
     require(network.get('Labels', {}).get('com.docker.compose.project') == PROJECT, 'stage234_acceptance_network_identity_invalid')
+    require(network.get('Labels', {}).get('org.holymedia.acceptance-purpose') == 'stage234', 'stage234_acceptance_network_purpose_invalid')
     require(network.get('Containers'), 'stage234_acceptance_network_empty')
     for identity in network['Containers']:
         container = json.loads(capture(['docker', 'inspect', identity]))[0]
@@ -100,6 +101,46 @@ def inspect_ready(head, image):
     require(image in descriptor.get('RepoDigests', []), 'stage234_image_digest_not_loaded')
     require((descriptor.get('Config', {}).get('Labels') or {}).get('org.opencontainers.image.revision') == head, 'stage234_image_source_revision_mismatch')
     return hashlib.sha256(env_file.read_bytes()).hexdigest()
+
+
+def assert_dependency(container, service):
+    labels = container.get('Config', {}).get('Labels') or {}
+    require(labels.get('com.docker.compose.project') == PROJECT and labels.get('com.docker.compose.service') == service,
+            'stage234_dependency_identity_invalid')
+    require(container.get('State', {}).get('Running') is True and container.get('State', {}).get('Health', {}).get('Status') == 'healthy',
+            'stage234_dependency_unhealthy')
+    require(container.get('Name') == '/' + PROJECT + '-' + service + '-1', 'stage234_dependency_name_invalid')
+    for volume in container.get('Mounts', []):
+        require(volume.get('Type') == 'volume' and str(volume.get('Name', '')).startswith(PROJECT + '_'), 'stage234_dependency_foreign_volume')
+
+
+def prepare_network():
+    # Secondary network only. Never recreates/restarts/migrates an existing DB,
+    # Redis, API or gateway; the old acceptance approval project stays untouched.
+    before = production_state()
+    dependencies = []
+    for service in ['postgres', 'redis']:
+        container = json.loads(capture(['docker', 'inspect', PROJECT + '-' + service + '-1']))[0]
+        assert_dependency(container, service)
+        dependencies.append((service, container))
+    probe = subprocess.run(['docker', 'network', 'inspect', NETWORK], capture_output=True, text=True, timeout=30)
+    if probe.returncode != 0:
+        capture(['docker', 'network', 'create', '--label', 'com.docker.compose.project=' + PROJECT,
+                 '--label', 'org.holymedia.acceptance-purpose=stage234', NETWORK])
+    network = json.loads(capture(['docker', 'network', 'inspect', NETWORK]))[0]
+    labels = network.get('Labels') or {}
+    require(labels.get('com.docker.compose.project') == PROJECT and labels.get('org.holymedia.acceptance-purpose') == 'stage234',
+            'stage234_acceptance_network_identity_invalid')
+    expected = {item['Id'] for _, item in dependencies}
+    require(set(network.get('Containers') or {}).issubset(expected), 'stage234_foreign_container_on_network')
+    for service, container in dependencies:
+        if container['Id'] not in (network.get('Containers') or {}):
+            capture(['docker', 'network', 'connect', '--alias', service, NETWORK, container['Id']])
+    actual = json.loads(capture(['docker', 'network', 'inspect', NETWORK]))[0]
+    require(set(actual.get('Containers') or {}) == expected, 'stage234_acceptance_dependencies_incomplete')
+    require(production_state() == before, 'stage234_production_state_changed_stop')
+    print(json.dumps({'result': 'ISOLATED_STAGE234_NETWORK_READY', 'network': NETWORK, 'dependencies': ['postgres', 'redis'],
+                      'existing_services_restarted': False, 'provider_reads': 0, 'validate_only': 0, 'real_writes': 0}))
 
 
 def command(image, head, run_id, directory, hold=False, env_file=None):
@@ -137,9 +178,13 @@ def main():
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--check-only', action='store_true')
     parser.add_argument('--hold-api', action='store_true', help='Keep exact API alive; root must prepare stock human approval gateway separately.')
+    parser.add_argument('--prepare-network', action='store_true', help='Prepare a secondary isolated acceptance-only DB/Redis network; no provider call.')
     options = parser.parse_args()
     validate_options(options.head, options.image, options.run_id)
     require(hasattr(os, 'geteuid') and os.geteuid() == 0, 'stage234_vps_sudo_required')
+    if options.prepare_network:
+        prepare_network()
+        return
     production = production_state()
     env_hash = inspect_ready(options.head, options.image)
     if options.check_only:

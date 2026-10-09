@@ -319,6 +319,18 @@ export async function runLivePreview() {
       enabled[0].externalAccountId !== target.customer
     )
       fail("stage234_foreign_enabled_account_invalid");
+    if (
+      (await db.client.mcpPreview.count({
+        where: {
+          workspaceId: account.workspaceId,
+          provider: "GOOGLE_ADS",
+          consumedAt: null,
+          cancelledAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      })) !== 0
+    )
+      fail("stage234_another_pending_preview_exists");
     const historicalHash = digest({ ...baseline, account: undefined }),
       historicalAudit = await db.client.auditEvent.findMany({
         where: { targetId: baseline.id },

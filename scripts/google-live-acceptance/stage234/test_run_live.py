@@ -18,7 +18,7 @@ class LauncherTests(unittest.TestCase):
     def test_no_product_bind_or_foreign_network_ports(self):
         args = runner.command('ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:' + 'b' * 64, 'a' * 40, '20261009T120000Z-test', Path('/opt/holymedia-google-acceptance/harness/stage234'), True)
         text = ' '.join(args)
-        self.assertIn('holymedia-google-acceptance_default', text)
+        self.assertIn('holymedia-google-acceptance_stage234', text)
         self.assertIn('127.0.0.1:4402:4001', text)
         self.assertNotIn('/workspace/apps/api/dist:', text)
         self.assertNotIn('--volumes-from', text)
@@ -38,6 +38,20 @@ class LauncherTests(unittest.TestCase):
 
     def test_report_drops_protected_context_and_approval_nonce(self):
         self.assertEqual(runner.safe_report({'result': 'PASS', 'preview_id': 'safe', 'service_token': 'synthetic', 'approval_url': 'synthetic', 'real_writes': 0}), {'result': 'PASS', 'preview_id': 'safe', 'real_writes': 0})
+
+    def test_secondary_network_dependency_proof_does_not_accept_other_project_or_volumes(self):
+        import copy
+        good = {'Name': '/holymedia-google-acceptance-postgres-1',
+                'Config': {'Labels': {'com.docker.compose.project': runner.PROJECT, 'com.docker.compose.service': 'postgres'}},
+                'State': {'Running': True, 'Health': {'Status': 'healthy'}},
+                'Mounts': [{'Type': 'volume', 'Name': 'holymedia-google-acceptance_pgdata'}]}
+        runner.assert_dependency(good, 'postgres')
+        for key in ['project', 'volume', 'health']:
+            bad = copy.deepcopy(good)
+            if key == 'project': bad['Config']['Labels']['com.docker.compose.project'] = 'holymedia-v2'
+            if key == 'volume': bad['Mounts'][0]['Name'] = 'holymedia-v2_pgdata'
+            if key == 'health': bad['State']['Health']['Status'] = 'unhealthy'
+            with self.assertRaises(RuntimeError): runner.assert_dependency(bad, 'postgres')
 
 
 if __name__ == '__main__':
