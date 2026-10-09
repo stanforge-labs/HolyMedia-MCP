@@ -607,10 +607,13 @@ PMax creation, complete group creation on existing PAUSED PMax, branding-aware m
 asset graphs, safe replacement/detach, signals/themes and v24 brand/negative editing.
 Retail/feed-specific PMax profiles and new brand-registry entries remain outside the profile.
 Stage 4 tracking set/typed empty clear and captured-value inverse are implemented;
-integration with existing READ link/UTM audit remains REQUIRED GAP (P244).
+P244 READ link/UTM audit is integrated for Google: bounded owned five-level READ report
+and the same audit algorithm for tracking preview exact local/parent BEFORE/AFTER.
+Downstream URLs, serving expansion and landing reachability are not claimed as checked.
 Clone remains the strict partial profile above. These local boundaries must not be
-reported as globally unsupported Google API capabilities. Native write OAuth and
-actual cross-client Q/R/S remain mandatory gates, not covered by REST/mock success.
+reported as globally unsupported Google API capabilities. Native private write OAuth
+is implemented/mock-tested without ServiceToken substitution; actual cross-client
+Q/R/S remain mandatory LIVE gates, not covered by REST/mock success.
 
 Acceptance G/H/I/J/K/L/N equivalents are mock/disposable only. New live TEST
 acceptance requires separate authorization and human approval. Q/R actual MCP

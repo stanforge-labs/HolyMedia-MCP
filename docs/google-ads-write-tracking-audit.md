@@ -40,17 +40,22 @@ redacted, not logged/echoed in warnings. The helper only emits selected scalar f
 typed structured warnings; it does not return arbitrary provider payloads. Raw provider
 data is not changed. No tokens, OAuth code/state, headers or cookies are evidence.
 
-Integration exports:
+Integrated exports and routing:
 
 - `GOOGLE_TRACKING_AUDIT_TOOLS`, `trackingAuditToolSchema(name)`,
   `trackingAuditToolArguments(name,args)` in `mcp-google-tracking-audit-schema.ts`.
 - Schema helper returns `{ action: 'specs' | 'audit', options }`.
-- Add adapter `trackingAudit(context,action,options)` using the existing private
+- Adapter `trackingAudit(context,action,options)` uses the existing private
   `searchStream` and `contextLoginCustomerId`; choose the exported READ helper.
-- MCP routing must use existing selected workspace/account ownership, descriptions and
-  readOnlyHint, not change public write flags. Before Stage4 tracking preview, consume this
-  READ audit as factual BEFORE evidence alongside the existing proposed-value validator;
-  it does not authorize commit or replace immutable/stale checks.
+- Google MCP routing uses existing selected workspace/account ownership and closed
+  schemas/readOnlyHint; it does not change public write flags. Stage4 tracking preview
+  consumes the same audit algorithm for factual BEFORE/proposed AFTER over the exact
+  local account/campaign/group and parent fields. Parent READs are frozen in stale checks;
+  downstream child URL inventory is explicitly NOT_READ, not a fabricated full URL audit.
+  A batch AFTER assumes all requested ancestor operations succeed; partial_failure=true
+  still produces actual per-row results and reread. Audit does not authorize a commit.
+- `safeGoogleTrackingSummary` composes with media redaction for browser/MCP/journal
+  copies only. Raw stored plan, digest, inverse and provider payload remain immutable.
 
 Tests cover five-query identity/masks, independent inheritance, no served-ad guess,
 camelCase/snake_case responses, typed schemas/limits, foreign identity, missing/truncated

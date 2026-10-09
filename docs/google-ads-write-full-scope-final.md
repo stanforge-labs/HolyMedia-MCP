@@ -12,10 +12,10 @@ SHA-256: `51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0`.
 [original-tz-source-20261009.json](../artifacts/google-full-scope/original-tz-source-20261009.json).
 
 Аудирована ветка `codex/google-ads-write-full-scope-final`, HEAD
-`6fb30acd6249768d738a1f20b013a8368b4c3950`.
-Root дополнительно готовит normalizer пустых protobuf tracking defaults; на момент
-этой сверки он не закоммичен. Документ не выдаёт этот pending diff за отдельный релиз.
-Native MCP OAuth write identity также находится в отдельной реализации, ещё не в этой базе.
+`ba0d2059be96624e4d372eb4e548f6716402cd9d` (revision до обновления этой матрицы).
+Интегрированы native private OAuth, закрытые profile schemas, tracking clear/default
+verification и P244 READ-аудит. Raw provider snapshots/immutable payload не редактируются
+ради presentation: media и URL secrets redacted только в response/browser/journal copies.
 
 Построчная матрица 62 областей требований, provider objects, source/test paths и evidence:
 [requirements-matrix-20261009.json](../artifacts/google-full-scope/requirements-matrix-20261009.json).
@@ -173,10 +173,13 @@ valid value либо typed empty clear, никогда не подставляе
 value даёт explicit unsupported inverse. Root normalizer должен принимать omitted empty
 protobuf default только для доказанного selected leaf, не менять raw reread.
 
-**P244 REQUIREDGAP:** existing READ `audit_links_and_utms` / `get_tracking_specs` помечены
-COMPAT_UNAVAILABLE_READ_TOOLS в V2; Stage 4 собственная URL/UTM validation не вызывает
-READ link/UTM audit. Нужна реализация/подключение этого аудита, не просто переименование
-validation в «audit PASS».
+**P244 implemented/mock-tested:** Google `audit_links_and_utms` / `get_tracking_specs`
+подключены к штатному owned ProviderService READ context и private MCP profile. Пять уровней
+tracking имеют fixed bounded GAQL, safe redaction и независимое наследование template/suffix.
+Tracking preview использует тот же audit algorithm для BEFORE/AFTER exact local/parent
+fields; parent snapshots frozen для stale checks. Downstream child URL inventory и landing
+reachability не проверяются внутри preview, serving URL/ad context не угадывается.
+См. [tracking audit](google-ads-write-tracking-audit.md).
 
 ## PMax capability: новый код, не исторический LIVE
 
@@ -207,10 +210,11 @@ REST/OpenAPI fallback реализованы и имеют contract/runtime test
 не следует путать с внутренним controller route. Tool profile ограничивает registry,
 не заменяет authentication/allowlist.
 
-На audited baseline P46 native OAuth Google write identity — REQUIREDGAP/in progress:
-scoped service identity сейчас работает, public read OAuth не равен authenticated native write.
-Обязательная OAuth-to-owner/session/audit mapping должна быть интегрирована и проверена
-без глобального включения Public writes. Final parent checkpoint обновит статус после landing.
+P46 native OAuth Google write identity интегрирован и stock mock-tested: stable
+user/client/grant/resource binding, fresh scopes/role/revocation, persisted human approval
+session/audit и immutable CAS без ServiceToken подмены. Private issuer требует нового
+explicit write consent; existing read-only OAuth не повышается автоматически. Public writes
+остаются OFF. См. [native OAuth](google-ads-write-native-oauth.md).
 
 Q — actual ChatGPT, R — actual second MCP client, S — explicit client consent before commit
 не закрываются REST/mock tests. Q/R BLOCKED до подключения клиентов; stock human approval
@@ -226,7 +230,7 @@ risk evidence: [moderate-security-risk-assessment-20261009.json](../artifacts/go
 или production approval этого doc-аудита.
 
 До release: final integrated Linux CI/full tests/format/lint/typecheck/build/Prisma/secret/deps;
-native OAuth mapping; link/UTM READ audit integration; согласованный полный clone profile;
+реальные native OAuth/client gates; согласованный полный clone profile;
 новый TEST live acceptance и реальные Q/R/S. Разделять local code gaps, live gate и Google
 eligibility. Не маркировать недоступность TEST данных как отсутствие API capability.
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "audit_date": "2026-10-09",
   "audited_branch": "codex/google-ads-write-full-scope-final",
-  "audited_head": "6fb30acd6249768d738a1f20b013a8368b4c3950",
+  "audited_head": "ba0d2059be96624e4d372eb4e548f6716402cd9d",
   "source": {
     "artifact": "artifacts/google-full-scope/original-tz-source-20261009.json",
     "filename": "ТЗ запись в Google Ads для HolyMedia MCP.docx",
@@ -46,7 +46,7 @@
       "production_changed": false,
       "main_changed": false
     },
-    "pending_root_work": "Tracking empty protobuf-default comparison normalization is uncommitted root-only work at audit; no claim of product test execution by this documentation audit.",
+    "integrated_root_work": "Native OAuth, closed client schemas, tracking clear/default verification and READ audit are integrated and stock mock-tested. Exact final hosted CI/live checkpoint is separate; no mock result is promoted to LIVE.",
     "quality": "Use final root quality/CI artifact after integration. This doc audit verifies references/JSON/format/secrets only; historic security baseline preserved."
   },
   "requirements": [
@@ -229,16 +229,20 @@
       "original_paragraphs": [46],
       "requirement": "OAuth2.1 MCP write identity for each employee, authenticated approval/audit ownership without URL key",
       "provider_objects": ["OAuthAuthorization", "McpPreview"],
-      "classification": "REQUIREDGAP",
+      "classification": "DONE+LIVEPENDING",
       "implementation": [
         "apps/api/src/mcp/mcp.controller.ts",
         "apps/api/src/mcp/oauth-authorization.service.ts",
         "apps/api/src/mcp/mcp-preview.service.ts"
       ],
-      "tests": ["apps/api/src/mcp/oauth-authorization.integration.test.ts"],
-      "live_status": "PENDING_AGENT_INTEGRATION",
+      "tests": [
+        "apps/api/src/mcp/oauth-authorization.integration.test.ts",
+        "apps/api/src/mcp/google-native-oauth.integration.test.ts",
+        "apps/api/src/mcp/oauth-authorization.service.test.ts"
+      ],
+      "live_status": "PRIVATE_NATIVE_CROSS_CLIENT_PENDING",
       "remaining_limits": [
-        "At audited 6fb30ac, private controlled-write principal is scoped service identity; native OAuth mapping to equivalent Google write approval identity is in progress in independent branch. Existing public read OAuth does not satisfy write scope."
+        "Private native OAuth mapping is implemented; real clients need new explicit private-resource write consent and Q/R/S LIVE evidence. Public read OAuth is not a write scope."
       ]
     },
     {
@@ -782,16 +786,22 @@
       "original_paragraphs": [244],
       "requirement": "Compare tracking changes against existing READ link/UTM audit",
       "provider_objects": ["READ link/UTM audit"],
-      "classification": "REQUIREDGAP",
+      "classification": "DONE+LIVEPENDING",
       "implementation": [
         "apps/api/src/mcp/mcp.service.ts",
-        "apps/api/src/providers/google-ads-stage4.ts"
+        "apps/api/src/providers/google-ads-stage4.ts",
+        "apps/api/src/providers/google-ads-tracking-audit.ts"
       ],
-      "tests": ["apps/api/src/providers/google-ads-stage4.test.ts"],
-      "live_status": "NOT_IMPLEMENTED",
+      "tests": [
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/providers/google-ads-tracking-audit-preview.test.ts",
+        "apps/api/src/providers/google-ads-tracking-audit.test.ts",
+        "apps/api/src/mcp/google-tracking-audit-runtime.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_READ_PROFILE",
       "remaining_limits": [
-        "audit_links_and_utms and get_tracking_specs are COMPAT_UNAVAILABLE_READ_TOOLS in V2 at audited baseline.",
-        "Stage4 own URL/UTM checks are implemented but are not P244 READ-audit integration."
+        "Google READ tracking tools reuse owned provider context; legacy unsupported providers are unchanged.",
+        "Preview audit covers exact local/parent fields with frozen snapshots, not downstream child URLs or landing reachability. Served ad is never guessed."
       ]
     },
     {
