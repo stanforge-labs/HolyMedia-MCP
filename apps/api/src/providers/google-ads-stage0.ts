@@ -85,7 +85,7 @@ const resources = {
     "campaign",
     "campaign",
     "campaigns",
-    "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.campaign_budget, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type, campaign.start_date_time, campaign.end_date_time, campaign.final_url_suffix, campaign.tracking_url_template",
+    "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.campaign_budget, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type, campaign.start_date_time, campaign.end_date_time, campaign.final_url_suffix, campaign.tracking_url_template, campaign.url_custom_parameters",
   ],
   campaignCriterion: [
     "campaign_criterion",
@@ -97,19 +97,19 @@ const resources = {
     "ad_group",
     "adGroup",
     "adGroups",
-    "ad_group.resource_name, ad_group.id, ad_group.name, ad_group.campaign, ad_group.status, ad_group.type, ad_group.cpc_bid_micros",
+    "ad_group.resource_name, ad_group.id, ad_group.name, ad_group.campaign, ad_group.status, ad_group.type, ad_group.cpc_bid_micros, ad_group.tracking_url_template, ad_group.final_url_suffix, ad_group.url_custom_parameters",
   ],
   adGroupCriterion: [
     "ad_group_criterion",
     "adGroupCriterion",
     "adGroupCriteria",
-    "ad_group_criterion.resource_name, ad_group_criterion.ad_group, ad_group_criterion.status, ad_group_criterion.negative, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.final_urls, ad_group_criterion.cpc_bid_micros",
+    "ad_group_criterion.resource_name, ad_group_criterion.ad_group, ad_group_criterion.status, ad_group_criterion.negative, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.final_urls, ad_group_criterion.cpc_bid_micros, ad_group_criterion.tracking_url_template, ad_group_criterion.final_url_suffix, ad_group_criterion.url_custom_parameters, ad_group_criterion.final_mobile_urls",
   ],
   adGroupAd: [
     "ad_group_ad",
     "adGroupAd",
     "adGroupAds",
-    "ad_group_ad.resource_name, ad_group_ad.ad_group, ad_group_ad.status, ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status, ad_group_ad.policy_summary.policy_topic_entries",
+    "ad_group_ad.resource_name, ad_group_ad.ad_group, ad_group_ad.status, ad_group_ad.ad.final_urls, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group_ad.ad.responsive_search_ad.path1, ad_group_ad.ad.responsive_search_ad.path2, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status, ad_group_ad.policy_summary.policy_topic_entries, ad_group_ad.ad.tracking_url_template, ad_group_ad.ad.final_url_suffix, ad_group_ad.ad.url_custom_parameters, ad_group_ad.ad.final_mobile_urls",
   ],
   asset: [
     "asset",
@@ -1243,7 +1243,9 @@ function contains(actual: unknown, expected: unknown): boolean {
     );
   if (expected && typeof expected === "object")
     return Object.entries(expected).every(([k, v]) =>
-      contains(row(actual)[k], v),
+      k === "urlCustomParameters" && Array.isArray(v)
+        ? cloneCustomParametersMatch(row(actual)[k], v)
+        : contains(row(actual)[k], v),
     );
   if (expected === false) return actual === undefined || actual === false;
   if (expected === 0) return actual === undefined || actual === 0;
@@ -1876,6 +1878,106 @@ const defaultDeviceKinds = {
 const neutralModifier = (value: unknown) => value === undefined || value === 1;
 const defaultDevicesQuery = (campaign: string) =>
   `SELECT campaign_criterion.resource_name, campaign_criterion.criterion_id, campaign_criterion.campaign, campaign_criterion.type, campaign_criterion.status, campaign_criterion.negative, campaign_criterion.device.type, campaign_criterion.bid_modifier FROM campaign_criterion WHERE campaign_criterion.campaign = ${quote(campaign)} AND campaign_criterion.type = DEVICE AND campaign_criterion.status != REMOVED`;
+/** Source-derived create fields only, never a caller-supplied provider request. */
+function cloneTrackingFields(entity: JsonRow, urls = false): JsonRow {
+  const unsupported = () =>
+    error(
+      "google_clone_tracking_unsupported",
+      "Source tracking/URL override вне проверенного typed Search clone profile; ничего не опущено.",
+    );
+  const output: JsonRow = {};
+  const controls = (text: string) =>
+    [...text].some((c) => c.codePointAt(0)! < 32 || c.codePointAt(0) === 127);
+  for (const field of ["trackingUrlTemplate", "finalUrlSuffix"] as const) {
+    const value = entity[field];
+    if (value === undefined || value === "") continue;
+    if (
+      typeof value !== "string" ||
+      value.length > 2048 ||
+      controls(value) ||
+      value.includes("#") ||
+      /[{}]/u.test(value.replace(/\{[A-Za-z_][A-Za-z0-9_]*\}/gu, ""))
+    )
+      unsupported();
+    if (field === "trackingUrlTemplate") {
+      if (
+        !String(value).startsWith("https://") ||
+        !String(value).includes("{lpurl}")
+      )
+        unsupported();
+      finalUrl(
+        String(value).replace(/\{[A-Za-z_][A-Za-z0-9_]*\}/gu, "placeholder"),
+      );
+    } else if (
+      String(value).startsWith("?") ||
+      !String(value)
+        .split("&")
+        .every((p) => /^[A-Za-z0-9_.-]+=[^&]*$/u.test(p))
+    )
+      unsupported();
+    output[field] = value;
+  }
+  const parameters = entity.urlCustomParameters;
+  if (parameters !== undefined) {
+    if (!Array.isArray(parameters) || parameters.length > 8) unsupported();
+    const seen = new Set<string>();
+    const typed: { key: string; value: string }[] = [];
+    for (const parameter of parameters as unknown[]) {
+      const p = row(parameter);
+      if (
+        Object.keys(p).some((k) => !["key", "value"].includes(k)) ||
+        typeof p.key !== "string" ||
+        !/^[A-Za-z0-9]{1,16}$/u.test(p.key) ||
+        (p.value !== undefined && typeof p.value !== "string") ||
+        Buffer.byteLength(String(p.value ?? ""), "utf8") > 200 ||
+        controls(String(p.value ?? "")) ||
+        seen.has(String(p.key).toLowerCase())
+      )
+        unsupported();
+      seen.add(String(p.key).toLowerCase());
+      typed.push({ key: String(p.key), value: String(p.value ?? "") });
+    }
+    if (typed.length) output.urlCustomParameters = typed;
+  }
+  for (const field of ["finalUrls", "finalMobileUrls"] as const) {
+    const values = entity[field];
+    if (values === undefined || (Array.isArray(values) && values.length === 0))
+      continue;
+    if (
+      !urls ||
+      !Array.isArray(values) ||
+      values.length !== 1 ||
+      typeof values[0] !== "string"
+    )
+      unsupported();
+    finalUrl((values as string[])[0]);
+    output[field] = [...(values as string[])]; // preserve original encoding, not URL canonicalization
+  }
+  for (const field of ["finalAppUrls", "urlCollections"]) {
+    const value = entity[field];
+    if (value !== undefined && !(Array.isArray(value) && value.length === 0))
+      unsupported();
+  }
+  return output;
+}
+function cloneCustomParametersMatch(
+  actual: unknown,
+  expected: unknown[],
+): boolean {
+  if (!Array.isArray(actual) || actual.length !== expected.length) return false;
+  const ordered = (values: unknown[]) =>
+    [...values].sort((a, b) =>
+      String(row(a).key).localeCompare(String(row(b).key), "en"),
+    );
+  const a = ordered(actual),
+    e = ordered(expected);
+  return e.every(
+    (value, index) =>
+      row(a[index]).key === row(value).key &&
+      (row(a[index]).value === row(value).value ||
+        (row(value).value === "" && row(a[index]).value === undefined)),
+  );
+}
 function defaultDevicesMatch(rows: JsonRow[], campaign: string): boolean {
   const prefix = campaign.replace("/campaigns/", "/campaignCriteria/");
   return (
@@ -2024,7 +2126,12 @@ export async function buildClonePlan(
     budgets[0]!.resourceName !== campaign.campaignBudget
   )
     error("google_clone_unsupported_components", "Source budget недоступен.");
-  const customers = await q(customerQuery),
+  const customers = await q(
+      customerQuery.replace(
+        " FROM customer",
+        ", customer.tracking_url_template, customer.final_url_suffix FROM customer",
+      ),
+    ),
     customer = row(customers[0]?.customer),
     currency = String(customer.currencyCode);
   if (
@@ -2247,22 +2354,16 @@ export async function buildClonePlan(
   const groups = await fetchKind(
       "adGroup",
       `campaign.id = ${id} AND ad_group.status != REMOVED`,
-      "ad_group.tracking_url_template, ad_group.final_url_suffix, ad_group.url_custom_parameters",
     ),
-    adGroups: JsonRow[] = [];
+    adGroups: JsonRow[] = [],
+    groupTracking: {
+      group: JsonRow;
+      fields: JsonRow;
+      keys: { source: JsonRow; fields: JsonRow }[];
+      ads: JsonRow[];
+    }[] = [];
+  const campaignTracking = cloneTrackingFields(campaign);
   for (const g of groups) {
-    const unsupportedTracking = (entity: JsonRow) =>
-      [
-        "trackingUrlTemplate",
-        "finalUrlSuffix",
-        "urlCustomParameters",
-        "finalMobileUrls",
-      ].some(
-        (k) =>
-          entity[k] !== undefined &&
-          entity[k] !== "" &&
-          !(Array.isArray(entity[k]) && (entity[k] as unknown[]).length === 0),
-      );
     owned(g.resourceName, "adGroups");
     if (
       g.campaign !== campaign.resourceName ||
@@ -2302,21 +2403,11 @@ export async function buildClonePlan(
     const keys = await fetchKind(
         "adGroupCriterion",
         `ad_group.id = ${g.id} AND ad_group_criterion.status != REMOVED`,
-        "ad_group_criterion.tracking_url_template, ad_group_criterion.final_url_suffix, ad_group_criterion.url_custom_parameters, ad_group_criterion.final_mobile_urls",
       ),
       ads = await fetchKind(
         "adGroupAd",
         `ad_group.id = ${g.id} AND ad_group_ad.status != REMOVED`,
-        "ad_group_ad.ad.tracking_url_template, ad_group_ad.ad.final_url_suffix, ad_group_ad.ad.url_custom_parameters, ad_group_ad.ad.final_mobile_urls",
-      );
-    if (
-      unsupportedTracking(g) ||
-      keys.some(unsupportedTracking) ||
-      ads.some((a) => unsupportedTracking(row(a.ad)))
-    )
-      error(
-        "google_clone_tracking_unsupported",
-        "Source group/keyword/ad tracking/mobile URL overrides требуют отдельного clone profile; значения не опущены молча.",
+        "ad_group_ad.ad.final_app_urls, ad_group_ad.ad.url_collections",
       );
     for (const k of keys) {
       owned(k.resourceName, "adGroupCriteria");
@@ -2348,6 +2439,23 @@ export async function buildClonePlan(
         "google_clone_unsupported_components",
         "Source содержит не-keyword criterion или не-RSA ad.",
       );
+    for (const negative of keys.filter((k) => k.negative))
+      if (Object.keys(cloneTrackingFields(negative, true)).length)
+        error(
+          "google_clone_tracking_unsupported",
+          "Tracking overrides на negative keyword не переносятся как positive criterion.",
+        );
+    groupTracking.push({
+      group: g,
+      fields: cloneTrackingFields(g),
+      keys: keys
+        .filter((k) => !k.negative)
+        .map((source) => ({
+          source,
+          fields: cloneTrackingFields(source, true),
+        })),
+      ads: ads.map((a) => cloneTrackingFields(row(a.ad), true)),
+    });
     adGroups.push({
       name: g.name,
       ...(campaign.biddingStrategyType === "MANUAL_CPC"
@@ -2431,7 +2539,7 @@ export async function buildClonePlan(
     const found = await fetchKind(
         "asset",
         `asset.resource_name = ${quote(String(link.asset))}`,
-        "asset.call_asset.call_conversion_reporting_state, asset.call_asset.call_conversion_action, asset.call_asset.ad_schedule_targets",
+        "asset.call_asset.call_conversion_reporting_state, asset.call_asset.call_conversion_action, asset.call_asset.ad_schedule_targets, asset.tracking_url_template, asset.final_url_suffix, asset.url_custom_parameters, asset.final_mobile_urls",
       ),
       a = found[0];
     if (found.length !== 1 || !a || a.resourceName !== assetResource)
@@ -2487,6 +2595,18 @@ export async function buildClonePlan(
       });
       continue;
     }
+    if (
+      ["SITELINK", "CALLOUT", "STRUCTURED_SNIPPET"].includes(
+        String(link.fieldType),
+      ) &&
+      Object.keys(cloneTrackingFields(a!, true)).some(
+        (field) => field !== "finalUrls",
+      )
+    )
+      error(
+        "google_clone_tracking_unsupported",
+        "Source text asset tracking/mobile overrides пока вне typed clone profile; значения не опущены при recreation.",
+      );
     if (link.status !== undefined && link.status !== "ENABLED")
       error(
         "google_clone_unsupported_components",
@@ -2628,6 +2748,100 @@ export async function buildClonePlan(
       "Clone builder не вернул единственную новую PAUSED campaign выбранного account.",
     );
   const targetResource = targetCampaign!.resource_name!;
+  const applyTracking = (
+    operation: Stage0Operation,
+    fields: JsonRow,
+    nested = false,
+  ) => {
+    if (!Object.keys(fields).length) return;
+    operation.fields = nested
+      ? { ...operation.fields, ad: { ...row(operation.fields.ad), ...fields } }
+      : { ...operation.fields, ...fields };
+    operation.expected = nested
+      ? {
+          ...operation.expected,
+          ad: { ...row(operation.expected.ad), ...fields },
+        }
+      : { ...operation.expected, ...fields };
+    const item = plan.items.find((i) =>
+      i.provider_operations.includes(plan.operations.indexOf(operation)),
+    );
+    if (item) {
+      item.after = operation.expected;
+      item.warnings.push(
+        "Tracking/final/mobile URL overrides сохранены точно на исходном уровне; parent inheritance и custom parameters не заменяются default UTM.",
+      );
+    }
+  };
+  applyTracking(targetCampaign!, campaignTracking);
+  const targetGroups = plan.operations.filter(
+    (o) => o.kind === "adGroup" && o.method === "create",
+  );
+  if (targetGroups.length !== groupTracking.length)
+    error(
+      "google_clone_target_invalid",
+      "Clone builder group count не совпадает с frozen source.",
+    );
+  for (const [index, source] of groupTracking.entries()) {
+    const targetGroup = targetGroups[index]!;
+    if (
+      targetGroup.fields.campaign !== targetResource ||
+      targetGroup.fields.name !== source.group.name ||
+      !targetGroup.resource_name ||
+      targetGroup.fields.status !== "PAUSED"
+    )
+      error(
+        "google_clone_target_invalid",
+        "Clone tracking target group identity/parent не подтверждены.",
+      );
+    applyTracking(targetGroup, source.fields);
+    const keys = plan.operations.filter(
+      (o) =>
+        o.kind === "adGroupCriterion" &&
+        o.method === "create" &&
+        o.fields.adGroup === targetGroup.resource_name &&
+        !o.fields.negative,
+    );
+    const ads = plan.operations.filter(
+      (o) =>
+        o.kind === "adGroupAd" &&
+        o.method === "create" &&
+        o.fields.adGroup === targetGroup.resource_name,
+    );
+    if (keys.length !== source.keys.length || ads.length !== source.ads.length)
+      error(
+        "google_clone_target_invalid",
+        "Clone tracking target keyword/RSA count не совпадает с frozen source.",
+      );
+    for (const [i, k] of source.keys.entries()) {
+      const target = keys[i]!;
+      if (
+        keyText(row(target.fields.keyword).text) !==
+          keyText(row(k.source.keyword).text) ||
+        row(target.fields.keyword).matchType !== row(k.source.keyword).matchType
+      )
+        error(
+          "google_clone_target_invalid",
+          "Clone tracking keyword identity/type не совпадают с frozen source.",
+        );
+      applyTracking(target, k.fields);
+    }
+    for (const [i, fields] of source.ads.entries()) {
+      if (ads[i]!.fields.status !== "PAUSED")
+        error(
+          "google_clone_target_invalid",
+          "Clone tracking RSA должен оставаться PAUSED.",
+        );
+      applyTracking(ads[i]!, fields, true);
+    }
+  }
+  plan.summary.clone_tracking_profile = {
+    source: "provider-derived same-account level-preserving",
+    groups: groupTracking.length,
+    positive_keywords: groupTracking.reduce((n, g) => n + g.keys.length, 0),
+    rsa: groupTracking.reduce((n, g) => n + g.ads.length, 0),
+    readonly_source: true,
+  };
   if (sourceTargetCpa > 0n) {
     const unit = sourceMicros(row(plan.summary.budget).billable_unit_micros);
     if (unit === 0n || sourceTargetCpa < unit || sourceTargetCpa % unit !== 0n)

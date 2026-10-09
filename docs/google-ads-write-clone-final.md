@@ -14,6 +14,10 @@ on integration commit `94edb8c3c082bbd8951bf166e8797e83f3b8a5dc`.
 - Existing same-account ENABLED NEGATIVE_KEYWORDS shared lists can be associated
   with the new campaign. Metadata and all members are read and frozen; conflicts
   with cloned positive keywords appear as preview warnings.
+- Campaign custom parameters and group/positive-keyword/RSA tracking overrides
+  are now preserved on their original levels: tracking template, final suffix,
+  custom parameters and one desktop/mobile URL where that resource supports it.
+  These are provider-derived typed create fields, not a new raw request API.
 
 This is an atomic Stage 0 creation graph with `partial_failure=false`. The new
 campaign, ad groups and RSA ads remain PAUSED. New association operations reference
@@ -45,10 +49,31 @@ mutations; see [default-device boundary](google-ads-clone-default-devices.md).
 Custom campaign/device/geo/schedule or ad-group adjustments are not silently
 normalized away.
 
-Group/keyword/ad tracking overrides, custom URL parameters and mobile URLs are
-explicit profile gaps. They are selected/frozen and rejected instead of silently
-dropped. A source without an explicit campaign final URL suffix is also rejected:
-the normal new-campaign default UTM must not overwrite existing inheritance.
+Tracking fields are selected/frozen and included in the immutable target plan,
+human preview and exact reread expectations. Group/keyword/ad overrides stay on
+their own level rather than flattening into campaign UTM. Original URL encoding
+is preserved after HTTP(S)/credential validation. Group identity, keyword text /
+match type and temporary parent mapping are proved before adding those fields.
+Account tracking is also frozen to protect inherited defaults on the same account.
+
+Custom parameters are bounded to eight, with case-insensitive unique alphanumeric
+keys (16 bytes) and values at most 200 UTF-8 bytes. Mapping order is not semantic:
+reread compares exact keys/values independently of provider list ordering. The
+only default normalization is an omitted empty CustomParameter value with its
+exact independently verified key; nonempty or wrong values still fail.
+
+Local tracking profile: HTTPS template containing `{lpurl}`, closed placeholder
+syntax, suffix `key=value` without leading `?`, no credentials/control characters,
+one desktop/mobile URL per positive keyword/RSA. Templates not covered by that
+profile are explicitly rejected, not declared unsupported by Google. Existing
+campaign UTM validation still bounds campaign placeholder support. A source
+without an explicit campaign final URL suffix remains rejected: the normal
+new-campaign default UTM must not overwrite existing inheritance.
+
+Negative-keyword tracking, app URL / URL collections and text-asset tracking or
+mobile overrides are explicit profile gaps, selected/frozen and rejected before
+target creation rather than silently dropped. Reused CALL/BUSINESS_NAME/image
+assets keep their existing contents and settings without recreation.
 
 Negative radii and address-only proximity cannot be cloned by this coordinate
 profile. `new_locations` with existing radii is rejected: without an explicit
@@ -66,10 +91,18 @@ validate-only, immutable commit, reread and audit remain the ordinary Stage 0 fl
 Dedicated mock regressions cover the actual Stage 0 builder, provider payloads,
 temporary-to-real CampaignSharedSet identities, provider verification, foreign
 references, duplicates, source snapshot changes, unsupported components and the
-final operation limit. These are code/mock evidence, not new LIVE acceptance.
+final operation limit, exact level-preserving tracking, parameter ordering/defaults,
+URL encoding, unsafe tracking and every tracking field as a stale dependency.
+These are code/mock evidence, not new LIVE acceptance.
 No real Google READ, validate-only or mutation was performed for this package.
 
 API v24 references: [CampaignSharedSet proto](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign_shared_set.proto),
 [GoogleAdsService operations](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/services/google_ads_service.proto),
 [asset selectors](https://developers.google.com/google-ads/api/fields/v24/asset),
 [temporary IDs](https://developers.google.com/google-ads/api/docs/batch-processing/temporary-ids).
+
+Tracking primary sources: [v24 AdGroup](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/ad_group.proto),
+[v24 AdGroupCriterion](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/ad_group_criterion.proto),
+[v24 Ad](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/ad.proto),
+[v24 Asset](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/asset.proto),
+[upgraded URL limits](https://developers.google.com/google-ads/api/docs/ads/upgraded-urls/fields).

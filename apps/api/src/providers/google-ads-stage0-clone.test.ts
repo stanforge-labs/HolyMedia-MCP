@@ -627,27 +627,10 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
       writeCode: "google_clone_unsupported_components",
     });
   });
-  it.each([
-    "group",
-    "keyword",
-    "ad",
-    "mobile",
-    "custom",
-    "campaign",
-    "template_only",
-  ])(
+  it.each(["campaign", "template_only"])(
     "source %s tracking overrides cannot be silently dropped by bounded clone",
     async (level) => {
       const f = fixture();
-      if (level === "group") f.group.finalUrlSuffix = "utm_source=group";
-      if (level === "keyword")
-        f.keys[0]!.trackingUrlTemplate =
-          "https://track.example.test/?u={lpurl}";
-      if (level === "ad") row(f.ads[0]!.ad).finalUrlSuffix = "utm_source=ad";
-      if (level === "mobile")
-        row(f.ads[0]!.ad).finalMobileUrls = ["https://mobile.example.test/"];
-      if (level === "custom")
-        f.group.urlCustomParameters = [{ key: "channel", value: "source" }];
       if (level === "campaign" || level === "template_only")
         f.campaign.finalUrlSuffix = undefined;
       if (level === "template_only")
@@ -656,6 +639,329 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
       await expect(f.clone()).rejects.toMatchObject({
         writeCode: "google_clone_tracking_unsupported",
       });
+      expect(f.build).not.toHaveBeenCalled();
+    },
+  );
+  it("preserves typed campaign/group/positive-keyword/RSA tracking hierarchy and URL encoding, mock verification only", async () => {
+    const f = fixture();
+    f.campaign.urlCustomParameters = [{ key: "Campaign", value: "source" }];
+    f.group.trackingUrlTemplate =
+      "https://group.example.test/?u={lpurl}&channel={_channel}";
+    f.group.finalUrlSuffix = "utm_source=group&custom={_channel}";
+    f.group.urlCustomParameters = [
+      { key: "channel", value: "group" },
+      { key: "Source", value: "original" },
+    ];
+    f.keys[0]!.trackingUrlTemplate = "https://keyword.example.test/?u={lpurl}";
+    f.keys[0]!.finalUrlSuffix = "utm_source=keyword";
+    f.keys[0]!.finalUrls = [
+      "https://example.test/?landing=%2f&label={_channel}",
+    ];
+    f.keys[0]!.finalMobileUrls = [
+      "https://mobile.example.test/?source=keyword",
+    ];
+    f.keys[0]!.urlCustomParameters = [{ key: "channel", value: "keyword" }];
+    const ad = row(f.ads[0]!.ad);
+    ad.trackingUrlTemplate = "https://ad.example.test/?u={lpurl}";
+    ad.finalUrlSuffix = "utm_source=ad";
+    ad.finalMobileUrls = ["https://mobile.example.test/?source=ad"];
+    ad.urlCustomParameters = [{ key: "channel", value: "ad" }];
+    const before = canonical({
+        campaign: f.campaign,
+        group: f.group,
+        keys: f.keys,
+        ads: f.ads,
+      }),
+      plan = await f.clone();
+    const campaignOp = plan.operations.find((o) => o.kind === "campaign")!,
+      groupOp = plan.operations.find((o) => o.kind === "adGroup")!,
+      keyOp = plan.operations.find(
+        (o) => o.kind === "adGroupCriterion" && !o.fields.negative,
+      )!,
+      adOp = plan.operations.find((o) => o.kind === "adGroupAd")!;
+    expect(campaignOp.fields.urlCustomParameters).toEqual(
+      f.campaign.urlCustomParameters,
+    );
+    for (const [op, source, nested] of [
+      [groupOp, f.group, false],
+      [keyOp, f.keys[0]!, false],
+      [adOp, ad, true],
+    ] as const) {
+      const fields = nested ? row(op.fields.ad) : op.fields,
+        expected = nested ? row(op.expected.ad) : op.expected;
+      for (const field of [
+        "trackingUrlTemplate",
+        "finalUrlSuffix",
+        "urlCustomParameters",
+        "finalUrls",
+        "finalMobileUrls",
+      ]) {
+        if (source[field] !== undefined) {
+          expect(fields[field]).toEqual(source[field]);
+          expect(expected[field]).toEqual(source[field]);
+        }
+      }
+      expect(op.fields.status).toBe("PAUSED");
+      expect(
+        canonical(
+          plan.items.find((i) =>
+            i.provider_operations.includes(plan.operations.indexOf(op)),
+          )!.after,
+        ),
+      ).toBe(canonical(op.expected));
+    }
+    expect(
+      canonical({
+        campaign: f.campaign,
+        group: f.group,
+        keys: f.keys,
+        ads: f.ads,
+      }),
+    ).toBe(before);
+    expect(plan.operations.every((o) => o.method === "create")).toBe(true);
+    const made = mockCreated(plan),
+      queries: string[] = [];
+    const verified = await verifyStage0Mutation(
+      plan,
+      made.results,
+      async (query) => {
+        queries.push(query);
+        return made.read(query);
+      },
+    );
+    expect(verified.status).toBe("VERIFIED");
+    for (const field of [
+      "campaign.url_custom_parameters",
+      "ad_group.tracking_url_template",
+      "ad_group_criterion.final_mobile_urls",
+      "ad_group_ad.ad.url_custom_parameters",
+      "ad_group_ad.ad.final_mobile_urls",
+    ])
+      expect(queries.some((q) => q.includes(field))).toBe(true);
+    // Google parameter mappings have semantic keys; provider array ordering is immaterial.
+    row(
+      made.actual.get(
+        made.results[plan.operations.indexOf(groupOp)]!.resource_name!,
+      )!.adGroup,
+    ).urlCustomParameters = [
+      ...(f.group.urlCustomParameters as unknown[]),
+    ].reverse();
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("VERIFIED");
+    row(
+      made.actual.get(
+        made.results[plan.operations.indexOf(keyOp)]!.resource_name!,
+      )!.adGroupCriterion,
+    ).finalMobileUrls = ["https://wrong.example.test/"];
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("UNVERIFIED");
+  });
+  it.each(["template", "suffix", "parameters", "mobile", "desktop"])(
+    "provider override %s remains a frozen stale dependency",
+    async (field) => {
+      const f = fixture(),
+        source = f.keys[0]!;
+      source.trackingUrlTemplate = "https://track.example.test/?u={lpurl}";
+      source.finalUrlSuffix = "utm_source=keyword";
+      source.urlCustomParameters = [{ key: "channel", value: "source" }];
+      source.finalMobileUrls = ["https://mobile.example.test/"];
+      source.finalUrls = ["https://desktop.example.test/"];
+      const plan = await f.clone(),
+        before = canonical(plan.checks);
+      if (field === "template")
+        source.trackingUrlTemplate = "https://changed.example.test/?u={lpurl}";
+      if (field === "suffix") source.finalUrlSuffix = "utm_source=changed";
+      if (field === "parameters")
+        source.urlCustomParameters = [{ key: "channel", value: "changed" }];
+      if (field === "mobile")
+        source.finalMobileUrls = ["https://changed-mobile.example.test/"];
+      if (field === "desktop")
+        source.finalUrls = ["https://changed-desktop.example.test/"];
+      expect(canonical(await rereadStage0Checks(plan, f.read))).not.toBe(
+        before,
+      );
+      expect(canonical(plan.checks)).toBe(before);
+    },
+  );
+  it("eight parameters/200 UTF8-byte value preserved; only known empty-value omission normalizes", async () => {
+    const f = fixture();
+    f.group.urlCustomParameters = Array.from({ length: 8 }, (_, i) => ({
+      key: "key" + i,
+      ...(i === 0 ? {} : { value: i === 1 ? "Я".repeat(100) : "value" }),
+    }));
+    const plan = await f.clone(),
+      made = mockCreated(plan),
+      groupIndex = plan.operations.findIndex((o) => o.kind === "adGroup"),
+      actual = row(
+        made.actual.get(made.results[groupIndex]!.resource_name!)!.adGroup,
+      );
+    const parameters = actual.urlCustomParameters as JsonRow[];
+    expect(parameters[0]!.value).toBe("");
+    delete parameters[0]!.value;
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("VERIFIED");
+    parameters[1]!.value = "wrong";
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("UNVERIFIED");
+  });
+  it("same-account tracking inheritance is a frozen customer dependency", async () => {
+    const f = fixture();
+    Object.assign(f.customer, {
+      trackingUrlTemplate: "https://account.example.test/?u={lpurl}",
+      finalUrlSuffix: "utm_source=account",
+    });
+    const plan = await f.clone(),
+      before = canonical(plan.checks);
+    expect(
+      plan.checks.some((c) =>
+        c.query.includes("customer.tracking_url_template"),
+      ),
+    ).toBe(true);
+    Object.assign(f.customer, {
+      trackingUrlTemplate: "https://changed.example.test/?u={lpurl}",
+    });
+    expect(canonical(await rereadStage0Checks(plan, f.read))).not.toBe(before);
+    expect(canonical(plan.checks)).toBe(before);
+  });
+  it.each(["template", "suffix", "mobile", "custom"])(
+    "recreated sitelink %s override rejected rather than dropped",
+    async (field) => {
+      const f = fixture(),
+        asset: JsonRow = {
+          resourceName: `${prefix}/assets/15`,
+          type: "SITELINK",
+          finalUrls: ["https://example.test/"],
+          sitelinkAsset: { linkText: "Test link" },
+        };
+      if (field === "template")
+        asset.trackingUrlTemplate = "https://track.example.test/?u={lpurl}";
+      if (field === "suffix") asset.finalUrlSuffix = "utm_source=asset";
+      if (field === "mobile")
+        asset.finalMobileUrls = ["https://mobile.example.test/"];
+      if (field === "custom")
+        asset.urlCustomParameters = [{ key: "channel", value: "asset" }];
+      f.assets.set(String(asset.resourceName), asset);
+      f.assetLinks.push({
+        resourceName: `${prefix}/campaignAssets/1~15~1`,
+        campaign: f.campaign.resourceName,
+        asset: asset.resourceName,
+        fieldType: "SITELINK",
+        status: "ENABLED",
+      });
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_tracking_unsupported",
+      });
+      expect(f.build).not.toHaveBeenCalled();
+      expect(
+        f.read.mock.calls.some(([q]) => q.includes("asset.final_mobile_urls")),
+      ).toBe(true);
+    },
+  );
+  it.each(["group_parent", "group_count", "keyword_identity"])(
+    "internal target %s mismatch cannot redirect a source override",
+    async (fault) => {
+      const f = fixture();
+      f.group.finalUrlSuffix = "utm_source=source";
+      f.build.mockImplementationOnce(async (brief) => {
+        const plan = await buildStage0Plan(account, brief, f.read, async () => [
+          f.geo,
+        ]);
+        const group = plan.operations.find((o) => o.kind === "adGroup")!,
+          keyword = plan.operations.find((o) => o.kind === "adGroupCriterion")!;
+        if (fault === "group_parent")
+          group.fields.campaign = `customers/1111111111/campaigns/-1`;
+        if (fault === "group_count")
+          plan.operations = plan.operations.filter((o) => o !== group);
+        if (fault === "keyword_identity")
+          keyword.fields.keyword = { text: "different", matchType: "EXACT" };
+        return plan;
+      });
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_target_invalid",
+      });
+    },
+  );
+  it.each([
+    "duplicate_case",
+    "long_key",
+    "nonalphanumeric_key",
+    "utf8_value",
+    "too_many_parameters",
+    "unknown_parameter_leaf",
+    "invalid_parameter_type",
+    "mobile_multiple",
+    "mobile_credentials",
+    "desktop_multiple",
+    "desktop_type",
+    "template_http",
+    "template_braces",
+    "template_credentials",
+    "suffix_querymark",
+    "negative_override",
+    "app_urls",
+    "url_collections",
+  ])(
+    "unsafe/unsupported tracking %s fails before target builder",
+    async (fault) => {
+      const f = fixture(),
+        k = f.keys[0]!,
+        ad = row(f.ads[0]!.ad);
+      if (fault === "duplicate_case")
+        k.urlCustomParameters = [
+          { key: "Channel", value: "a" },
+          { key: "channel", value: "b" },
+        ];
+      if (fault === "long_key")
+        k.urlCustomParameters = [{ key: "a".repeat(17), value: "a" }];
+      if (fault === "nonalphanumeric_key")
+        k.urlCustomParameters = [{ key: "bad_key", value: "a" }];
+      if (fault === "utf8_value")
+        k.urlCustomParameters = [{ key: "value", value: "Я".repeat(101) }];
+      if (fault === "too_many_parameters")
+        k.urlCustomParameters = Array.from({ length: 9 }, (_, i) => ({
+          key: "k" + i,
+          value: "a",
+        }));
+      if (fault === "unknown_parameter_leaf")
+        k.urlCustomParameters = [
+          { key: "value", value: "a", extra: "not-typed" },
+        ];
+      if (fault === "invalid_parameter_type") k.urlCustomParameters = "invalid";
+      if (fault === "mobile_multiple")
+        k.finalMobileUrls = [
+          "https://m1.example.test/",
+          "https://m2.example.test/",
+        ];
+      if (fault === "mobile_credentials")
+        k.finalMobileUrls = ["https://user:password@example.test/"];
+      if (fault === "desktop_multiple")
+        k.finalUrls = ["https://a.example.test/", "https://b.example.test/"];
+      if (fault === "desktop_type") k.finalUrls = "https://a.example.test/";
+      if (fault === "template_http")
+        k.trackingUrlTemplate = "http://track.example.test/?u={lpurl}";
+      if (fault === "template_braces")
+        k.trackingUrlTemplate =
+          "https://track.example.test/?u={lpurl}&x={invalid";
+      if (fault === "template_credentials")
+        k.trackingUrlTemplate = "https://user:password@example.test/?u={lpurl}";
+      if (fault === "suffix_querymark") k.finalUrlSuffix = "?utm_source=bad";
+      if (fault === "negative_override") {
+        k.negative = true;
+        k.finalUrlSuffix = "utm_source=bad";
+      }
+      if (fault === "app_urls")
+        ad.finalAppUrls = [
+          { osType: "ANDROID", url: "android-app://example.test/" },
+        ];
+      if (fault === "url_collections")
+        ad.urlCollections = [
+          { id: "collection", finalUrls: ["https://example.test/"] },
+        ];
+      await expect(f.clone()).rejects.toBeInstanceOf(Error);
       expect(f.build).not.toHaveBeenCalled();
     },
   );
