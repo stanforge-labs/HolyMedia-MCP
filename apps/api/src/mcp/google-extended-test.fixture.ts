@@ -345,6 +345,56 @@ export function extendedFixture() {
             v.type = "IMAGE";
             v.imageAsset = images.get(String(object(fields.imageAsset).data));
           }
+          if (kind === "assets" && fields.textAsset) v.type = "TEXT";
+          if (kind === "campaigns") {
+            const campaignId = resource.split("/").at(-1)!;
+            if (fields.maximizeConversions !== undefined) {
+              v.biddingStrategyType = "MAXIMIZE_CONVERSIONS";
+              v.maximizeConversions = {
+                targetCpaMicros: "0",
+                ...object(fields.maximizeConversions),
+              };
+            }
+            if (fields.maximizeConversionValue !== undefined) {
+              v.biddingStrategyType = "MAXIMIZE_CONVERSION_VALUE";
+              v.maximizeConversionValue = {
+                targetRoas: 0,
+                ...object(fields.maximizeConversionValue),
+              };
+            }
+            const budget = object(
+              f.resources.get(String(fields.campaignBudget))?.campaignBudget,
+            );
+            // Google names non-shared budgets after their attached campaign.
+            if (budget.explicitlyShared === false) budget.name = fields.name;
+            // Campaign creation materializes provider-managed goal/config rows;
+            // subsequent operations update them via numeric canonical references.
+            for (const existing of [...f.resources.values()]) {
+              const goal = object(existing.customerConversionGoal);
+              if (!goal.resourceName) continue;
+              const suffix = String(goal.resourceName).split("/").at(-1)!;
+              if (!/^\d+~\d+$/.test(suffix))
+                throw new Error("Invalid mock canonical customer goal");
+              const goalResource = `${prefix}/campaignConversionGoals/${campaignId}~${suffix}`;
+              f.resources.set(goalResource, {
+                campaignConversionGoal: {
+                  resourceName: goalResource,
+                  campaign: resource,
+                  category: goal.category,
+                  origin: goal.origin,
+                  biddable: goal.biddable,
+                },
+              });
+            }
+            const configResource = `${prefix}/conversionGoalCampaignConfigs/${campaignId}`;
+            f.resources.set(configResource, {
+              conversionGoalCampaignConfig: {
+                resourceName: configResource,
+                campaign: resource,
+                goalConfigLevel: "CUSTOMER",
+              },
+            });
+          }
           if (["adGroupCriteria", "campaignCriteria"].includes(kind)) {
             const types: Record<string, string> = {
               keyword: "KEYWORD",
