@@ -464,4 +464,32 @@ describe("Google-only closed client profile: actual registry, no provider calls"
     expect(result.fieldPath).toBe('arguments["<invalid-key>"]');
     expect(result.message).not.toContain("untrusted");
   });
+  it("stock Google profile preserves conditional schemas and rejects extra arguments before provider dispatch", async () => {
+    const service = new McpService(null!, null!, null!, null!, null!, null!);
+    const actual = service.googleWriteTools();
+    expect(actual).toEqual(googleWriteToolProfile(service.tools()));
+    const principal = {
+      kind: "service",
+      scopes: ["adforge:mcp:read"],
+      workspaceId: "w",
+      accountIds: [],
+    };
+    await expect(
+      service.callGoogleWriteProfile(principal as never, "get_campaign", {
+        ...account,
+        campaign_id: "1",
+        arbitrary_payload: { status: "ENABLED" },
+      }),
+    ).rejects.toMatchObject({
+      writeCode: "google_client_arguments_invalid",
+      failures: [],
+      fieldPath: "arguments.arbitrary_payload",
+    });
+    await expect(
+      service.callGoogleWriteProfile(principal as never, "commit_preview", {
+        preview_token: "synthetic",
+        status: "ENABLED",
+      }),
+    ).rejects.toMatchObject({ writeCode: "google_client_arguments_invalid" });
+  });
 });

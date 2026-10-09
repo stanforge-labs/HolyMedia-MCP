@@ -36,6 +36,7 @@ import {
   googleWriteGenericIntent,
   googleWriteGenericSchema,
   googleWriteToolProfile,
+  validateGoogleWriteProfileArguments,
 } from "./google-write-client-contract.js";
 import {
   META_ASSET_TOOLS,
@@ -595,13 +596,7 @@ export class McpService {
   }
 
   public googleWriteTools() {
-    return googleWriteToolProfile(this.tools()).map((tool) => {
-      const schema = tool.inputSchema as Record<string, unknown>;
-      // The private Google subset must not expose the disjoint legacy Meta branch.
-      const alternatives = schema.oneOf as
-        Record<string, unknown>[] | undefined;
-      return alternatives ? { ...tool, inputSchema: alternatives[0]! } : tool;
-    });
+    return googleWriteToolProfile(this.tools());
   }
 
   public async callGoogleWriteProfile(
@@ -614,6 +609,14 @@ export class McpService {
         "invalid_request",
         "Инструмент недоступен в Google Ads profile.",
       );
+    if (
+      !principal.scopes.includes("adforge:mcp:read") &&
+      !principal.scopes.includes("adforge:mcp")
+    )
+      throw new ForbiddenException("MCP read scope is required.");
+    // Format validation does not authorize an account or a stored preview.
+    // Those fresh checks remain in the stock dispatcher and preview service.
+    validateGoogleWriteProfileArguments(name, rawArguments);
     const args = objectValue(rawArguments);
     if (args.provider !== undefined && args.provider !== "GOOGLE_ADS")
       throw new ProviderError(
