@@ -18,6 +18,10 @@ export type Stage3Intent = ExtendedRow & {
   action: "targeting";
   items: ExtendedRow[];
 };
+export type Stage3GeoSuggest = (
+  name: string,
+  country?: string,
+) => Promise<ExtendedRow[]>;
 export const STAGE3_DAYS = [
   "MONDAY",
   "TUESDAY",
@@ -71,12 +75,16 @@ export const STAGE3_ACTION_FIELDS: Record<
     required: ["criterion_id", "bid_modifier"],
   },
   demographic_add: {
-    allowed: ["dimension", "value"],
+    allowed: ["dimension", "value", "bid_modifier"],
     required: ["dimension", "value"],
   },
   demographic_exclude: {
     allowed: ["dimension", "value"],
     required: ["dimension", "value"],
+  },
+  demographic_bid_modifier: {
+    allowed: ["dimension", "criterion_id", "bid_modifier"],
+    required: ["dimension", "criterion_id", "bid_modifier"],
   },
   geo_add: {
     allowed: ["name", "country_code", "geo_target_id"],
@@ -93,8 +101,12 @@ export const STAGE3_ACTION_FIELDS: Record<
   presence: { allowed: ["positive", "negative"], required: ["positive"] },
   language_add: { allowed: ["name"], required: ["name"] },
   schedule_add: {
-    allowed: ["days", "start", "end"],
+    allowed: ["days", "start", "end", "bid_modifier"],
     required: ["days", "start", "end"],
+  },
+  schedule_bid_modifier: {
+    allowed: ["criterion_id", "bid_modifier"],
+    required: ["criterion_id", "bid_modifier"],
   },
   device_modifier: {
     allowed: ["device", "bid_modifier"],
@@ -120,11 +132,25 @@ export const STAGE3_ACTION_FIELDS: Record<
     required: ["custom_audience_id", "privacy_ack"],
   },
 };
-const audienceTypes = ["USER_LIST", "IN_MARKET", "AFFINITY", "CUSTOM"];
+export const STAGE3_AUDIENCE_TYPES = [
+  "USER_LIST",
+  "IN_MARKET",
+  "AFFINITY",
+  "CUSTOM",
+  "DETAILED_DEMOGRAPHIC",
+];
+const audienceTypes = STAGE3_AUDIENCE_TYPES;
+const audienceCriterionTypes = [
+  "USER_LIST",
+  "USER_INTEREST",
+  "CUSTOM_AUDIENCE",
+  "EXTENDED_DEMOGRAPHIC",
+];
 const removableTypes = [
   "USER_LIST",
   "USER_INTEREST",
   "CUSTOM_AUDIENCE",
+  "EXTENDED_DEMOGRAPHIC",
   "AGE_RANGE",
   "GENDER",
   "PARENTAL_STATUS",
@@ -290,6 +316,7 @@ export function parseStage3Intent(raw: unknown): Stage3Intent {
           "presence",
           "language_add",
           "schedule_add",
+          "schedule_bid_modifier",
           "device_modifier",
         ].includes(action) &&
         x.level !== "CAMPAIGN"
@@ -309,6 +336,15 @@ export function parseStage3Intent(raw: unknown): Stage3Intent {
       choice(x.mode, ["OBSERVATION", "TARGETING"], "audience mode");
     if (x.bid_modifier !== undefined)
       modifier(x.bid_modifier, action === "device_modifier");
+    if (
+      action === "audience_add" &&
+      x.bid_modifier !== undefined &&
+      x.mode !== "OBSERVATION"
+    )
+      extFail(
+        "google_stage3_observation_required",
+        "PPC P203: audience bid_modifier допустим только в OBSERVATION; TARGETING не переключается автоматически.",
+      );
     if (x.audience !== undefined) {
       const a = extClosed(x.audience, ["kind", "id", "name"], ["kind"]);
       choice(a.kind, audienceTypes, "audience kind");
@@ -334,7 +370,9 @@ export function parseStage3Intent(raw: unknown): Stage3Intent {
         "google_stage3_unsupported",
         "Campaign-level PARENTAL_STATUS поддерживает только negative/exclude. Positive targeting допустим на ad group level.",
       );
-    if (action.startsWith("demographic_"))
+    if (action === "demographic_bid_modifier")
+      choice(x.dimension, Object.keys(STAGE3_DEMOGRAPHICS), "dimension");
+    else if (action.startsWith("demographic_"))
       choice(
         x.value,
         STAGE3_DEMOGRAPHICS[
@@ -452,13 +490,14 @@ export function parseStage3Intent(raw: unknown): Stage3Intent {
 }
 
 const parentFields =
-  "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.bidding_strategy, campaign.bidding_strategy_type, campaign.targeting_setting.target_restrictions, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type";
+  "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, campaign.bidding_strategy, campaign.bidding_strategy_type, campaign.targeting_setting.target_restrictions, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type";
 const groupFields =
   "ad_group.resource_name, ad_group.id, ad_group.name, ad_group.status, ad_group.campaign, ad_group.targeting_setting.target_restrictions";
 const typeFields: Record<string, string[]> = {
   USER_LIST: ["user_list.user_list"],
   USER_INTEREST: ["user_interest.user_interest_category"],
   CUSTOM_AUDIENCE: ["custom_audience.custom_audience"],
+  EXTENDED_DEMOGRAPHIC: ["extended_demographic.extended_demographic_id"],
   AGE_RANGE: ["age_range.type"],
   GENDER: ["gender.type"],
   PARENTAL_STATUS: ["parental_status.type"],
@@ -515,26 +554,39 @@ function audienceQuery(
       ? "user_list"
       : kind === "CUSTOM"
         ? "custom_audience"
-        : "user_interest";
+        : kind === "DETAILED_DEMOGRAPHIC"
+          ? "detailed_demographic"
+          : "user_interest";
   const key =
     type === "user_list"
       ? "userList"
       : type === "custom_audience"
         ? "customAudience"
-        : "userInterest";
+        : type === "detailed_demographic"
+          ? "detailedDemographic"
+          : "userInterest";
   const resourceKind =
     type === "user_list"
       ? "userLists"
       : type === "custom_audience"
         ? "customAudiences"
-        : "userInterests";
+        : type === "detailed_demographic"
+          ? "detailedDemographics"
+          : "userInterests";
   const field =
     type === "user_list"
       ? "userList"
       : type === "custom_audience"
         ? "customAudience"
-        : "userInterest";
-  const reference = field === "userInterest" ? "userInterestCategory" : field;
+        : type === "detailed_demographic"
+          ? "extendedDemographic"
+          : "userInterest";
+  const reference =
+    field === "userInterest"
+      ? "userInterestCategory"
+      : field === "extendedDemographic"
+        ? "extendedDemographicId"
+        : field;
   const fields =
     type === "user_list"
       ? [
@@ -556,13 +608,16 @@ function audienceQuery(
             "description",
             "members",
           ]
-        : [
-            "resource_name",
-            "user_interest_id",
-            "name",
-            "taxonomy_type",
-            "launched_to_all",
-          ];
+        : type === "detailed_demographic"
+          ? ["resource_name", "id", "name", "launched_to_all", "availabilities"]
+          : [
+              "resource_name",
+              "user_interest_id",
+              "name",
+              "taxonomy_type",
+              "launched_to_all",
+              "availabilities",
+            ];
   const idField = type === "user_interest" ? "user_interest_id" : "id";
   const where =
     a.id !== undefined
@@ -608,11 +663,44 @@ function requireManualModifier(
       "Этот modifier profile требует standard Manual CPC / Maximize Clicks. Автоматические/portfolio стратегии могут игнорировать modifier; операция отклонена, не имитируется.",
     );
 }
+function availabilityProven(
+  audience: ExtendedRow,
+  campaign: ExtendedRow,
+): boolean {
+  if (audience.launchedToAll === true) return true;
+  return (
+    Array.isArray(audience.availabilities) &&
+    audience.availabilities.map(extRow).some((a) => {
+      const channel = extRow(a.channel),
+        mode = channel.availabilityMode;
+      const matches =
+        mode === "ALL_CHANNELS" ||
+        (channel.advertisingChannelType === campaign.advertisingChannelType &&
+          (mode === "CHANNEL_TYPE" ||
+            (mode === "CHANNEL_TYPE_AND_SUBTYPES" &&
+              (campaign.advertisingChannelSubType &&
+              campaign.advertisingChannelSubType !== "UNSPECIFIED"
+                ? Array.isArray(channel.advertisingChannelSubType) &&
+                  channel.advertisingChannelSubType.includes(
+                    campaign.advertisingChannelSubType,
+                  )
+                : channel.includeDefaultChannelSubType === true))));
+      return (
+        matches &&
+        Array.isArray(a.locale) &&
+        a.locale
+          .map(extRow)
+          .some((l) => l.availabilityMode === "LAUNCHED_TO_ALL")
+      );
+    })
+  );
+}
 
 export async function buildStage3Plan(
   account: string,
   rawIntent: unknown,
   read: Stage1Reader,
+  suggestGeo?: Stage3GeoSuggest,
 ): Promise<ExtendedPlan> {
   const intent = parseStage3Intent(rawIntent),
     ctx = await extContext(account, read),
@@ -916,9 +1004,31 @@ export async function buildStage3Plan(
       add(kind, "create", null, fields, fields, null, inv.query, responseKey);
       completelyReversible = false;
     };
+    const observationRequired = () => {
+      const plannedMode = modes.get(parentResource);
+      const own = extRow(parent.targetingSetting).targetRestrictions;
+      const inherited =
+        x.level === "AD_GROUP" && (!Array.isArray(own) || !own.length)
+          ? extRow(campaign.targetingSetting).targetRestrictions
+          : own;
+      const restriction = Array.isArray(inherited)
+        ? inherited.map(extRow).find((r) => r.targetingDimension === "AUDIENCE")
+        : undefined;
+      if (
+        plannedMode
+          ? plannedMode !== "OBSERVATION"
+          : restriction?.bidOnly !== true
+      )
+        extFail(
+          "google_stage3_observation_required",
+          "PPC P203: фактический audience mode должен быть OBSERVATION. TARGETING/default не меняется скрыто ради modifier.",
+        );
+      item.warnings.push(
+        "Audience bid modifier: provider-derived OBSERVATION; охват не сужается. PPC P203.",
+      );
+    };
     const audienceMode = async (mode: string) => {
-      if (action === "audience_mode")
-        await inventory(["USER_LIST", "USER_INTEREST", "CUSTOM_AUDIENCE"]);
+      if (action === "audience_mode") await inventory(audienceCriterionTypes);
       const restrictions = extRow(parent.targetingSetting).targetRestrictions;
       const current = Array.isArray(restrictions)
         ? restrictions.map(extRow)
@@ -941,11 +1051,32 @@ export async function buildStage3Plan(
         Array.isArray(extRow(campaign.targetingSetting).targetRestrictions) &&
         (extRow(campaign.targetingSetting).targetRestrictions as unknown[])
           .length
-      )
+      ) {
+        const restrictions = extRow(campaign.targetingSetting)
+          .targetRestrictions as unknown[];
+        const parentAudience = restrictions
+          .map(extRow)
+          .find((r) => r.targetingDimension === "AUDIENCE");
+        const inheritedMode =
+          parentAudience?.bidOnly === true ? "OBSERVATION" : "TARGETING";
+        if (!current.length && inheritedMode === mode) {
+          const planned = modes.get(parentResource);
+          if (planned && planned !== mode)
+            extFail(
+              "google_stage3_mode_conflict",
+              "Inherited и planned audience modes противоречат друг другу.",
+            );
+          modes.set(parentResource, mode);
+          item.warnings.push(
+            `Audience mode ${mode} унаследован от ${campaignResource}; campaign setting не изменяется.`,
+          );
+          return;
+        }
         extFail(
           "google_stage3_mode_parent_conflict",
           "Campaign уже владеет targeting_setting; нельзя менять ad group режим. Коллекции не очищаются автоматически.",
         );
+      }
       if (x.level === "CAMPAIGN") {
         const childQuery = `SELECT ${groupFields} FROM ad_group WHERE ad_group.campaign = ${extQuote(campaignResource)} AND ad_group.status != 'REMOVED'`;
         const children = (await ctx.query(childQuery)).map((r) =>
@@ -976,7 +1107,7 @@ export async function buildStage3Plan(
             const childQuery = criterionQuery(
               "AD_GROUP",
               String(child.resourceName),
-              ["USER_LIST", "USER_INTEREST", "CUSTOM_AUDIENCE"],
+              audienceCriterionTypes,
             );
             const criteria = (await ctx.query(childQuery)).map((r) =>
               extRow(r.adGroupCriterion),
@@ -1095,11 +1226,29 @@ export async function buildStage3Plan(
       if (
         ["IN_MARKET", "AFFINITY"].includes(audienceKind) &&
         (audience.taxonomyType !== audienceKind ||
-          audience.launchedToAll !== true)
+          !availabilityProven(audience, campaign))
       )
         extFail(
           "google_stage3_audience_ineligible",
           "Taxonomy/availability audience не подтверждены; не угадываем capability.",
+        );
+      if (
+        audienceKind === "DETAILED_DEMOGRAPHIC" &&
+        (!/^[0-9]{1,20}$/u.test(String(audience.id)) ||
+          !availabilityProven(audience, campaign))
+      )
+        extFail(
+          "google_stage3_audience_ineligible",
+          "Detailed demographic taxonomy ID/availability не подтверждены выбранным provider customer.",
+        );
+      if (
+        audienceKind === "DETAILED_DEMOGRAPHIC" &&
+        audience.resourceName !==
+          `${prefix}/detailedDemographics/${audience.id}`
+      )
+        extFail(
+          "google_stage3_audience_invalid",
+          "Detailed demographic catalog numeric ID не совпадает с proof resource name; taxonomy ID не угадывается.",
         );
       if (
         audienceKind === "CUSTOM" &&
@@ -1109,8 +1258,10 @@ export async function buildStage3Plan(
           "google_stage3_audience_ineligible",
           "Custom audiences поддерживаются здесь только для DISPLAY/VIDEO и ENABLED definitions, не Search.",
         );
-      if (x.bid_modifier !== undefined)
+      if (x.bid_modifier !== undefined) {
+        observationRequired();
         requireManualModifier(campaign, Number(x.bid_modifier));
+      }
       item.keyword = String(audience.name);
       item.warnings.push(
         `Resolved audience ${audience.resourceName}; requested mode ${x.mode}.`,
@@ -1120,8 +1271,17 @@ export async function buildStage3Plan(
           ? "USER_LIST"
           : audienceKind === "CUSTOM"
             ? "CUSTOM_AUDIENCE"
-            : "USER_INTEREST",
-        { [spec.field]: { [spec.reference]: audience.resourceName } },
+            : audienceKind === "DETAILED_DEMOGRAPHIC"
+              ? "EXTENDED_DEMOGRAPHIC"
+              : "USER_INTEREST",
+        {
+          [spec.field]: {
+            [spec.reference]:
+              audienceKind === "DETAILED_DEMOGRAPHIC"
+                ? String(audience.id)
+                : audience.resourceName,
+          },
+        },
         action === "audience_exclude",
         x.bid_modifier !== undefined ? { bidModifier: x.bid_modifier } : {},
       );
@@ -1139,7 +1299,7 @@ export async function buildStage3Plan(
       const types =
           action === "criterion_remove"
             ? [String(x.criterion_type)]
-            : ["USER_LIST", "USER_INTEREST", "CUSTOM_AUDIENCE"],
+            : audienceCriterionTypes,
         inv = await inventory(types),
         resource = `${prefix}/${kind}/${x.level === "CAMPAIGN" ? x.campaign_id : x.ad_group_id}~${x.criterion_id}`;
       const found = inv.rows.filter((r) => r.resourceName === resource);
@@ -1155,7 +1315,13 @@ export async function buildStage3Plan(
             "google_stage3_modifier_invalid",
             "Negative audience не имеет bid modifier.",
           );
+        observationRequired();
         requireManualModifier(campaign, Number(x.bid_modifier));
+        if (Number(before.bidModifier ?? 1) === Number(x.bid_modifier))
+          extFail(
+            "google_stage3_no_changes",
+            "Audience bid modifier уже имеет requested value; mutation не требуется.",
+          );
         add(
           kind,
           "update",
@@ -1170,6 +1336,14 @@ export async function buildStage3Plan(
         if (typeof before.bidModifier === "number")
           inverse.push({ ...x, bid_modifier: before.bidModifier });
         else completelyReversible = false;
+        item.before = {
+          ...before,
+          audience_mode: "OBSERVATION",
+        } as typeof item.before;
+        item.after = {
+          ...extRow(item.after),
+          audience_mode: "OBSERVATION",
+        } as typeof item.after;
       } else {
         add(kind, "remove", resource, {}, {}, before, inv.query, responseKey);
         if (action === "audience_remove") {
@@ -1193,6 +1367,68 @@ export async function buildStage3Plan(
       }
       continue;
     }
+    if (
+      action === "demographic_bid_modifier" ||
+      action === "schedule_bid_modifier"
+    ) {
+      requireManualModifier(campaign, Number(x.bid_modifier));
+      const type =
+          action === "schedule_bid_modifier"
+            ? "AD_SCHEDULE"
+            : String(x.dimension),
+        inv = await inventory([type]);
+      const resource = `${prefix}/${kind}/${x.level === "CAMPAIGN" ? x.campaign_id : x.ad_group_id}~${x.criterion_id}`,
+        found = inv.rows.filter((r) => r.resourceName === resource);
+      if (found.length !== 1)
+        extFail(
+          "google_stage3_criterion_unavailable",
+          "Bid modifier требует existing positive criterion точного dimension/parent, не создание нового targeting.",
+        );
+      const before = found[0]!;
+      if (before.negative === true)
+        extFail(
+          "google_stage3_modifier_invalid",
+          "Negative demographic/schedule criterion не допускает bid_modifier.",
+        );
+      if (Number(before.bidModifier ?? 1) === Number(x.bid_modifier))
+        extFail(
+          "google_stage3_no_changes",
+          "Bid modifier уже имеет requested value; provider mutation не требуется.",
+        );
+      if (action === "schedule_bid_modifier") {
+        if (!ctx.timezone || ctx.timezone === "undefined")
+          extFail(
+            "google_stage3_timezone_unavailable",
+            "Timezone аккаунта отсутствует; schedule modifier не проверен.",
+          );
+        item.warnings.push(
+          `Schedule bid modifier timezone: ${ctx.timezone}; интервалы/соседние criteria не меняются. PPC P219–221.`,
+        );
+      } else
+        item.warnings.push(
+          `Demographic ${type} bid modifier; dimension/negative/status не меняются. PPC P210–212.`,
+        );
+      add(
+        kind,
+        "update",
+        resource,
+        { resourceName: resource, bidModifier: x.bid_modifier },
+        { ...before, bidModifier: x.bid_modifier },
+        before,
+        inv.query,
+        responseKey,
+        "bid_modifier",
+      );
+      if (
+        typeof before.bidModifier === "number" &&
+        Number.isFinite(before.bidModifier) &&
+        before.bidModifier >= 0.1 &&
+        before.bidModifier <= 10
+      )
+        inverse.push({ ...x, bid_modifier: before.bidModifier });
+      else completelyReversible = false;
+      continue;
+    }
     if (action.startsWith("demographic_")) {
       const field = (
         {
@@ -1205,10 +1441,13 @@ export async function buildStage3Plan(
       item.warnings.push(
         "Demographic availability зависит от страны и рекламной policy; Google validate_only обязателен. Коллекция demographics не заменяется.",
       );
+      if (x.bid_modifier !== undefined)
+        requireManualModifier(campaign, Number(x.bid_modifier));
       await create(
         String(x.dimension),
         { [field]: { type: x.value } },
         action === "demographic_exclude",
+        x.bid_modifier !== undefined ? { bidModifier: x.bid_modifier } : {},
       );
       continue;
     }
@@ -1219,10 +1458,33 @@ export async function buildStage3Plan(
           Казахстан: "Kazakhstan",
         },
         name = aliases[String(x.name)] ?? String(x.name);
-      const query = `SELECT geo_target_constant.resource_name, geo_target_constant.id, geo_target_constant.name, geo_target_constant.canonical_name, geo_target_constant.country_code, geo_target_constant.target_type, geo_target_constant.status FROM geo_target_constant WHERE ${x.geo_target_id ? `geo_target_constant.id = ${x.geo_target_id}` : `geo_target_constant.name = ${extQuote(name)}`} AND geo_target_constant.status = 'ENABLED'${x.country_code ? ` AND geo_target_constant.country_code = ${extQuote(String(x.country_code))}` : ""}`;
-      const matches = (await ctx.query(query)).map((r) =>
-        extRow(r.geoTargetConstant),
-      );
+      const fields =
+        "geo_target_constant.resource_name, geo_target_constant.id, geo_target_constant.name, geo_target_constant.canonical_name, geo_target_constant.country_code, geo_target_constant.target_type, geo_target_constant.status";
+      let matches: ExtendedRow[];
+      if (suggestGeo) {
+        const suggestions = await suggestGeo(
+          String(x.name),
+          x.country_code as string | undefined,
+        );
+        if (!Array.isArray(suggestions) || suggestions.length > 100)
+          extFail(
+            "google_stage3_geo_limit",
+            "GeoTargetConstantService response invalid/более 100 suggestions; данные не обрезаны.",
+          );
+        matches = suggestions
+          .map((s) => extRow(s.geoTargetConstant ?? s))
+          .filter(
+            (g) =>
+              g.status === "ENABLED" &&
+              (!x.country_code || g.countryCode === x.country_code) &&
+              (!x.geo_target_id || String(g.id) === x.geo_target_id),
+          );
+      } else {
+        const query = `SELECT ${fields} FROM geo_target_constant WHERE ${x.geo_target_id ? `geo_target_constant.id = ${x.geo_target_id}` : `geo_target_constant.name = ${extQuote(name)}`} AND geo_target_constant.status = 'ENABLED'${x.country_code ? ` AND geo_target_constant.country_code = ${extQuote(String(x.country_code))}` : ""}`;
+        matches = (await ctx.query(query)).map((r) =>
+          extRow(r.geoTargetConstant),
+        );
+      }
       if (matches.length !== 1)
         extFail(
           "google_stage3_geo_ambiguous",
@@ -1233,7 +1495,8 @@ export async function buildStage3Plan(
               .join("; ") || "нет"
           }.`,
         );
-      const geo = matches[0]!;
+      let geo = matches[0]!;
+      extId(String(geo.id), "resolved Google geo ID");
       if (
         !/^geoTargetConstants\/[0-9]+$/u.test(String(geo.resourceName)) ||
         geo.status !== "ENABLED" ||
@@ -1244,6 +1507,32 @@ export async function buildStage3Plan(
           "google_stage3_geo_invalid",
           "Неверный Google geo target reference.",
         );
+      if (String(geo.resourceName) !== `geoTargetConstants/${geo.id}`)
+        extFail(
+          "google_stage3_geo_invalid",
+          "Geo candidate resource ID не совпадает с reference.",
+        );
+      if (suggestGeo) {
+        const verified = await ctx.query(
+            `SELECT ${fields} FROM geo_target_constant WHERE geo_target_constant.id = ${geo.id}`,
+          ),
+          actual = extRow(verified[0]?.geoTargetConstant);
+        if (
+          verified.length !== 1 ||
+          actual.resourceName !== geo.resourceName ||
+          String(actual.id) !== String(geo.id) ||
+          actual.status !== "ENABLED" ||
+          (x.country_code && actual.countryCode !== x.country_code)
+        )
+          extFail(
+            "google_stage3_geo_invalid",
+            "Geo service candidate не подтверждён fresh GAQL constant; targeting preview отклонён.",
+          );
+        geo = actual;
+        item.warnings.push(
+          "Name resolution: GeoTargetConstantService.suggest → exact frozen GAQL reference proof. PPC P215.",
+        );
+      }
       item.warnings.push(
         `Гео ${x.name} → ${geo.resourceName}, ${geo.canonicalName}, type ${geo.targetType}; mode ${extRow(campaign.geoTargetTypeSetting).positiveGeoTargetType ?? "PROVIDER_DEFAULT"}.`,
       );
@@ -1355,6 +1644,8 @@ export async function buildStage3Plan(
           "google_stage3_timezone_unavailable",
           "Timezone аккаунта отсутствует; нельзя проверить расписание.",
         );
+      if (x.bid_modifier !== undefined)
+        requireManualModifier(campaign, Number(x.bid_modifier));
       const inv = await inventory(["AD_SCHEDULE"]),
         stored =
           scheduled.get(parentResource) ??
@@ -1392,6 +1683,9 @@ export async function buildStage3Plan(
           status: "ENABLED",
           negative: false,
           adSchedule,
+          ...(x.bid_modifier !== undefined
+            ? { bidModifier: x.bid_modifier }
+            : {}),
         };
         add(kind, "create", null, fields, fields, null, inv.query, responseKey);
         completelyReversible = false;
@@ -1459,7 +1753,9 @@ export async function searchStage3Audiences(
         ? "user_list"
         : kind === "CUSTOM"
           ? "custom_audience"
-          : "user_interest";
+          : kind === "DETAILED_DEMOGRAPHIC"
+            ? "detailed_demographic"
+            : "user_interest";
   const query = spec.query.replace(
     `${table}.name = ${extQuote(name)}`,
     `${table}.name LIKE ${extQuote(`%${name.replace(/[%_]/g, "")}%`)}`,

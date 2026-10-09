@@ -6,7 +6,7 @@ The package uses the existing controlled-write contract: account/workspace owner
 
 ## Tools and typed contract
 
-`google_ads_targeting_preview` accepts explicit `provider: GOOGLE_ADS`, account ID and 1–500 closed `items`. It returns an immutable version-3 extension plan; the shared engine performs validation and approval. `google_ads_audience_search` is a separate read-only reference lookup by name and kind. Both are private MCP tools; Public MCP remains read-only.
+`google_ads_targeting_preview` accepts explicit `provider: GOOGLE_ADS`, account ID and 1–500 closed `items`. It returns an immutable version-3 extension plan; the shared engine performs validation and approval. `google_ads_audience_search` is a separate read-only reference lookup by name and kind, including DETAILED_DEMOGRAPHIC. Both are private MCP tools; Public MCP remains read-only.
 
 Every targeting row has `operation`, `level: CAMPAIGN | AD_GROUP`, `campaign_id`, and `ad_group_id` only at AD_GROUP level. IDs are numeric, never caller-supplied Google resource names. Definitions (`custom_audience_create/update`) do not accept a campaign or ad group because creating a definition is distinct from targeting it.
 
@@ -51,6 +51,8 @@ Reviewed v24 capability boundaries: `CUSTOM_AUDIENCE` has no negative targeting;
 
 ## Safety, snapshots and recovery
 
+Original PPC document P194–225 is now source-audited; see [required-scope closeout](google-ads-write-stage3-required-closeout.md). Audience bid modifiers enforce the original P203 rule: **only provider-derived OBSERVATION**; a default/explicit TARGETING setting is rejected without changing mode. Campaign OBSERVATION can be inherited by a group; adding an audience with the same inherited mode never edits the campaign setting. Existing demographic/schedule modifiers use exact `bid_modifier` masks and capture reversible numeric before-values.
+
 - Full customer proof, parent resource and campaign/group association, targeting restrictions, channel/strategy, selected criterion and reference inventory are frozen for stale checks. A foreign resource or mismatching association aborts the whole batch.
 - Duplicate raw rows, resolved aliases, positive/negative contradictions and multiple changes to one exact resource fail before provider validation. Underlying operation count, including modes and each schedule day, cannot exceed 500.
 - Criteria are modified with exact update masks or one exact remove, never by overwriting the targeting collection. Audience mode uses v24 `targeting_setting.target_restriction_operations` with one `ADD` operation for the AUDIENCE dimension; Google replaces only that dimension. Other restrictions remain intact even if independently inserted between stale-read and mutation. Expected reread still verifies the merged full restriction list and scope-wide impact. Optional omitted `bid_only` is interpreted as provider-default TARGETING=false, without inventing a reversible original field; nonboolean values still fail.
@@ -78,5 +80,7 @@ Standalone regressions cover enums, account/group ownership, mismatching referen
 - [Custom audience channel guide](https://developers.google.com/google-ads/api/docs/remarketing/audience-segments/custom-audiences)
 - [UserList v24 eligibility](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/user_list.proto)
 - [Criterion info: schedule, geo micro-degrees, proximity](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/common/criteria.proto)
+- [Detailed demographic catalog v24](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/detailed_demographic.proto)
+- [Detailed demographic GAQL v24](https://developers.google.com/google-ads/api/fields/v24/detailed_demographic)
 
 Live Acceptance I/J remains NOT RUN until explicit TEST authorization and independent manual approval. Cross-client Q/R remains a separate mandatory client acceptance gate; mock results do not replace it.

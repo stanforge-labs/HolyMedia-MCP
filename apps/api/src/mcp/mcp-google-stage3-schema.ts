@@ -4,6 +4,7 @@ import {
   STAGE3_ACTION_FIELDS,
   STAGE3_DAYS,
   STAGE3_DEMOGRAPHICS,
+  STAGE3_AUDIENCE_TYPES,
 } from "../providers/google-ads-stage3.js";
 
 export const GOOGLE_STAGE3_TOOLS = [
@@ -18,7 +19,7 @@ const audience = {
   required: ["kind"],
   anyOf: [{ required: ["id"] }, { required: ["name"] }],
   properties: {
-    kind: { enum: ["USER_LIST", "IN_MARKET", "AFFINITY", "CUSTOM"] },
+    kind: { enum: STAGE3_AUDIENCE_TYPES },
     id,
     name,
   },
@@ -73,6 +74,7 @@ const properties: Record<string, unknown> = {
       "USER_LIST",
       "USER_INTEREST",
       "CUSTOM_AUDIENCE",
+      "EXTENDED_DEMOGRAPHIC",
       "AGE_RANGE",
       "GENDER",
       "PARENTAL_STATUS",
@@ -105,7 +107,7 @@ export function stage3ToolSchema(
       properties: {
         ...common,
         name,
-        kind: { enum: ["USER_LIST", "IN_MARKET", "AFFINITY", "CUSTOM"] },
+        kind: { enum: STAGE3_AUDIENCE_TYPES },
       },
     };
   return {
@@ -129,6 +131,7 @@ export function stage3ToolSchema(
                   "presence",
                   "language_add",
                   "schedule_add",
+                  "schedule_bid_modifier",
                   "device_modifier",
                 ].includes(operation);
               return {
@@ -163,7 +166,12 @@ export function stage3ToolSchema(
                               properties: {
                                 ...audience.properties,
                                 kind: {
-                                  enum: ["USER_LIST", "IN_MARKET", "AFFINITY"],
+                                  enum: [
+                                    "USER_LIST",
+                                    "IN_MARKET",
+                                    "AFFINITY",
+                                    "DETAILED_DEMOGRAPHIC",
+                                  ],
                                 },
                               },
                             }
@@ -179,7 +187,8 @@ export function stage3ToolSchema(
                           then: { required: ["ad_group_id"] },
                           else: { not: { required: ["ad_group_id"] } },
                         },
-                        ...(operation.startsWith("demographic_")
+                        ...(operation.startsWith("demographic_") &&
+                        operation !== "demographic_bid_modifier"
                           ? [
                               {
                                 oneOf: Object.entries(STAGE3_DEMOGRAPHICS).map(
@@ -257,7 +266,7 @@ export function stage3ToolIntent(tool: string, args: Record<string, unknown>) {
       !r.name.trim() ||
       r.name.length > 255 ||
       typeof r.kind !== "string" ||
-      !["USER_LIST", "IN_MARKET", "AFFINITY", "CUSTOM"].includes(r.kind)
+      !STAGE3_AUDIENCE_TYPES.includes(r.kind)
     )
       extFail(
         "google_stage3_input_invalid",
