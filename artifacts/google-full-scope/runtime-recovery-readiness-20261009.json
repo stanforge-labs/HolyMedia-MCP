@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "acceptance_phase": "RUNTIME_RECOVERY_READ_ONLY",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "requested_head": "b259bfd503e5298fa23978a517acbe96fc884b88",
+  "diagnostic_code_head": "49b0bd6415dc6e4c08849d3f0154eed3b492dd45",
+  "stock_api_proof": {
+    "source_head": "b259bfd503e5298fa23978a517acbe96fc884b88",
+    "image_digest": "sha256:8d3f8025ba78f080633ef3955a9a1a3b3e254c3b9773622472efc46d27b74299",
+    "provider_reads": 0,
+    "validate_only": 0,
+    "real_writes": 0,
+    "commit_sent": false,
+    "boots": [
+      {
+        "ready": true,
+        "elapsed_ms": 9560,
+        "probes": [
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "status": 503,
+            "postgres": null,
+            "redis": null
+          },
+          {
+            "status": 200,
+            "postgres": "ok",
+            "redis": "ok"
+          }
+        ],
+        "startup_errors": [
+          {
+            "message": "redis readiness failed",
+            "error_class": "Error"
+          }
+        ],
+        "exit_code_before_shutdown": null,
+        "signal_before_shutdown": null,
+        "shutdown_exit_code": null,
+        "shutdown_signal": "SIGTERM"
+      },
+      {
+        "ready": true,
+        "elapsed_ms": 7752,
+        "probes": [
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "status": 503,
+            "postgres": null,
+            "redis": null
+          },
+          {
+            "status": 200,
+            "postgres": "ok",
+            "redis": "ok"
+          }
+        ],
+        "startup_errors": [
+          {
+            "message": "redis readiness failed",
+            "error_class": "Error"
+          }
+        ],
+        "exit_code_before_shutdown": null,
+        "signal_before_shutdown": null,
+        "shutdown_exit_code": null,
+        "shutdown_signal": "SIGTERM"
+      },
+      {
+        "ready": true,
+        "elapsed_ms": 7457,
+        "probes": [
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "error_class": "TypeError"
+          },
+          {
+            "status": 503,
+            "postgres": null,
+            "redis": null
+          },
+          {
+            "status": 200,
+            "postgres": "ok",
+            "redis": "ok"
+          }
+        ],
+        "startup_errors": [
+          {
+            "message": "redis readiness failed",
+            "error_class": "Error"
+          }
+        ],
+        "exit_code_before_shutdown": null,
+        "signal_before_shutdown": null,
+        "shutdown_exit_code": null,
+        "shutdown_signal": "SIGTERM"
+      }
+    ],
+    "result": "RUNTIME_READINESS_PASS",
+    "key": {
+      "id": "34cd413a-8aff-4677-9439-abf2a9fb473a",
+      "expires_at": "2026-10-10T12:51:17.677Z",
+      "scopes": [
+        "adforge:mcp:read",
+        "adforge:mcp:write"
+      ],
+      "one_test_account": true
+    },
+    "pending_previews": 0,
+    "exact_commit_prerequisites": "DB_KEY_ACCOUNT_GATES_TYPED_TOOLS_READY_NO_COMMIT",
+    "timestamp": "2026-10-09T15:15:45.571Z"
+  },
+  "source_reconciliation": {
+    "previous_preview_source": "99ce4f05cb8f7c464442109c5c275780500ff63b",
+    "previous_preview_image": "sha256:77f70b71f61953626d18c8e66f1315c3db1df8bc6848371a312866134580e9bd",
+    "tested_b259_image": "sha256:8d3f8025ba78f080633ef3955a9a1a3b3e254c3b9773622472efc46d27b74299",
+    "reason": "Historical preview and exact-commit source were pinned to old immutable image. Source fixes were not silently mounted into that runtime. Product differences 99..b259 affect Stage0 clone, not Stage2 N/API/config contracts. New N requires its own source-pinned runtime and manifest; old preview is expired and old claims remain.",
+    "old_runtime_changed": false
+  },
+  "diagnosis": {
+    "observed": "Three independent starts show initial Redis readiness warning/503 followed by postgres+redis ok/200 and authenticated stock MCP READ.",
+    "old_failure": "Exact cause of previous readiness timeout remains unproven; original child stderr was ignored. No evidence establishes OOM, auth, provider or database failure.",
+    "bounded_wait_is_root_cause_proof": false,
+    "new_safe_startup_capture": true
+  },
+  "fresh_fixture_read": {
+    "source_head": "b259bfd503e5298fa23978a517acbe96fc884b88",
+    "timestamp": "2026-10-09T15:18:15.562Z",
+    "test_customer_id": "8590146099",
+    "mcc_id": "4378327049",
+    "test_account": true,
+    "hierarchy": true,
+    "cpc_micros": "100000",
+    "campaigns": "2 PAUSED",
+    "groups": "3 PAUSED",
+    "rsa": "3 PAUSED",
+    "original_keywords": "20 ENABLED",
+    "residual_phrase": "11479221 PAUSED",
+    "shared_list": "12261567996 detached",
+    "read": 34,
+    "validate_only": 0,
+    "real_write": 0,
+    "oauth_refresh": 0,
+    "fixture_unchanged": true
+  },
+  "pending_approvals": 0,
+  "production_changed": false,
+  "main_changed": false,
+  "old_evidence_unchanged": true
+}
