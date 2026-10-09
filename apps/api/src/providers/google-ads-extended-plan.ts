@@ -5,6 +5,7 @@ import type {
   Stage1MutationResult,
 } from "./google-ads-stage1.js";
 import { canonical } from "./google-ads-stage1.js";
+import { googleAdsApiError } from "./google-ads.error.js";
 import {
   assertGoogleWriteAccount,
   customerId,
@@ -400,23 +401,37 @@ export function decodeExtendedMutation(
             (v) => typeof v === "string",
           ) ?? "GOOGLE_ADS_ERROR",
         );
-        errors.set(
-          Number(index),
-          googleWriteFailure(
-            code,
-            path
-              .filter(
-                (p) =>
-                  typeof p.fieldName === "string" &&
-                  /^[A-Za-z_][A-Za-z0-9_]{0,80}$/.test(p.fieldName),
-              )
-              .map(
-                (p) =>
-                  `${p.fieldName}${p.index === undefined ? "" : `[${Number(p.index)}]`}`,
-              )
-              .join("."),
-          ),
+        const failure = googleWriteFailure(
+          code,
+          path
+            .filter(
+              (p) =>
+                typeof p.fieldName === "string" &&
+                /^[A-Za-z_][A-Za-z0-9_]{0,80}$/.test(p.fieldName),
+            )
+            .map(
+              (p) =>
+                `${p.fieldName}${p.index === undefined ? "" : `[${Number(p.index)}]`}`,
+            )
+            .join("."),
         );
+        const parsed = googleAdsApiError(
+          {
+            error: {
+              details: [
+                { "@type": "google.ads.GoogleAdsFailure", errors: [e] },
+              ],
+            },
+          },
+          new Response(null, { status: 400 }),
+        );
+        if (parsed)
+          failure.google_details = parsed.errors.map((d) => ({
+            google_code: d.error_code,
+            message: d.message,
+            ...(d.field_path ? { field_path: d.field_path } : {}),
+          }));
+        errors.set(Number(index), failure);
       }
     }
     if (!errors.size) globalFailure = true;
@@ -461,16 +476,26 @@ export function decodeExtendedMutation(
     };
   });
 }
-function replace(value: unknown, refs: Map<string, string>): unknown {
+export function replaceExtendedTemps(
+  value: unknown,
+  refs: Map<string, string>,
+): unknown {
   if (typeof value === "string") {
-    let out = value;
-    for (const [temp, actual] of refs) out = out.split(temp).join(actual);
-    return out;
+    if (refs.has(value)) return refs.get(value)!;
+    // GAQL resource literals are quoted. Never substring-replace -1 inside -10,
+    // or alter user-facing names/text that happen to contain a resource string.
+    if (value.startsWith("SELECT "))
+      return value.replace(
+        /'([^']+)'/g,
+        (_m, resource: string) => `'${refs.get(resource) ?? resource}'`,
+      );
+    return value;
   }
-  if (Array.isArray(value)) return value.map((x) => replace(x, refs));
+  if (Array.isArray(value))
+    return value.map((x) => replaceExtendedTemps(x, refs));
   if (value && typeof value === "object")
     return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, replace(v, refs)]),
+      Object.entries(value).map(([k, v]) => [k, replaceExtendedTemps(v, refs)]),
     );
   return value;
 }
@@ -506,21 +531,64 @@ export async function verifyExtendedMutation(
   const actual: (ExtendedRow | null)[] = [],
     ops: ExtendedRow[] = [];
   let contextVerified = true;
-  for (const c of plan.checks.filter(
-    (c) => !plan.operations.some((o) => o.read_query === c.query),
-  )) {
-    // Parent/impact snapshots may include the same mutated resource. They must be verified
-    // by the operation's exact reread instead of incorrectly treating intended changes stale.
-    const affected = plan.operations.some((o) =>
-      c.rows.some((r) =>
-        Object.values(r).some(
-          (v) => extRow(v).resourceName === o.resource_name,
-        ),
-      ),
-    );
-    if (affected) continue;
+  const mutable = new Set(
+    plan.operations
+      .filter((o) => o.method === "update")
+      .map((o) => String(o.resource_name)),
+  );
+  const membershipChanges = new Set(
+    plan.operations
+      .filter((o) => o.method === "remove")
+      .map((o) => String(o.resource_name)),
+  );
+  plan.operations.forEach((o, i) => {
+    if (
+      o.method === "create" &&
+      results[i]?.success &&
+      results[i]?.resource_name
+    )
+      membershipChanges.add(results[i]!.resource_name!);
+  });
+  const hasMembershipChange = (v: unknown): boolean =>
+    Array.isArray(v)
+      ? v.some(hasMembershipChange)
+      : Boolean(
+          v &&
+          typeof v === "object" &&
+          (membershipChanges.has(String(extRow(v).resourceName)) ||
+            Object.values(v).some(hasMembershipChange)),
+        );
+  const stripMutable = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(stripMutable);
+    if (v && typeof v === "object") {
+      const r = extRow(v);
+      if (mutable.has(String(r.resourceName)))
+        return { resourceName: r.resourceName, verified_by_operation: true };
+      return Object.fromEntries(
+        Object.entries(r).map(([k, x]) => [k, stripMutable(x)]),
+      );
+    }
+    return v;
+  };
+  const contextRows = (rows: ExtendedRow[]) =>
+    rows
+      .filter((r) => !hasMembershipChange(r))
+      .map(stripMutable)
+      .filter(
+        (r) =>
+          !Object.values(extRow(r)).every(
+            (v) => extRow(v).verified_by_operation === true,
+          ),
+      )
+      .sort((a, b) => canonical(a).localeCompare(canonical(b), "en"));
+  for (const c of plan.checks) {
+    // Remove only the exact changed entity from the comparison, never its siblings
+    // or parent fields. Nested Ad changes must not hide unexpected AdGroupAd status.
     try {
-      if (canonical(await extRead(read, c.query)) !== canonical(c.rows))
+      if (
+        canonical(contextRows(await extRead(read, c.query))) !==
+        canonical(contextRows(c.rows))
+      )
         contextVerified = false;
     } catch {
       contextVerified = false;
@@ -531,7 +599,7 @@ export async function verifyExtendedMutation(
       verified = false;
     const resource = results[i]?.resource_name ?? o.resource_name;
     try {
-      const q = String(replace(o.read_query, refs)),
+      const q = String(replaceExtendedTemps(o.read_query, refs)),
         rows = await extRead(read, q);
       const found = rows
         .map((r) =>
@@ -546,14 +614,41 @@ export async function verifyExtendedMutation(
         entity = found[0]!;
         extOwner(entity.resourceName, plan.account_id, o.kind);
       }
-      const expected = extRow(replace(o.expected, refs));
+      const expected = extRow(replaceExtendedTemps(o.expected, refs));
       if (resource) expected.resourceName = resource;
+      const comparisonEntity = entity ? structuredClone(entity) : null;
+      // Protobuf JSON omits selected default values. Normalize only documented
+      // provider-managed defaults with an independent strategy-type proof.
+      if (
+        comparisonEntity &&
+        extRow(expected.manualCpc).enhancedCpcEnabled === false &&
+        comparisonEntity.biddingStrategyType === "MANUAL_CPC"
+      )
+        comparisonEntity.manualCpc = {
+          ...extRow(comparisonEntity.manualCpc),
+          enhancedCpcEnabled:
+            extRow(comparisonEntity.manualCpc).enhancedCpcEnabled ?? false,
+        };
+      if (
+        comparisonEntity &&
+        expected.biddingStrategy === "" &&
+        comparisonEntity.biddingStrategy === undefined
+      )
+        comparisonEntity.biddingStrategy = "";
+      if (
+        comparisonEntity &&
+        expected.negative === false &&
+        comparisonEntity.negative === undefined &&
+        ["adGroupCriteria", "campaignCriteria"].includes(o.kind)
+      )
+        comparisonEntity.negative = false;
       verified =
         contextVerified &&
         results[i]?.success === true &&
         (o.method === "remove"
           ? found.length === 0 || entity?.status === "REMOVED"
-          : Boolean(entity) && extContains(entity, expected));
+          : Boolean(comparisonEntity) &&
+            extContains(comparisonEntity, expected));
     } catch {
       /* Never retry a mutation when reread is uncertain. */
     }
