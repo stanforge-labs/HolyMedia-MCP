@@ -1,0 +1,1270 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-10-09",
+  "audited_branch": "codex/google-ads-write-full-scope-final",
+  "audited_head": "6fb30acd6249768d738a1f20b013a8368b4c3950",
+  "source": {
+    "artifact": "artifacts/google-full-scope/original-tz-source-20261009.json",
+    "filename": "ТЗ запись в Google Ads для HolyMedia MCP.docx",
+    "source_date": "2026-10-05",
+    "sha256": "51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0",
+    "paragraph_count": 336,
+    "unchanged": true,
+    "anchors": "OOXML paragraph numbers, not page numbers"
+  },
+  "classifications": {
+    "DONE+TESTED": "Implemented supported profile with local/mock tests; live status separate.",
+    "DONE+LIVEPENDING": "Implemented supported profile and mock tests; new profile real acceptance still pending.",
+    "REQUIREDGAP": "Original requirement incomplete or mandatory live/client gate not closed.",
+    "UNSUPPORTEDbyAPI": "Only independently demonstrated provider restriction, not a local implementation limitation.",
+    "OPTIONALbeyondoriginal": "No explicit original paragraph mandate, even when later user authorized and implemented."
+  },
+  "evidence_boundaries": {
+    "historical_stage01": {
+      "artifact": "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json",
+      "result": "COMPLETE",
+      "read": 1794,
+      "validate_only": 27,
+      "real_write": 17,
+      "all_write_customer_id": "8590146099",
+      "historical_audit_immutable": true
+    },
+    "fresh_preflight": {
+      "artifact": "artifacts/google-full-scope/read-only-preflight-20261009.json",
+      "runtime_source": "7da2fbbe7d150072183bc5e121cae4abae019ddc",
+      "read": 15,
+      "validate_only": 0,
+      "real_write": 0,
+      "does_not_prove_new_code_live": true,
+      "eligible_images": 0,
+      "conversion_actions": 0
+    },
+    "this_doc_audit": {
+      "read": 0,
+      "validate_only": 0,
+      "real_write": 0,
+      "production_changed": false,
+      "main_changed": false
+    },
+    "pending_root_work": "Tracking empty protobuf-default comparison normalization is uncommitted root-only work at audit; no claim of product test execution by this documentation audit.",
+    "quality": "Use final root quality/CI artifact after integration. This doc audit verifies references/JSON/format/secrets only; historic security baseline preserved."
+  },
+  "requirements": [
+    {
+      "id": "shared-flow",
+      "stage": "SHARED",
+      "original_paragraphs": [27, 28, 29, 30, 31],
+      "requirement": "Provider-derived preview, validate_only, browser approval, exact immutable commit, fresh stale/TTL/consumption guards",
+      "provider_objects": ["GoogleAdsService"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/mcp/mcp-preview.service.ts",
+        "apps/api/src/providers/google-ads-extended-plan.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts",
+        "apps/api/src/mcp/google-extended.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_STAGE01_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "ownership-flags",
+      "stage": "SHARED",
+      "original_paragraphs": [37, 42],
+      "requirement": "Account allowlist, workspace/token ownership, scopes and MCC context; gates default OFF",
+      "provider_objects": ["Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/mcp/mcp-preview.service.ts",
+        "apps/api/src/providers/provider.service.ts",
+        "packages/config/src/index.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts",
+        "apps/api/src/mcp/google-extended.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_STAGE01_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "batch-errors",
+      "stage": "SHARED",
+      "original_paragraphs": [32, 41],
+      "requirement": "500-operation bound, per-row Russian/local/provider errors and preserved source/code; Stage1 partial failure",
+      "provider_objects": ["AdGroupCriterionService", "GoogleAdsService"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-write.ts",
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/providers/google-ads-stage2-advanced.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts",
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage2-advanced.test.ts"
+      ],
+      "live_status": "PREVIOUS_STAGE01_PASS",
+      "remaining_limits": [
+        "Stage0 and interdependent creation graphs use atomic partial_failure=false, as required by P103."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "audit-rollback",
+      "stage": "SHARED",
+      "original_paragraphs": [34, 38, 39],
+      "requirement": "Stable commit identities, journal, exact before/after, irreversible warning and fresh inverse preview where reversible",
+      "provider_objects": ["AuditService"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/mcp/mcp-preview.service.ts",
+        "apps/api/src/providers/google-ads-extended-plan.ts",
+        "apps/api/src/providers/google-ads-stage2.ts",
+        "apps/api/src/providers/google-ads-stage4.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-stage2.integration.test.ts",
+        "apps/api/src/mcp/google-extended.integration.test.ts",
+        "apps/api/src/mcp/google-tracking-rollback.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_STAGE01_STATUS_URL_PASS_NEW_INVERSES_PENDING",
+      "remaining_limits": [
+        "No automatic deletion inverse for creations/removals.",
+        "Inherited/zero CPC override and newly created local modifier cannot advertise invented positive-value or delete-based inverse. Explicit captured-value updates support inverse.",
+        "Campaign PAUSE cannot advertise ENABLE inverse bypassing launch checklist."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "money",
+      "stage": "SHARED",
+      "original_paragraphs": [35, 40],
+      "requirement": "Exact absolute/percentage money, Google currency_constant billable units, half-up quantization and >50% warnings",
+      "provider_objects": [
+        "CurrencyConstant",
+        "CampaignBudget",
+        "AdGroup",
+        "AdGroupCriterion"
+      ],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-money.ts",
+        "apps/api/src/providers/google-ads-stage0.ts",
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/providers/google-ads-stage2.ts",
+        "apps/api/src/providers/google-ads-pmax.ts"
+      ],
+      "tests": [
+        "apps/api/src/providers/google-ads-money.test.ts",
+        "apps/api/src/providers/google-ads-stage01-money.test.ts",
+        "apps/api/src/mcp/google-stage2.integration.test.ts",
+        "apps/api/src/providers/google-ads-pmax.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "No FX or Intl/hardcoded precision fallback. Missing/mismatched authoritative unit and positive money rounding to zero reject."
+      ]
+    },
+    {
+      "id": "all-paused",
+      "stage": "SHARED",
+      "original_paragraphs": [36],
+      "requirement": "Campaign/ad-group/ad creation PAUSED; activation separate and checklist guarded",
+      "provider_objects": ["Campaign", "AdGroup", "AdGroupAd", "AssetGroup"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage0.ts",
+        "apps/api/src/providers/google-ads-stage4.ts",
+        "apps/api/src/providers/google-ads-pmax.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/providers/google-ads-pmax.test.ts"
+      ],
+      "live_status": "Stage01 Search previous PASS; new PMax pending",
+      "remaining_limits": [
+        "Asset/link criteria may be ENABLED beneath PAUSED campaign/group; preview states this, no activation of delivery parents."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "client-schemas",
+      "stage": "CLIENT",
+      "original_paragraphs": [44, 45, 47, 48, 49, 50, 51, 52],
+      "requirement": "Streamable HTTP typed tools, descriptions/annotations, bounded profiles, structuredContent plus text independent of client UI",
+      "provider_objects": ["MCP"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/mcp/mcp.controller.ts",
+        "apps/api/src/mcp/mcp.service.ts",
+        "apps/api/src/mcp/google-write-client-contract.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-write-client-contract.test.ts",
+        "apps/api/src/mcp/google-write-client-runtime.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Schemas/stock HTTP tests are not real ChatGPT/Claude/Gemini/Cursor acceptance."
+      ]
+    },
+    {
+      "id": "native-write-oauth",
+      "stage": "CLIENT",
+      "original_paragraphs": [46],
+      "requirement": "OAuth2.1 MCP write identity for each employee, authenticated approval/audit ownership without URL key",
+      "provider_objects": ["OAuthAuthorization", "McpPreview"],
+      "classification": "REQUIREDGAP",
+      "implementation": [
+        "apps/api/src/mcp/mcp.controller.ts",
+        "apps/api/src/mcp/oauth-authorization.service.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": ["apps/api/src/mcp/oauth-authorization.integration.test.ts"],
+      "live_status": "PENDING_AGENT_INTEGRATION",
+      "remaining_limits": [
+        "At audited 6fb30ac, private controlled-write principal is scoped service identity; native OAuth mapping to equivalent Google write approval identity is in progress in independent branch. Existing public read OAuth does not satisfy write scope."
+      ]
+    },
+    {
+      "id": "rest-openapi",
+      "stage": "CLIENT",
+      "original_paragraphs": [53],
+      "requirement": "Same protected operations through authenticated REST fallback and OpenAPI3.1",
+      "provider_objects": ["MCP REST"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/mcp/mcp.controller.ts",
+        "apps/api/src/mcp/google-write-client-contract.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-write-client-contract.test.ts",
+        "apps/api/src/mcp/google-write-client-runtime.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "GET /mcp/openapi and POST /mcp/rest/:tool use authenticated private contract; deployment routing supplies external /api/v1 prefix."
+      ]
+    },
+    {
+      "id": "cross-client-QRS",
+      "stage": "CLIENT",
+      "original_paragraphs": [57, 58, 59, 60, 61, 62, 63, 64, 65],
+      "requirement": "Actual Q ChatGPT / R second client and S explicit user consent before commits",
+      "provider_objects": ["MCP clients"],
+      "classification": "REQUIREDGAP",
+      "implementation": [
+        "apps/api/src/mcp/google-write-client-contract.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": ["apps/api/src/mcp/google-write-client-runtime.test.ts"],
+      "live_status": "BLOCKED_REAL_CLIENTS",
+      "remaining_limits": [
+        "Q/R clients not connected; cross-client S pending. Harness human approval PASS is not live Q/R/S."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s0-budget-search",
+      "stage": "0",
+      "original_paragraphs": [71, 72, 73, 74, 75, 76],
+      "requirement": "Currency budget and Search campaign names/bidding/dates/network defaults",
+      "provider_objects": ["CampaignBudget", "Campaign"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage0-budget.test.ts",
+        "apps/api/src/providers/google-ads-stage01-money.test.ts"
+      ],
+      "live_status": "PREVIOUS_T_PASS_NEW_MONEY_PENDING",
+      "remaining_limits": [
+        "Non-shared budget name provider-derived from campaign, never custom daily suffix. Authoritative-money extension awaits new live validation."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s0-geo-language",
+      "stage": "0",
+      "original_paragraphs": [77, 78, 79],
+      "requirement": "Geo name resolution, languages, PRESENCE default and positive radius/proximity",
+      "provider_objects": ["GeoTargetConstantService", "CampaignCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage0-proximity.test.ts"
+      ],
+      "live_status": "PREVIOUS_T_GEO_LANGUAGE_PASS_NEW_PROXIMITY_PENDING",
+      "remaining_limits": [
+        "Typed coordinates/radius, no invented geocoding; new proximity profile mock-tested, not in historical T live."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s0-schedule",
+      "stage": "0",
+      "original_paragraphs": [80, 81, 82],
+      "requirement": "Optional quarter-hour schedule validation and account timezone",
+      "provider_objects": ["CampaignCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": []
+    },
+    {
+      "id": "s0-goals",
+      "stage": "0",
+      "original_paragraphs": [83, 84, 85],
+      "requirement": "Action existence/status/ownership/data validation and exact campaign goals/config",
+      "provider_objects": [
+        "ConversionAction",
+        "CampaignConversionGoal",
+        "CustomConversionGoal",
+        "ConversionGoalCampaignConfig"
+      ],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage0-conversion-goal.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "No fabricated conversion health; same-account supported goals only. TEST preflight has 0 conversion actions."
+      ]
+    },
+    {
+      "id": "s0-groups-keywords",
+      "stage": "0",
+      "original_paragraphs": [86, 87, 88, 89, 90, 91],
+      "requirement": "PAUSED groups/keywords, reused Stage1 duplicate/negative conflicts and explicit currency bids",
+      "provider_objects": ["AdGroup", "AdGroupCriterion", "CampaignCriterion"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage0.ts",
+        "apps/api/src/providers/google-ads-stage1.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/mcp/google-stage1.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_T_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s0-rsa-assets",
+      "stage": "0",
+      "original_paragraphs": [92, 93, 94, 95, 96, 97],
+      "requirement": "PAUSED RSA plus text/call/business assets and existing owned image/logo references",
+      "provider_objects": ["AdGroupAd", "Asset", "CampaignAsset"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage0.ts",
+        "apps/api/src/providers/google-ads-stage4.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage4.test.ts"
+      ],
+      "live_status": "PREVIOUS_T_SUBSET_PASS",
+      "remaining_limits": [
+        "Search Stage0 brief uses image/logo references, not inline upload; bounded binary creation exists in Stage4 before assembly.",
+        "Historical T covered RSA and four sitelinks, not every asset form."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s0-tracking-atomic",
+      "stage": "0",
+      "original_paragraphs": [98, 99, 100, 101, 102, 103],
+      "requirement": "UTM/tracking and atomic temporary-ID creation graph",
+      "provider_objects": ["GoogleAdsService", "Campaign"],
+      "classification": "DONE+TESTED",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "PREVIOUS_T_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s0-clone-profile",
+      "stage": "0",
+      "original_paragraphs": [104, 105, 106],
+      "requirement": "Clone existing Search campaign with new name/geo/budget and immutable source",
+      "provider_objects": [
+        "Campaign",
+        "CampaignBudget",
+        "AdGroup",
+        "AdGroupAd",
+        "CampaignCriterion",
+        "Asset"
+      ],
+      "classification": "REQUIREDGAP",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Implemented bounded Search MANUAL_CPC/MAXIMIZE_CONVERSIONS clone.",
+        "Whole preview rejects shared-list links, proximity/audience/device criteria, non-keyword/non-RSA resources, multi-final URLs, custom/cross-account goals, call/business/unknown assets and unsupported networks/bidding/geo modes.",
+        "These are local coverage gaps, not Google API impossibility. No silently dropped component."
+      ]
+    },
+    {
+      "id": "s0-checklist-activation",
+      "stage": "0",
+      "original_paragraphs": [107, 108, 109, 110, 111, 112, 113],
+      "requirement": "Actual launch checklist, safe URL probes, conversion/policy warnings and separate campaign resume",
+      "provider_objects": ["Campaign", "ConversionAction", "Asset"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage0.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/mcp/google-campaign-pause.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_V_W_PASS",
+      "remaining_limits": [
+        "PAUSED groups/ads and pending policy warnings remain visible; conversion optimization failures block activation."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s1-keyword-lifecycle",
+      "stage": "1",
+      "original_paragraphs": [
+        134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147,
+        148
+      ],
+      "requirement": "Keyword status/create/match replacement/final URL and protected removal",
+      "provider_objects": ["AdGroupCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/providers/google-ads-keywords.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_STAGE1_MATRIX_PASS",
+      "remaining_limits": [
+        "Historical A/B/C/F/M/O exercised live status/replacement/protection; not every new money/URL case."
+      ],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s1-negatives-lists-terms",
+      "stage": "1",
+      "original_paragraphs": [
+        149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162,
+        163
+      ],
+      "requirement": "Campaign/group negatives, shared lists and search-term conversion using common builders/conflicts",
+      "provider_objects": [
+        "CampaignCriterion",
+        "AdGroupCriterion",
+        "SharedSet",
+        "SharedCriterion",
+        "CampaignSharedSet"
+      ],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/providers/google-ads-negatives.ts",
+        "apps/api/src/providers/google-ads-search-terms.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/providers/google-ads-negatives.test.ts",
+        "apps/api/src/providers/google-ads-search-terms.test.ts"
+      ],
+      "live_status": "PREVIOUS_D_E_PASS_OTHER_PROFILES_PENDING",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "s2-foundation",
+      "stage": "2",
+      "original_paragraphs": [166, 170, 171, 172, 173, 174, 175, 176, 177, 178],
+      "requirement": "Keyword CPC / group CPC+tCPA / budget absolute-percent changes and shared impact",
+      "provider_objects": ["AdGroupCriterion", "AdGroup", "CampaignBudget"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2.ts",
+        "apps/api/src/providers/google-ads-money.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage2.integration.test.ts",
+        "apps/api/src/providers/google-ads-money.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Inherited zero keyword bid needs explicit absolute input, not invented default.",
+        "G/H/N are mock/disposable equivalents, live pending."
+      ]
+    },
+    {
+      "id": "s2-strategies",
+      "stage": "2",
+      "original_paragraphs": [179, 180, 181],
+      "requirement": "Manual CPC, Max Clicks/Conversions, tCPA/tROAS/tImpressionShare and bounded parameters/clears",
+      "provider_objects": ["Campaign", "BiddingStrategy"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2-advanced.ts"
+      ],
+      "tests": ["apps/api/src/providers/google-ads-stage2-advanced.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Search-compatible strategy/profile checks; optional supported clear_fields implemented, required targets never silently cleared.",
+        "Arbitrary parameters/hotel profiles outside local supported profile."
+      ]
+    },
+    {
+      "id": "s2-portfolios",
+      "stage": "2",
+      "original_paragraphs": [182, 183, 184],
+      "requirement": "Portfolio create/update and campaign attach/detach with all impacted campaigns proved",
+      "provider_objects": ["BiddingStrategy", "Campaign"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2-advanced.ts"
+      ],
+      "tests": ["apps/api/src/providers/google-ads-stage2-advanced.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Same-account/currency and existing compatible budget profile; no invented cross-account or budget realignment.",
+        "Manager cross-account portfolio management is not explicitly required by P182–184."
+      ]
+    },
+    {
+      "id": "s2-device-modifiers",
+      "stage": "2",
+      "original_paragraphs": [185, 186, 187],
+      "requirement": "Campaign device modifiers and AdGroupBidModifier inherited/local override",
+      "provider_objects": ["CampaignCriterion", "AdGroupBidModifier"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2-advanced.ts"
+      ],
+      "tests": ["apps/api/src/providers/google-ads-stage2-advanced.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Device0 or0.1..10; automatic strategy compatibility explicit. Creating local override has no automatic removal inverse."
+      ]
+    },
+    {
+      "id": "s2-geo-schedule-modifiers",
+      "stage": "2",
+      "original_paragraphs": [188, 189, 190],
+      "requirement": "Exact existing geo/schedule modifier leaves without collection replacement",
+      "provider_objects": ["CampaignCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2-advanced.ts"
+      ],
+      "tests": ["apps/api/src/providers/google-ads-stage2-advanced.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": []
+    },
+    {
+      "id": "s2-filtered-bulk",
+      "stage": "2",
+      "original_paragraphs": [191, 192, 193],
+      "requirement": "Frozen performance selections, exact money comparisons, bounded mixed rows and impact/audit",
+      "provider_objects": ["AdGroupCriterion", "AdGroup", "CampaignBudget"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2.ts",
+        "apps/api/src/providers/google-ads-stage2-advanced.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage2.integration.test.ts",
+        "apps/api/src/providers/google-ads-stage2-advanced.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Performance metric drift may stale preview; no automatic retry/refresh of approved selection."
+      ]
+    },
+    {
+      "id": "s3-audiences-modes",
+      "stage": "3",
+      "original_paragraphs": [198, 199, 200, 201, 202, 203, 204, 205, 206],
+      "requirement": "Campaign/group audiences, exclude/remove, visible observation/targeting, modifier and name catalogs",
+      "provider_objects": [
+        "CampaignCriterion",
+        "AdGroupCriterion",
+        "UserInterest",
+        "UserList",
+        "CustomAudience"
+      ],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage3.ts"],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage3-required.test.ts",
+        "apps/api/src/providers/google-ads-stage3.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Mode/strategy/channel compatibility enforced; unsupported combinations explicitly rejected, not advertised as globally available.",
+        "Only independently proven OBSERVATION audience modifiers."
+      ]
+    },
+    {
+      "id": "s3-custom-contextual",
+      "stage": "3",
+      "original_paragraphs": [207, 208, 209],
+      "requirement": "Custom audience terms/URLs/apps definitions create/update with exact composition",
+      "provider_objects": ["CustomAudienceService"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage3.ts"],
+      "tests": ["apps/api/src/providers/google-ads-stage3-required.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Separate CustomAudienceService transport; no invented mixed GoogleAdsService operation.",
+        "Contextual segments, no Customer Match/PII list uploads."
+      ]
+    },
+    {
+      "id": "s3-demographics",
+      "stage": "3",
+      "original_paragraphs": [210, 211, 212],
+      "requirement": "Age/gender/parental/income include/exclude and supported existing criterion modifiers",
+      "provider_objects": ["CampaignCriterion", "AdGroupCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage3.ts"],
+      "tests": ["apps/api/src/providers/google-ads-stage3-required.test.ts"],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Country/channel eligibility checked by provider validation. Criteria/catalog read is implemented; a standalone demographic performance reporting tool is not claimed."
+      ]
+    },
+    {
+      "id": "s3-geo",
+      "stage": "3",
+      "original_paragraphs": [213, 214, 215],
+      "requirement": "City/region include/exclude, radius, official name suggestions and presence modes",
+      "provider_objects": ["GeoTargetConstantService", "CampaignCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage3.ts",
+        "apps/api/src/providers/adapters/google.ads.ts"
+      ],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage3-required.test.ts",
+        "apps/api/src/providers/google-ads-stage3.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Ambiguous name rejects with candidates; typed proximity include only; no guessed coordinates.",
+        "Excluded radius is rejected by bounded contract rather than silently converted."
+      ]
+    },
+    {
+      "id": "s3-language-schedule-device",
+      "stage": "3",
+      "original_paragraphs": [216, 217, 218, 219, 220, 221, 222, 223, 224, 225],
+      "requirement": "Language aliases, account-timezone schedules, device exclusions and exact incremental criteria updates",
+      "provider_objects": ["CampaignCriterion"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage3.ts"],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage3-required.test.ts",
+        "apps/api/src/providers/google-ads-stage3.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": []
+    },
+    {
+      "id": "s4-rsa",
+      "stage": "4",
+      "original_paragraphs": [230, 231, 232, 233, 234, 235, 236, 237, 238],
+      "requirement": "Create/edit RSA text/pins/paths/URLs 30/90/15, moderation warning, status and protected remove",
+      "provider_objects": ["AdService", "AdGroupAdService"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage4.ts"],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/mcp/google-extended.integration.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "K/L mock/disposable equivalents; historical T RSA does not establish live new AdService edit profile."
+      ]
+    },
+    {
+      "id": "s4-assets",
+      "stage": "4",
+      "original_paragraphs": [239, 240, 241],
+      "requirement": "Text/call/business/image/logo asset creation and supported account/campaign/group links",
+      "provider_objects": [
+        "Asset",
+        "CustomerAsset",
+        "CampaignAsset",
+        "AdGroupAsset"
+      ],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage4.ts",
+        "apps/api/src/providers/google-ads-media.ts"
+      ],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/providers/google-ads-media.test.ts",
+        "apps/api/src/mcp/google-media-controlled.integration.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Safe inline JPEG/PNG only, ≤1MiB each/≤2MiB decoded total/≤8; full pixel decode+canonical reencode; no arbitrary URL/path.",
+        "Eligible existing refs require owner/type/dimensions proof; no binary in response/audit/browser review."
+      ]
+    },
+    {
+      "id": "s4-tracking",
+      "stage": "4",
+      "original_paragraphs": [242, 243],
+      "requirement": "Tracking template/suffix account/campaign/group set/typed clear, exact masks, inverse values",
+      "provider_objects": ["Customer", "Campaign", "AdGroup"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage4.ts"],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/mcp/google-tracking-rollback.integration.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Typed clears of supported fields now implemented; no arbitrary raw masks.",
+        "Invalid historic tracking value cannot receive fabricated rollback; source comparison preserves raw provider reread."
+      ]
+    },
+    {
+      "id": "s4-read-link-utm-audit",
+      "stage": "4",
+      "original_paragraphs": [244],
+      "requirement": "Compare tracking changes against existing READ link/UTM audit",
+      "provider_objects": ["READ link/UTM audit"],
+      "classification": "REQUIREDGAP",
+      "implementation": [
+        "apps/api/src/mcp/mcp.service.ts",
+        "apps/api/src/providers/google-ads-stage4.ts"
+      ],
+      "tests": ["apps/api/src/providers/google-ads-stage4.test.ts"],
+      "live_status": "NOT_IMPLEMENTED",
+      "remaining_limits": [
+        "audit_links_and_utms and get_tracking_specs are COMPAT_UNAVAILABLE_READ_TOOLS in V2 at audited baseline.",
+        "Stage4 own URL/UTM checks are implemented but are not P244 READ-audit integration."
+      ]
+    },
+    {
+      "id": "s4-campaign-groups",
+      "stage": "4",
+      "original_paragraphs": [245, 246, 247, 248, 249, 250, 251, 252, 253],
+      "requirement": "Campaign status/name/dates/networks; group create/name/status and Search builder reuse",
+      "provider_objects": ["Campaign", "AdGroup"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage4.ts",
+        "apps/api/src/providers/google-ads-stage0.ts"
+      ],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/mcp/google-extended.integration.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Campaign ENABLE routes through Stage0 checklist; PAUSE inverse cannot bypass it."
+      ]
+    },
+    {
+      "id": "s4-pmax-required",
+      "stage": "4",
+      "original_paragraphs": [254, 255, 256, 257],
+      "requirement": "Existing PMax complete asset-group creation and content edits, signals/themes, supported negatives/brand exclusion",
+      "provider_objects": [
+        "AssetGroup",
+        "AssetGroupAsset",
+        "AssetGroupSignal",
+        "CampaignCriterion",
+        "CampaignSharedSet"
+      ],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": [
+        "apps/api/src/providers/google-ads-pmax.ts",
+        "apps/api/src/providers/google-ads-stage4.ts"
+      ],
+      "tests": [
+        "apps/api/src/providers/google-ads-pmax.test.ts",
+        "apps/api/src/providers/google-ads-stage4.test.ts",
+        "apps/api/src/mcp/google-media-controlled.integration.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "Existing PAUSED parent independently proved; complete required assets and brand mode, not partial empty group.",
+        "Minimum-assets-safe detach/atomic replace preserves owned asset objects; typed irreversible association removal acknowledgment.",
+        "Brand exclusion uses existing owned ENABLED BRANDS list; no guessed enum or new brand registry entry.",
+        "Fresh TEST account has no IMAGE assets/conversion actions; PMax live pending."
+      ]
+    },
+    {
+      "id": "s4-pmax-new-creation",
+      "stage": "4",
+      "original_paragraphs": [],
+      "requirement": "Later explicit user-authorized non-retail full atomic PMax creation beyond original P254–257 editing requirement",
+      "provider_objects": [
+        "CampaignBudget",
+        "Campaign",
+        "Asset",
+        "AssetGroup",
+        "AssetGroupAsset",
+        "CustomConversionGoal",
+        "ConversionGoalCampaignConfig"
+      ],
+      "classification": "OPTIONALbeyondoriginal",
+      "implementation": ["apps/api/src/providers/google-ads-pmax.ts"],
+      "tests": [
+        "apps/api/src/providers/google-ads-pmax.test.ts",
+        "apps/api/src/mcp/google-media-controlled.integration.test.ts"
+      ],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": [
+        "Implemented/mock-tested; PAUSED graph, exact same-account actual conversion actions, explicit brand guidelines and EU declaration, authoritative currency units.",
+        "Retail/feed/travel/local-services special profiles not implemented and not presumed original mandatory."
+      ],
+      "later_user_authorized": true
+    },
+    {
+      "id": "acceptance-A",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [264, 265, 266, 267],
+      "requirement": "preview no provider change",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-B",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [268, 269, 270, 271],
+      "requirement": "pause/resume separate audit",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-C",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [272, 273, 274, 275],
+      "requirement": "19 valid plus local structured invalid row",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-D",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [276, 277, 278, 279],
+      "requirement": "campaign negative/conflict/restore",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-E",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [280, 281, 282, 283],
+      "requirement": "shared list members attach/detach",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-F",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [284, 285, 286, 287],
+      "requirement": "match replacement and restore",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-M",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [312, 313, 314, 315],
+      "requirement": "protected remove rejected before mutation",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-O",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [320, 321, 322, 323],
+      "requirement": "external UI change stale rejection",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-P",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [324, 325, 326, 327],
+      "requirement": "nonallowlisted rejection",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage1.ts",
+        "apps/api/src/mcp/mcp-preview.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-keyword-write.integration.test.ts"
+      ],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-G",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [288, 289, 290, 291],
+      "requirement": "auto strategy +10% keyword CPC warning",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage2.ts"],
+      "tests": ["apps/api/src/mcp/google-stage2.integration.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-H",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [292, 293, 294, 295],
+      "requirement": "shared budget +60% warning/impact",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage2.ts"],
+      "tests": ["apps/api/src/mcp/google-stage2.integration.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-I",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [296, 297, 298, 299],
+      "requirement": "audience OBSERVATION add/remove",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage3.ts"],
+      "tests": ["apps/api/src/providers/google-ads-stage3-required.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-J",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [300, 301, 302, 303],
+      "requirement": "geo city/exclusion/radius by name",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage3.ts"],
+      "tests": ["apps/api/src/providers/google-ads-stage3-required.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-K",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [304, 305, 306, 307],
+      "requirement": "31-character RSA preview rejection",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage4.ts"],
+      "tests": ["apps/api/src/providers/google-ads-stage4.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-L",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [308, 309, 310, 311],
+      "requirement": "valid RSA PAUSED and verified",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage4.ts"],
+      "tests": ["apps/api/src/providers/google-ads-stage4.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-N",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [316, 317, 318, 319],
+      "requirement": "approved bid inverse restore",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+LIVEPENDING",
+      "implementation": ["apps/api/src/providers/google-ads-stage2.ts"],
+      "tests": ["apps/api/src/mcp/google-stage2.integration.test.ts"],
+      "live_status": "MOCK_PASS_LIVE_PENDING",
+      "remaining_limits": ["Mock/disposable equivalent is not live result."]
+    },
+    {
+      "id": "acceptance-T",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [117, 118, 119],
+      "requirement": "full paused Search graph",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-U",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [120, 121, 122],
+      "requirement": "RSA31 rejection before mutation",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-V",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [123, 124, 125],
+      "requirement": "missing conversion goal",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "acceptance-W",
+      "stage": "ACCEPTANCE",
+      "original_paragraphs": [126, 127, 128],
+      "requirement": "separate activation and approved restore",
+      "provider_objects": ["TEST Customer"],
+      "classification": "DONE+TESTED",
+      "implementation": ["apps/api/src/providers/google-ads-stage0.ts"],
+      "tests": ["apps/api/src/mcp/google-stage0.integration.test.ts"],
+      "live_status": "PREVIOUS_LIVE_PASS",
+      "remaining_limits": [],
+      "live_evidence": [
+        "artifacts/google-live-acceptance/stage01-final-live-acceptance-20261009.json"
+      ]
+    },
+    {
+      "id": "operational-readiness",
+      "stage": "OPERATIONS",
+      "original_paragraphs": [25, 328, 330, 331, 332, 333, 334, 335, 336],
+      "requirement": "Stage acceptance gates, actual API access/version, TEST MCC fixture and approved accounts/approvers/warning threshold",
+      "provider_objects": ["TEST Customer", "MCP clients"],
+      "classification": "REQUIREDGAP",
+      "implementation": ["docs/google-ads-write.md"],
+      "tests": [
+        "apps/api/src/mcp/google-stage0.integration.test.ts",
+        "apps/api/src/mcp/google-stage1.integration.test.ts",
+        "apps/api/src/mcp/google-extended.integration.test.ts"
+      ],
+      "live_status": "NEW_SCOPE_LIVE_AND_CLIENT_PENDING",
+      "remaining_limits": [
+        "Stage01 historically accepted; new Stage2–4 live and Q/R/S still mandatory pending.",
+        "Developer access level not inferred from READ. No production/main changes or automatic deploy."
+      ]
+    },
+    {
+      "id": "immutable-match-api",
+      "stage": "API_BOUNDARY",
+      "original_paragraphs": [140, 141, 142],
+      "requirement": "In-place keyword match-type mutation is not a legal replacement for create-new/pause-old",
+      "provider_objects": ["AdGroupCriterion.keyword"],
+      "classification": "UNSUPPORTEDbyAPI",
+      "implementation": ["apps/api/src/providers/google-ads-stage1.ts"],
+      "tests": ["apps/api/src/mcp/google-stage1.integration.test.ts"],
+      "live_status": "NOT_AN_IMPLEMENTATION_GAP",
+      "remaining_limits": [
+        "KeywordInfo field is IMMUTABLE; implemented replacement satisfies original requirement."
+      ],
+      "primary_reference": "https://raw.githubusercontent.com/googleapis/googleapis/master/google/ads/googleads/v24/resources/ad_group_criterion.proto"
+    },
+    {
+      "id": "optional-expansions",
+      "stage": "OPTIONAL",
+      "original_paragraphs": [],
+      "requirement": "Manager cross-account portfolios, Customer Match uploads, arbitrary parameter clears, retail feeds, demographic performance reporting",
+      "provider_objects": [
+        "BiddingStrategy",
+        "UserDataService",
+        "MerchantCenter"
+      ],
+      "classification": "OPTIONALbeyondoriginal",
+      "implementation": [
+        "apps/api/src/providers/google-ads-stage2-advanced.ts",
+        "apps/api/src/providers/google-ads-stage3.ts",
+        "apps/api/src/providers/google-ads-pmax.ts",
+        "apps/api/src/mcp/mcp.service.ts"
+      ],
+      "tests": [
+        "apps/api/src/providers/google-ads-stage2-advanced.test.ts",
+        "apps/api/src/providers/google-ads-stage3-required.test.ts",
+        "apps/api/src/providers/google-ads-pmax.test.ts"
+      ],
+      "live_status": "NOT_RUN_NEW_PROFILE",
+      "remaining_limits": [
+        "No paragraph proof mandates these additional profiles. Not implemented/claimed; later independent authorization/spec required."
+      ]
+    }
+  ]
+}
