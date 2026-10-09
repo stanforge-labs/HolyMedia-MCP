@@ -1,0 +1,43 @@
+{
+  "source_head": "86a073d3809a8842c21ef7f84d89c358a0200ab8",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "hosted_linux_ci": {
+    "run_id": 37933661500,
+    "job_id": 113830272597,
+    "result": "PASS",
+    "node_tests": 110,
+    "api_vitest_tests": 1292,
+    "other_vitest_tests": 63,
+    "total_js_tests": 1465,
+    "skipped": 0,
+    "python_regressions": 24,
+    "secret_scanner_regressions": 7,
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "prisma": "PASS",
+    "migration_and_restore_rehearsal": "PASS",
+    "build": "PASS",
+    "api_worker_dependency_smokes": "PASS",
+    "standard_secret_scan": "PASS",
+    "dependencies": {"critical": 0, "high": 0, "moderate": 6}
+  },
+  "windows_local": {
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma": "PASS",
+    "secret_scan": "PASS",
+    "tests": "PASS_WITH_INTEGRATION_SKIPS",
+    "integration_skips": 26,
+    "reason": "No local PostgreSQL/Redis rehearsal services; the same gated tests ran on hosted Linux with zero skips."
+  },
+  "image_run_id": 37933661473,
+  "immutable_image_digest": "sha256:2edc1e9678bd9b192dd4e724417362200d038c1617bbfa76aa53b405c2fe85de",
+  "product_overlays": false,
+  "new_migrations": 0,
+  "stage01_release_candidate_unchanged": "bb5b8d16979a41720129243927a6c9f56e091083",
+  "production_changed": false,
+  "main_changed": false
+}

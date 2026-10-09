@@ -506,3 +506,5 @@ test("normal refresh is bounded once and stored only encrypted in disposable vau
   assert.ok(!JSON.stringify(r.saved).includes("mock-refresh-marker"));
   assert.ok(!JSON.stringify(r.saved).includes("mock-client-marker"));
 });
+import { URLSearchParams } from "node:url";
+const { Response, structuredClone } = globalThis;

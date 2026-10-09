@@ -2,7 +2,7 @@
   "schema_version": 1,
   "audit_date": "2026-10-09",
   "audited_branch": "codex/google-ads-write-full-scope-final",
-  "audited_head": "eed4aad",
+  "audited_head": "86a073d3809a8842c21ef7f84d89c358a0200ab8",
   "current_evidence": {
     "historical_evidence_preserved": true,
     "disposable_key": "artifacts/google-full-scope/test-key-issuance-20261009.json",

@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { lstatSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, URL, URLSearchParams } from "node:url";
+import process from "node:process";
+const { AbortSignal, structuredClone, console } = globalThis;
 import { readAcceptanceContext } from "./context-vault.mjs";
 import {
   classifyReadOnlyRequest,

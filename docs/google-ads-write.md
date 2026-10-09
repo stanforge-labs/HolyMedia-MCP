@@ -3,7 +3,7 @@
 ## Текущая сводка — 2026-10-09
 
 Аудированная интеграционная база: `codex/google-ads-write-full-scope-final`,
-`6fb30acd6249768d738a1f20b013a8368b4c3950`. Подробная сверка с оригинальным ТЗ
+`86a073d3809a8842c21ef7f84d89c358a0200ab8`. Подробная сверка с оригинальным ТЗ
 от 05.10.2026 (336 OOXML paragraphs, SHA-256 `51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0`):
 [итоговый scope и ограничения](google-ads-write-full-scope-final.md),
 [машиночитаемая матрица](../artifacts/google-full-scope/requirements-matrix-20261009.json).

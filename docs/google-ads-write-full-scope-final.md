@@ -12,7 +12,7 @@ SHA-256: `51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0`.
 [original-tz-source-20261009.json](../artifacts/google-full-scope/original-tz-source-20261009.json).
 
 Аудирована ветка `codex/google-ads-write-full-scope-final`, HEAD
-`5c8d8b6af01a3124405b31291d24263334fdf71d` (revision до обновления этой матрицы).
+`86a073d3809a8842c21ef7f84d89c358a0200ab8` (source-pinned code revision до финального live checkpoint).
 Интегрированы native private OAuth, закрытые profile schemas, tracking clear/default
 verification и P244 READ-аудит. Raw provider snapshots/immutable payload не редактируются
 ради presentation: media и URL secrets redacted только в response/browser/journal copies.

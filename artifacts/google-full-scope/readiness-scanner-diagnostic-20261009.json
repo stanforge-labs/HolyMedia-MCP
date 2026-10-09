@@ -1,0 +1,15 @@
+{
+  "finding": "New untracked read-only supervisor status literal matched the existing Meta credential regex.",
+  "path": "scripts/google-live-acceptance/stage234/run-readiness.py",
+  "root_cause": "A compile-time uppercase diagnostic result, not a credential or runtime provider value.",
+  "matched_length": 32,
+  "classification": "REPRODUCED_STATIC_ENUM_FALSE_POSITIVE",
+  "fix": "Shortened the harmless result name to RDY_CHECK_ONLY_PASS.",
+  "regression": "test_static_status_does_not_match_provider_credential_family reproduces the previous regex hit from fragments and rejects it in current source.",
+  "scanner_changed": false,
+  "exemption_added": false,
+  "standard_secret_scan_after_fix": "PASS",
+  "provider_calls": 0,
+  "credentials_exposed": false,
+  "production_changed": false
+}
