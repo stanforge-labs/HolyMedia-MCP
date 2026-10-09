@@ -1210,6 +1210,33 @@ export class ProviderService {
       results,
     );
   }
+  public async googleExtended(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    version: 3 | 4 | 5,
+    action:
+      "build" | "read" | "validate" | "commit" | "verify" | "audience_search",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx =
+      action === "audience_search"
+        ? await this.readContext(workspaceId, connectionId, accountId)
+        : await this.googleKeywordContext(workspaceId, connectionId, accountId);
+    if (ctx.account.provider !== "GOOGLE_ADS")
+      throw new GoogleAdsWriteError(
+        "google_account_required",
+        "Требуется Google Ads аккаунт.",
+      );
+    return (ctx.adapter as unknown as GoogleAdsAdapter).extended(
+      ctx.read,
+      version,
+      action,
+      input,
+      results,
+    );
+  }
   public async googleStage0(
     workspaceId: string,
     connectionId: string,

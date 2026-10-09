@@ -1,5 +1,20 @@
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import {
+  GOOGLE_STAGE2_ADVANCED_TOOLS,
+  stage2AdvancedToolIntent,
+  stage2AdvancedToolSchema,
+} from "./mcp-google-stage2-advanced-schema.js";
+import {
+  GOOGLE_STAGE3_TOOLS,
+  stage3ToolIntent,
+  stage3ToolSchema,
+} from "./mcp-google-stage3-schema.js";
+import {
+  GOOGLE_STAGE4_TOOLS,
+  stage4ToolIntent,
+  stage4ToolSchema,
+} from "./mcp-google-stage4-schema.js";
+import {
   GOOGLE_STAGE2_TOOLS,
   stage2ToolIntent,
   stage2ToolSchema,
@@ -51,8 +66,25 @@ const providerAliases: Record<string, ProviderId> = {
   yandex_direct: "YANDEX_DIRECT",
   tiktok_ads: "TIKTOK_ADS",
 };
+const extendedDescriptions: Record<string, string> = {
+  google_ads_strategy_modifier_preview:
+    "Google Ads Stage 2 typed strategy/portfolio/modifier preview. Frozen shared impact, compatibility and currency checks; Google validate_only, browser human approval and immutable commit_preview. No hidden status or goal changes; new stage gate OFF by default.",
+  google_ads_bulk_bid_budget_preview:
+    "Google Ads performance-filter bulk preview: bounded frozen IDs, typed absolute/percent money changes, per-row results and shared budget impact. Maximum 500 operations, no truncation or filter expansion during commit. Validate only, separate human approval and immutable commit.",
+  google_ads_targeting_preview:
+    "Google Ads Stage 3 typed audiences/demographics/geo/language/schedule/device preview. Shows OBSERVATION vs TARGETING and account timezone, incremental criteria/mode changes, explicit removal acknowledgement. Atomic validate_only then human approval/immutable commit; no immediate write.",
+  google_ads_audience_search:
+    "Read-only bounded Google audience reference search by name and segment family in the selected owned account. Returns candidates, not a claim of campaign eligibility. No validate_only or mutation.",
+  google_ads_ads_assets_preview:
+    "Google Ads Stage 4 typed RSA/assets/campaign/group/tracking preview. New delivery entities PAUSED, 30/90/15 validation, moderation warnings and scoped existing image references. Irreversible removal requires acknowledgement plus human approval; no immediate write.",
+  google_ads_pmax_preview:
+    "Google Ads bounded existing PMax asset-group updates, signals/themes and PAUSED TEXT/IMAGE reference links. Full PMax creation, binary ingestion and unsupported brand/minimum-asset profiles explicitly rejected. Google validate_only and separate human approval/immutable commit required.",
+};
 
 export const V1_COMPATIBLE_MCP_TOOLS = [
+  ...GOOGLE_STAGE2_ADVANCED_TOOLS,
+  ...GOOGLE_STAGE3_TOOLS,
+  ...GOOGLE_STAGE4_TOOLS,
   ...GOOGLE_STAGE2_TOOLS,
   ...GOOGLE_STAGE1_TOOLS,
   "analyze_audiences",
@@ -467,7 +499,8 @@ export class McpService {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
       description:
-        name === "create_campaign_from_brief"
+        extendedDescriptions[name] ??
+        (name === "create_campaign_from_brief"
           ? "Google Ads: prepare an atomic PAUSED Search campaign preview from a typed brief. Calls validate_only; returns object plan, warnings and HolyMedia approval URL. No provider write until approved commit_preview."
           : name === "get_launch_checklist"
             ? "Read actual campaign structure and bounded safe landing-URL checks; return PASS/WARNING/FAIL per launch prerequisite. Does not activate campaign."
@@ -479,13 +512,16 @@ export class McpService {
                   ? "Prepare a campaign pause preview. Google Ads supports ENABLED Search campaigns: validates only, requires browser approval and separate commit_preview, then rereads PAUSED. Does not change groups/ads; stopping delivery does not require launch readiness. Existing Meta semantics unchanged."
                   : name === "google_ads_bid_budget_preview"
                     ? "Stage 2 gated typed bid/budget preview: absolute/percent changes, account currency micros, shared budget impact, >50% and automated bidding warnings. Validate only; requires existing browser approval and immutable commit_preview. No strategy/status changes."
-                    : (stage1Description(name) ?? toolDescription(name)),
+                    : (stage1Description(name) ?? toolDescription(name))),
       ...([
         "pause_entities_preview",
         "update_entity_status_preview",
         "commit_preview",
         ...GOOGLE_STAGE1_TOOLS,
         ...GOOGLE_STAGE2_TOOLS,
+        ...GOOGLE_STAGE2_ADVANCED_TOOLS,
+        ...GOOGLE_STAGE3_TOOLS,
+        ...GOOGLE_STAGE4_TOOLS,
         "create_keyword_from_brief",
         "preview_update_object",
         "preview_delete_or_archive_object",
@@ -500,6 +536,7 @@ export class McpService {
               readOnlyHint: [
                 "list_change_journal",
                 "get_launch_checklist",
+                "google_ads_audience_search",
               ].includes(name),
               destructiveHint: name === "commit_preview",
               openWorldHint: true,
@@ -507,22 +544,25 @@ export class McpService {
             },
           }
         : {}),
-      inputSchema: (name === "preview_change_campaign_budget"
-        ? {
-            oneOf: [
-              stage2ToolSchema(name),
-              {
-                type: "object",
-                not: {
-                  required: ["provider"],
-                  properties: { provider: { const: "GOOGLE_ADS" } },
+      inputSchema: stage2AdvancedToolSchema(name) ??
+        stage3ToolSchema(name) ??
+        (stage4ToolSchema(name) as Record<string, unknown> | undefined) ??
+        (name === "preview_change_campaign_budget"
+          ? {
+              oneOf: [
+                stage2ToolSchema(name),
+                {
+                  type: "object",
+                  not: {
+                    required: ["provider"],
+                    properties: { provider: { const: "GOOGLE_ADS" } },
+                  },
+                  description:
+                    "Unchanged legacy Meta budget contract; Google must use the closed typed items branch.",
                 },
-                description:
-                  "Unchanged legacy Meta budget contract; Google must use the closed typed items branch.",
-              },
-            ],
-          }
-        : stage2ToolSchema(name)) ??
+              ],
+            }
+          : stage2ToolSchema(name)) ??
         stage0ToolSchema(name) ??
         stage1ToolSchema(name) ??
         keywordStatusToolSchema(name) ??
@@ -550,6 +590,52 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (
+      GOOGLE_STAGE2_ADVANCED_TOOLS.some((tool) => tool === name) ||
+      GOOGLE_STAGE3_TOOLS.some((tool) => tool === name) ||
+      GOOGLE_STAGE4_TOOLS.some((tool) => tool === name)
+    ) {
+      const version = GOOGLE_STAGE2_ADVANCED_TOOLS.some((tool) => tool === name)
+        ? 5
+        : GOOGLE_STAGE3_TOOLS.some((tool) => tool === name)
+          ? 3
+          : 4;
+      const intent =
+        version === 5
+          ? stage2AdvancedToolIntent(name, args)
+          : version === 3
+            ? stage3ToolIntent(name, args)
+            : stage4ToolIntent(name, args);
+      if (name === "google_ads_audience_search") {
+        const account = await this.database.client.providerAccount.findFirst({
+          where: {
+            workspaceId: principal.workspaceId,
+            provider: "GOOGLE_ADS",
+            externalAccountId: text(args.account_id),
+          },
+        });
+        if (
+          !account ||
+          (principal.kind === "service" &&
+            !principal.accountIds.includes(account.id))
+        )
+          throw new ForbiddenException("Account is not accessible.");
+        return this.providers.googleExtended(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          3,
+          "audience_search",
+          intent,
+        );
+      }
+      return this.previews.createGoogleExtended(
+        this.servicePrincipal(principal),
+        text(args.account_id),
+        version,
+        intent,
+      );
+    }
     if (
       GOOGLE_STAGE2_TOOLS.includes(name) ||
       (args.provider === "GOOGLE_ADS" &&

@@ -37,12 +37,22 @@ export function object(value: unknown): MockRow {
 }
 export function fixture(
   stage0 = false,
-  options: { strictCampaignAssetGaql?: boolean; stage2?: boolean } = {},
+  options: {
+    strictCampaignAssetGaql?: boolean;
+    stage2?: boolean;
+    extended?: boolean;
+  } = {},
 ) {
   for (const [key, value] of Object.entries({
     NODE_ENV: "test",
     PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
     PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: options.stage2 ? "true" : "false",
+    PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: options.extended
+      ? "true"
+      : "false",
+    PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: options.extended
+      ? "true"
+      : "false",
     ...(options.stage2 ? { PROVIDER_GOOGLE_API_VERSION: "v24" } : {}),
     GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: customer,
     V2_PREVIEW_ONLY: "false",
@@ -720,6 +730,17 @@ export function fixture(
     },
   };
   const providers = {
+    googleExtended: vi.fn(
+      async (
+        _w: string,
+        _c: string,
+        _a: string,
+        version: 3 | 4 | 5,
+        action: Parameters<GoogleAdsAdapter["extended"]>[2],
+        input: unknown,
+        results?: Stage1MutationResult[],
+      ) => adapter.extended(context, version, action, input, results),
+    ),
     googleStage2: vi.fn(
       async (
         _w: string,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { McpService } from "./mcp.service.js";
+import { McpService, V1_COMPATIBLE_MCP_TOOLS } from "./mcp.service.js";
 
 function serviceWithAccounts(
   accounts: Array<Record<string, unknown>>,
@@ -188,7 +188,10 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(171); // Existing 170 + gated Stage 2 preview; generic budget reused.
+    expect(service.tools()).toHaveLength(V1_COMPATIBLE_MCP_TOOLS.length);
+    expect(new Set(service.tools().map((tool) => tool.name)).size).toBe(
+      V1_COMPATIBLE_MCP_TOOLS.length,
+    );
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );

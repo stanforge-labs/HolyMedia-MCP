@@ -1,5 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
+  assertExtendedGate,
+  assertExtendedPlan,
+  type ExtendedPlan,
+} from "../providers/google-ads-extended-plan.js";
+import { parseStage2AdvancedIntent } from "../providers/google-ads-stage2-advanced.js";
+import { parseStage3Intent } from "../providers/google-ads-stage3.js";
+import { parseStage4Intent } from "../providers/google-ads-stage4.js";
+import {
   assertStage2Gate,
   assertStage2Plan,
   parseStage2Intent,
@@ -454,7 +462,7 @@ export class McpPreviewService {
       }
       if (
         googlePreview &&
-        /^GOOGLE_STAGE[012]_/.test(googlePreview.operation) &&
+        /^GOOGLE_STAGE[0-5]_/.test(googlePreview.operation) &&
         googlePreview.snapshotDigest ===
           digest(canonical(googlePreview.requestedState))
       ) {
@@ -1259,6 +1267,16 @@ export class McpPreviewService {
     input: unknown,
     results?: Stage1MutationResult[],
   ) {
+    if (plan.version >= 3)
+      return this.providers.googleExtended(
+        workspaceId,
+        connectionId,
+        accountId,
+        plan.version as 3 | 4 | 5,
+        action,
+        input,
+        results,
+      );
     if (plan.version === 2)
       return this.providers.googleStage2(
         workspaceId,
@@ -1331,6 +1349,40 @@ export class McpPreviewService {
     )) as Stage2Plan;
     return this.storeGoogleStage1(principal, account, plan);
   }
+  public async createGoogleExtended(
+    principal: ServiceTokenPrincipal,
+    accountId: string,
+    version: 3 | 4 | 5,
+    rawIntent: unknown,
+  ) {
+    this.ensureRead(principal);
+    const intent =
+      version === 3
+        ? parseStage3Intent(rawIntent)
+        : version === 4
+          ? parseStage4Intent(rawIntent)
+          : parseStage2AdvancedIntent(rawIntent);
+    const account = await this.account(principal, customerId(accountId));
+    if (
+      account.provider !== "GOOGLE_ADS" ||
+      customerId(account.externalAccountId) !== customerId(accountId)
+    )
+      throw new PreviewError("confirmation_context_mismatch");
+    assertExtendedGate(this.config, account.externalAccountId, version);
+    await this.assertControlledPrincipal(principal, account.id);
+    const plan = (await this.providers.googleExtended(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      version,
+      "build",
+      intent,
+    )) as ExtendedPlan;
+    assertExtendedPlan(plan, account.externalAccountId);
+    if (plan.version !== version)
+      throw new PreviewError("confirmation_context_mismatch");
+    return this.storeGoogleStage1(principal, account, plan);
+  }
   private async storeGoogleStage1(
     principal: ServiceTokenPrincipal,
     account: Awaited<ReturnType<McpPreviewService["account"]>>,
@@ -1367,7 +1419,7 @@ export class McpPreviewService {
         provider_validation: "failed",
         operation_count: plan.operations.length,
         provider_mutation_sent: false,
-        ...(plan.version === 0
+        ...(plan.version === 0 || plan.version >= 3
           ? {
               policy_warnings: results.flatMap((result, operation_index) =>
                 (result.error?.google_details ?? [])
@@ -1434,13 +1486,16 @@ export class McpPreviewService {
       commit_tool: "commit_preview",
       provider_mutation_sent: false,
       rollback_of: rollbackOf,
-      ...(plan.version === 2
+      ...(plan.version === 2 || plan.version >= 3
         ? {
-            partial_failure: true,
-            atomic: false,
+            partial_failure:
+              plan.version === 2 || !(plan as ExtendedPlan).atomic,
+            atomic: plan.version === 2 ? false : (plan as ExtendedPlan).atomic,
             provider_request_groups: new Set(plan.operations.map((o) => o.kind))
               .size,
-            excluded_row_count: plan.items.filter((i) => i.row_error).length,
+            excluded_row_count: plan.items.filter(
+              (i) => "row_error" in i && i.row_error,
+            ).length,
             mutation_plan: plan.operations.map((o) => ({
               resource_name: o.resource_name,
               update_mask: o.update_mask,
@@ -1455,6 +1510,12 @@ export class McpPreviewService {
             partial_failure: false,
             atomic: true,
             policy_warnings: [],
+          }
+        : {}),
+      ...(plan.version >= 3
+        ? {
+            irreversible: (plan as ExtendedPlan).irreversible,
+            rollback_supported: Boolean((plan as ExtendedPlan).inverse_intent),
           }
         : {}),
       summary: `Google Ads: ${plan.intent.action}, ${plan.operations.length} операций. Проверьте эффекты и предупреждения в HolyMedia.`,
@@ -1475,7 +1536,7 @@ export class McpPreviewService {
     const plan = preview.requestedState as GoogleWritePlan;
     if (
       !plan ||
-      ![0, 1, 2].includes(plan.version) ||
+      ![0, 1, 2, 3, 4, 5].includes(plan.version) ||
       plan.account_id !== customerId(account.externalAccountId) ||
       preview.connectionId !== account.connectionId ||
       preview.operation !== this.googlePlanOperation(plan) ||
@@ -1493,6 +1554,14 @@ export class McpPreviewService {
     if (plan.version === 2) {
       assertStage2Gate(this.config, account.externalAccountId);
       assertStage2Plan(plan, account.externalAccountId);
+    }
+    if (plan.version >= 3) {
+      assertExtendedGate(
+        this.config,
+        account.externalAccountId,
+        plan.version as 3 | 4 | 5,
+      );
+      assertExtendedPlan(plan as ExtendedPlan, account.externalAccountId);
     }
     return plan;
   }
@@ -1595,7 +1664,18 @@ export class McpPreviewService {
       account_id: plan.account_id,
       operation_count: plan.operations.length,
       items: verified.items,
-      partial_failure: plan.version !== 0,
+      partial_failure:
+        plan.version === 0
+          ? false
+          : plan.version >= 3
+            ? !(plan as ExtendedPlan).atomic
+            : true,
+      ...(plan.version >= 3
+        ? {
+            atomic: (plan as ExtendedPlan).atomic,
+            irreversible: (plan as ExtendedPlan).irreversible,
+          }
+        : {}),
       ...(plan.version === 0
         ? { atomic: true, campaign_plan: plan.summary }
         : {}),
@@ -1629,7 +1709,9 @@ export class McpPreviewService {
         objectId:
           typeof actual?.resource_name === "string"
             ? actual.resource_name
-            : operation.resource_name,
+            : typeof payloadRecord(actual).resourceName === "string"
+              ? String(payloadRecord(actual).resourceName)
+              : operation.resource_name,
         serviceTokenId: principal.tokenId,
         serviceIdentityId: principal.serviceIdentityId,
         previewId,
@@ -1920,6 +2002,42 @@ export class McpPreviewService {
         current,
       );
     }
+    if (/^GOOGLE_STAGE[345]_/.test(preview.operation)) {
+      const original = this.googleStage1Stored(
+        preview,
+        account,
+      ) as ExtendedPlan;
+      if (
+        preview.commitStatus !== "VERIFIED" ||
+        original.irreversible ||
+        !original.inverse_intent ||
+        original.operations.some((o) => o.method !== "update")
+      )
+        throw new GoogleAdsWriteError(
+          "rollback_unsupported",
+          "Для этой операции нет безопасной typed inverse; auto delete rollback запрещён.",
+        );
+      const inverse = (await this.providers.googleExtended(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        original.version,
+        "build",
+        original.inverse_intent,
+      )) as ExtendedPlan;
+      const post = preview.verificationRead as JsonRow[];
+      if (
+        inverse.operations.length !== original.operations.length ||
+        inverse.operations.some((o) => {
+          const i = original.operations.findIndex(
+            (p) => p.resource_name === o.resource_name,
+          );
+          return i < 0 || canonical(o.before) !== canonical(post[i]);
+        })
+      )
+        throw new PreviewError("google_preview_stale");
+      return this.storeGoogleStage1(principal, account, inverse, commitId);
+    }
     if (preview.operation === "GOOGLE_STAGE2_BID_BUDGET_UPDATE") {
       if (
         !["VERIFIED", "PARTIAL_FAILURE"].includes(String(preview.commitStatus))
@@ -2029,7 +2147,7 @@ export class McpPreviewService {
     const context = await this.googleBrowserContext(human, nonce);
     if (!context) return null;
     const { preview, account } = context;
-    if (/^GOOGLE_STAGE[012]_/.test(preview.operation)) {
+    if (/^GOOGLE_STAGE[0-5]_/.test(preview.operation)) {
       const plan = this.googleStage1Stored(preview, account);
       return {
         provider: "Google Ads",
@@ -2043,6 +2161,13 @@ export class McpPreviewService {
         before: `${plan.items.length} items`,
         after: `${plan.operations.length} provider operations`,
         stage1_items: plan.items,
+        ...(plan.version >= 3
+          ? {
+              irreversible: (plan as ExtendedPlan).irreversible,
+              atomic: (plan as ExtendedPlan).atomic,
+              exact_mutation_plan: plan.operations,
+            }
+          : {}),
         expires_at: preview.expiresAt.toISOString(),
         approved: Boolean(preview.confirmedAt && preview.approvedByUserId),
       };
@@ -2091,7 +2216,7 @@ export class McpPreviewService {
     const context = await this.googleBrowserContext(human, nonce);
     if (!context) return null;
     const { preview, account } = context;
-    if (/^GOOGLE_STAGE[012]_/.test(preview.operation))
+    if (/^GOOGLE_STAGE[0-5]_/.test(preview.operation))
       this.googleStage1Stored(preview, account);
     else this.googleStored(preview, account);
     if (preview.confirmedAt)
@@ -2330,7 +2455,7 @@ export class McpPreviewService {
         "confirmed_write_disabled",
         "Подтверждённая запись выключена на сервере.",
       );
-    if (/^GOOGLE_STAGE[012]_/.test(preview.operation))
+    if (/^GOOGLE_STAGE[0-5]_/.test(preview.operation))
       return this.commitGoogleStage1(principal, preview, account);
     const stored = this.googleStored(preview, account);
     let current: GoogleKeywordSnapshot[];

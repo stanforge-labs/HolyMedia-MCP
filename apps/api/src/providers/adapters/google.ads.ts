@@ -1,5 +1,20 @@
 import { createHash } from "node:crypto";
 import {
+  assertExtendedGate,
+  assertExtendedPlan,
+  rereadExtendedChecks,
+  verifyExtendedMutation,
+  extendedProviderOperation,
+  decodeExtendedMutation,
+  type ExtendedPlan,
+} from "../google-ads-extended-plan.js";
+import { buildStage2AdvancedPlan } from "../google-ads-stage2-advanced.js";
+import {
+  buildStage3Plan,
+  searchStage3Audiences,
+} from "../google-ads-stage3.js";
+import { buildStage4Plan } from "../google-ads-stage4.js";
+import {
   assertStage2Gate,
   assertStage2Plan,
   buildStage2Plan,
@@ -39,6 +54,7 @@ import {
   decodeStage1Mutation,
   verifyStage1Mutation,
   type Stage1Plan,
+  type Stage1MutationResult,
 } from "../google-ads-stage1.js";
 import {
   assertGoogleWriteAccount,
@@ -755,6 +771,120 @@ export class GoogleAdsAdapter
       }
     }
     return output;
+  }
+  public async extended(
+    context: ProviderReadContext,
+    version: 3 | 4 | 5,
+    action:
+      "build" | "read" | "validate" | "commit" | "verify" | "audience_search",
+    input: unknown,
+    results: Stage1MutationResult[] = [],
+  ) {
+    if (!context.credentials.scopes.includes(GOOGLE_SCOPE))
+      throw new GoogleAdsWriteError(
+        "google_scope_required",
+        "Требуется Google OAuth adwords.",
+      );
+    if (action === "audience_search") {
+      if (version !== 3)
+        throw new GoogleAdsWriteError(
+          "google_extended_action_invalid",
+          "Audience search относится к Stage 3.",
+        );
+      const searchInput = Object.fromEntries(
+        Object.entries(stage0Row(input)).filter(([key]) => key !== "action"),
+      );
+      return searchStage3Audiences(
+        context.accountId,
+        searchInput,
+        this.stage1Reader(context),
+      );
+    }
+    assertExtendedGate(this.config, context.accountId, version);
+    const read = this.stage1Reader(context);
+    if (action === "build")
+      return version === 3
+        ? buildStage3Plan(context.accountId, input, read)
+        : version === 4
+          ? buildStage4Plan(context.accountId, input, read)
+          : buildStage2AdvancedPlan(context.accountId, input, read);
+    const plan = input as ExtendedPlan;
+    assertExtendedPlan(plan, context.accountId);
+    if (plan.version !== version)
+      throw new GoogleAdsWriteError(
+        "google_extended_plan_invalid",
+        "Stage/version mismatch.",
+      );
+    if (action === "read") return rereadExtendedChecks(plan, read);
+    if (action === "verify") return verifyExtendedMutation(plan, results, read);
+    const validateOnly = action === "validate";
+    if (
+      !validateOnly &&
+      (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    )
+      throw new GoogleAdsWriteError(
+        "confirmed_write_disabled",
+        "Подтверждённая запись выключена.",
+      );
+    const custom = plan.operations.every((o) => o.kind === "customAudiences");
+    try {
+      const response = await providerJson<unknown>(
+        `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/${custom ? "customAudiences" : "googleAds"}:mutate`,
+        {
+          method: "POST",
+          headers: {
+            ...this.headers(
+              context.credentials.accessToken,
+              this.contextLoginCustomerId(context),
+            ),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(
+            custom
+              ? {
+                  operations: plan.operations.map((o) =>
+                    o.method === "remove"
+                      ? { remove: o.resource_name }
+                      : {
+                          [o.method]: o.fields,
+                          ...(o.method === "update"
+                            ? { updateMask: o.update_mask }
+                            : {}),
+                        },
+                  ),
+                  validateOnly,
+                }
+              : {
+                  mutateOperations: plan.operations.map(
+                    extendedProviderOperation,
+                  ),
+                  partialFailure: !plan.atomic,
+                  validateOnly,
+                },
+          ),
+        },
+        this.config.providerHttpTimeoutMs,
+        googleAdsApiError,
+      );
+      return decodeExtendedMutation(response, plan, validateOnly, custom);
+    } catch (e) {
+      const failure =
+        !validateOnly &&
+        (!(e instanceof GoogleAdsApiError) || Number(e.providerStatus) >= 500)
+          ? googleWriteFailure("OUTCOME_UNCERTAIN")
+          : writeFailureFromError(e);
+      if (e instanceof GoogleAdsApiError)
+        failure.google_details = e.errors.map((d) => ({
+          google_code: d.error_code,
+          message: d.message,
+          ...(d.field_path ? { field_path: d.field_path } : {}),
+        }));
+      return plan.operations.map((o) => ({
+        success: false,
+        resource_name: o.resource_name,
+        error: failure,
+      }));
+    }
   }
   public readStage1(context: ProviderReadContext, plan: Stage1Plan) {
     assertGoogleWriteAccount(this.config, context.accountId);
