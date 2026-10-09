@@ -1,0 +1,79 @@
+{
+  "kind": "Independent G I J PMax READ readiness",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "runtime_head": "c11f14c263b8e3a27418d87146b1894c7d9107dc",
+  "harness_head": "561e31b1dcf557d613bd2863c42340567726d7ff",
+  "test_customer_id": "8590146099",
+  "fixture_unchanged": true,
+  "G": {
+    "live_acceptance": "BLOCKED",
+    "observed_paused_auto_search_campaigns": 0,
+    "code": "discovery_auto_campaign_unproven",
+    "setup_proposal": "An owned PAUSED TEST Search campaign using a supported auto-bidding strategy and a real eligible keyword with explicit CPC is required. Any strategy/keyword setup must receive its own stock preview and human approval. No setup or inherited-CPC assumption was made."
+  },
+  "I": {
+    "live_acceptance": "BLOCKED",
+    "in_market_observed": 500,
+    "in_market_bound_reached": true,
+    "affinity_observed": 190,
+    "affinity_exhausted_within_bound": true,
+    "globally_launched_in_market_observed": 0,
+    "globally_launched_affinity_observed": 0,
+    "search_channel_global_locale_rows_proved": 0,
+    "user_lists_observed": 0,
+    "no_global_absence_claim": true,
+    "setup_proposal": "Supply a real owned eligible audience or provider-confirmed Search/locale eligibility. Do not create Customer Match or personal-data lists, fictional IDs, or relax the eligibility guard."
+  },
+  "J": {
+    "live_acceptance": "BLOCKED",
+    "resolved_city": { "name": "Astana", "id": "1009806" },
+    "direct_parent_scoped_districts_observed": 0,
+    "existing_provider_proximity_centers_observed": 0,
+    "code": "discovery_city_district_unproven",
+    "setup_proposal": "Need a provider-confirmed eligible district/exclusion and legitimate verified address/coordinates for proximity. No centroid was invented from GeoTargetConstant and no radius preview was fabricated."
+  },
+  "PMax": {
+    "live_acceptance": "BLOCKED",
+    "enabled_same_account_conversion_actions_proved": 0,
+    "usable_landscape_images_proved": 0,
+    "usable_square_images_proved": 0,
+    "usable_logos_proved": 0,
+    "branding_association_proved": false,
+    "required_inputs": [
+      "Legitimate TEST conversion goal and eligibility",
+      "Authorized real landscape JPEG/PNG",
+      "Authorized real square JPEG/PNG",
+      "Authorized real logo",
+      "Validated business name and brand guidelines"
+    ],
+    "media_contract": "Bounded inline JPEG/PNG; MIME/size/dimensions and decoded content validation. No remote download, secret local path, fake goal or fabricated eligible asset.",
+    "atomic_profile": "Interdependent campaign/asset-group temporary IDs, partial_failure=false, paused defaults and minimum assets validation; live validation still requires real prerequisites."
+  },
+  "runs": [
+    {
+      "run_id": "20261009T194000Z-rd2",
+      "provider_read": 44,
+      "validate_only": 0,
+      "real_write": 0
+    },
+    {
+      "run_id": "20261009T195000Z-rd3",
+      "provider_read": 46,
+      "validate_only": 0,
+      "real_write": 0
+    }
+  ],
+  "provenance_correction": {
+    "run_id": "20261009T195000Z-rd3",
+    "incorrect_declared_harness_head": "561e31b543b6d05e96fe0f2205cb5c5ebcb448b1",
+    "actual_git_archive_commit": "561e31b1dcf557d613bd2863c42340567726d7ff",
+    "local_remote_tar_sha256": "aaa69e04cab7af09b63476f88f85ec3037ca029d97447256de74a1d211904e00",
+    "archive_files_checked": 60,
+    "mounted_source_mismatches": 0,
+    "note": "CLI harness label was incorrectly transcribed. Actual git archive commit and all mounted files were independently matched; immutable c11 API image/source was correct. Original diagnostic evidence is retained without rewrite; this separate attestation records the correction. No mutation occurred."
+  },
+  "protected_evidence": "/opt/holymedia-google-acceptance/state/stage234-readiness-20261009T195000Z-rd3/targeting-readiness-evidence.json",
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-09T19:47:07.395Z"
+}
