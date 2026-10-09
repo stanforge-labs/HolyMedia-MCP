@@ -5,7 +5,7 @@ spec=importlib.util.spec_from_file_location("audience_preview",Path(__file__).wi
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 class IPreviewLauncher(unittest.TestCase):
  def test_new_scoped_preview_container_and_exact_candidate(self):
-  text=" ".join(m.command("ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:"+"a"*64,"b"*40,"20261009T204000Z-i1",Path("/harness"),Path("/state/stage234-i-unique"),"c"*64,"d"*40,"AFFINITY","90100"))
+  text=" ".join(m.command("ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:"+"a"*64,"b"*40,"20261009T204000Z-i1",Path("/harness"),Path("/state/stage234-i-unique"),"c"*64,"d"*40,"AFFINITY","90100","e"*40))
   for required in ["STAGE234_I_CANDIDATE_ID=90100","STAGE234_I_CANDIDATE_KEY=AFFINITY","STAGE234_I_GUARD_PRELOAD=1","PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED=true","PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED=false","V2_CONFIRMED_WRITE_ENABLED=false","/stage234/audience-preview-runner.mjs","127.0.0.1:4403:4001"]:self.assertIn(required,text)
   for denied in ["--privileged","--network host","--volumes-from","commit-runner","restore-runner","/etc/holymedia-v2"]:self.assertNotIn(denied,text)
  def test_manifest_contains_transitive_immutable_readiness_proof(self):

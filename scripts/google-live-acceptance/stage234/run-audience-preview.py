@@ -13,15 +13,15 @@ base = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(base)
 
 def manifest(head, directory):
-    names = ["audience-preview-guard.mjs", "audience-preview-runner.mjs", "rsa-approval-gateway.mjs", "live-guard.mjs", "context-vault.mjs", "targeting-readiness-runner.mjs", "targeting-discovery.mjs", "scenario-targeting-readiness.mjs", "read-only-guard.mjs", "startup-diagnostics.mjs", "verified-l-residual.mjs"]
+    names = ["run-audience-preview.py", "audience-preview-guard.mjs", "audience-preview-runner.mjs", "rsa-approval-gateway.mjs", "live-guard.mjs", "context-vault.mjs", "targeting-readiness-runner.mjs", "targeting-discovery.mjs", "scenario-targeting-readiness.mjs", "read-only-guard.mjs", "startup-diagnostics.mjs", "verified-l-residual.mjs"]
     result = {}
     for name in names:
         path = directory / name
         base.require(path.is_file() and not path.is_symlink() and 0 < path.stat().st_size <= 500000, "stage234_l_manifest_file_invalid")
         result[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return {"head":head, "purpose":"I_PREVIEW_ONLY", "files":result}
+    return {"head":head, "api_head":"55d9df3553ff1ad01586978b6e4ecc07913969c5", "purpose":"I_PREVIEW_ONLY", "files":result}
 
-def command(image, head, run_id, directory, state, readiness_hash, readiness_harness, candidate_key, candidate_id):
+def command(image, head, run_id, directory, state, readiness_hash, readiness_harness, candidate_key, candidate_id, harness_head):
     name = "stage234-i-" + run_id
     args = ["docker","run","--init","--rm","-d","--name","hm-" + name,"--network",base.NETWORK,
         "--label","com.docker.compose.project=" + base.PROJECT,"--label","org.holymedia.acceptance-purpose=I-preview",
@@ -29,7 +29,7 @@ def command(image, head, run_id, directory, state, readiness_hash, readiness_har
         "-p","127.0.0.1:4403:4001","-v",str(directory)+":/stage234:ro",
         "-v",str(base.ROOT / "harness")+":/acceptance:ro","-v",str(state)+":/acceptance-state/"+name,"--entrypoint","node"]
     env = {
-        "STAGE234_SOURCE_HEAD":head,"STAGE234_IMAGE_DIGEST":image.split("@")[1],
+        "STAGE234_SOURCE_HEAD":head,"STAGE234_HARNESS_HEAD":harness_head,"STAGE234_IMAGE_DIGEST":image.split("@")[1],
         "STAGE234_I_READINESS_SHA256":readiness_hash,"STAGE234_I_READINESS_HARNESS_HEAD":readiness_harness,"STAGE234_I_CANDIDATE_KEY":candidate_key,"STAGE234_I_CANDIDATE_ID":candidate_id,
         "STAGE234_RUN_DIR":"/acceptance-state/"+name,"STAGE234_KEEP_API_ALIVE":"true",
         "STAGE234_GUARD_PRELOAD":"0","STAGE234_L_GUARD_PRELOAD":"0","STAGE234_I_GUARD_PRELOAD":"1","STAGE234_COMMIT_GUARD_PRELOAD":"0","STAGE234_L_COMMIT_GUARD_PRELOAD":"0",
@@ -57,7 +57,8 @@ def execute(options):
     production = base.production_state()
     env_hash = base.inspect_ready(options.head,options.image)
     directory = Path(__file__).resolve().parent
-    frozen = manifest(options.head,directory)
+    base.require(re.fullmatch(r"[a-f0-9]{40}",options.harness_head or ""),"stage234_i_harness_pin_invalid")
+    frozen = manifest(options.harness_head,directory)
     if options.check_only:
         print(json.dumps({"result":"I_RUNTIME_PRECHECK_PASS_NO_PROVIDER_CALLS","real_writes":0,"source_head":options.head}))
         return
@@ -72,16 +73,16 @@ def execute(options):
         with os.fdopen(fd,"wb") as stream: stream.write(data)
         os.chown(state/name,1000,1000)
     try:
-        base.capture(command(options.image,options.head,options.run_id,directory,state,options.readiness_sha256,options.readiness_harness_head,options.candidate_key,options.candidate_id))
+        base.capture(command(options.image,options.head,options.run_id,directory,state,options.readiness_sha256,options.readiness_harness_head,options.candidate_key,options.candidate_id,options.harness_head))
     finally:
         base.require(base.production_state()==production,"stage234_l_production_state_changed")
         base.require(hashlib.sha256((base.ROOT/"acceptance.env").read_bytes()).hexdigest()==env_hash,"stage234_l_existing_env_changed")
-        base.require(manifest(options.head,directory)==frozen,"stage234_l_harness_changed")
+        base.require(manifest(options.harness_head,directory)==frozen,"stage234_l_harness_changed")
     print(json.dumps({"result":"I_SOURCE_PINNED_PREVIEW_ONLY_STARTED","checkpoint_directory":str(state),"container":"hm-stage234-i-"+options.run_id,"approval_origin":"http://localhost:4403","real_writes_permitted":False}))
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
-    for name in ["head","image","run-id"]: parser.add_argument("--"+name,required=True)
+    for name in ["head","harness-head","image","run-id"]: parser.add_argument("--"+name,required=True)
     parser.add_argument("--context-basename",required=True)
     parser.add_argument("--check-only",action="store_true")
     for name in ["readiness-relative","readiness-sha256","readiness-harness-head","candidate-key","candidate-id"]:parser.add_argument("--"+name,required=True)

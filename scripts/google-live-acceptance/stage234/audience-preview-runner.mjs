@@ -96,15 +96,19 @@ export async function runIPreview() {
       account.externalAccountId !== target.customer ||
       !account.enabled ||
       !key ||
+      context.key_id !== key.id ||
       key.revokedAt ||
-      (key.expiresAt && key.expiresAt <= new Date()) ||
+      key.serviceIdentity?.revokedAt ||
+      !Number.isFinite(Date.parse(key.expiresAt)) ||
+      Date.parse(key.expiresAt) !== Date.parse(context.expires_at) ||
+      Date.parse(key.expiresAt) <= Date.now() ||
+      Date.parse(key.expiresAt) > Date.now() + 24 * 60 * 60 * 1000 ||
       key.serviceIdentity.workspaceId !== account.workspaceId ||
       key.resourceAccessMode !== "STATIC_ALLOWLIST" ||
       canonical(key.accountIds) !== canonical([account.id]) ||
       !Array.isArray(key.scopes) ||
-      !["adforge:mcp:read", "adforge:mcp:write"].every((scope) =>
-        key.scopes.includes(scope),
-      )
+      canonical([...key.scopes].sort()) !==
+        canonical(["adforge:mcp:read", "adforge:mcp:write"])
     )
       fail("stage234_owned_account_or_scoped_key_invalid");
     const enabled = await db.client.providerAccount.findMany({
@@ -454,6 +458,7 @@ export async function runIPreview() {
       acceptance_test: "I_PREVIEW_ONLY",
       result: "PREVIEW_PASS_I_LIVE_COMMIT_PENDING",
       source_head: env.STAGE234_SOURCE_HEAD,
+      harness_head: env.STAGE234_HARNESS_HEAD,
       image_digest: env.STAGE234_IMAGE_DIGEST,
       test_customer_id: target.customer,
       campaign_id: target.campaign,
