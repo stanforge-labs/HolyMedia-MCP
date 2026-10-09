@@ -956,16 +956,18 @@ export async function buildStage0Plan(
     }
     const negatives = [...campaignNegatives, ...list(group.negative_keywords)];
     for (const k of list(group.keywords)) {
-      add(
-        "adGroupCriterion",
-        keywordCreateFields(
+      add("adGroupCriterion", {
+        ...keywordCreateFields(
           k as Stage1Item,
           { adGroup: groupName },
           false,
           currency,
           moneyUnit,
         ),
-      );
+        // Stage 1 lifecycle keeps its explicit ENABLED creation contract.
+        // A new/clone Stage 0 delivery graph is inert at every status leaf.
+        status: "PAUSED",
+      });
       if (k.cpc_bid) {
         const bid = row(k.cpc_bid),
           requested = currencyMicros(

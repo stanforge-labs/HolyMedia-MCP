@@ -346,8 +346,10 @@ Required: `provider=GOOGLE_ADS`, `account_id`, `campaign_name`, `daily_budget={a
 Group: `name`, `keywords[{text,match_type,cpc_bid?,final_url?}]`, `rsa[]`, optional `default_bid`,
 `negative_keywords[]`. Имена групп уникальны; exact-equivalent keys/negatives не дублируются внутри parent.
 `parseStage1Intent`, `normalizeKeywordText`, `keywordCreateFields`, `currencyMicros`, `conflictReason`
-переиспользуются для существующих и temporary parents. Ключи ENABLED внутри PAUSED groups/campaign;
-RSA, groups и campaign всегда PAUSED. Нет параметра для скрытого запуска.
+переиспользуются для существующих и temporary parents. Новый Stage 0 brief/clone явно
+переопределяет Stage 1 keyword default: positive keywords, RSA, groups и campaign PAUSED.
+Historical fixtures с ENABLED originals не менялись. Budget/assets/criteria без status
+не получают выдуманное PAUSED field. Нет параметра для скрытого запуска.
 
 Default strategy: **MANUAL_CPC**, с обязательным явным `default_bid` каждой группы.
 Никакая ставка не угадывается по валюте/бюджету. Optional **MAXIMIZE_CONVERSIONS** требует
@@ -361,7 +363,10 @@ EU political declaration: DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING для эт�
 enabled constant и повторная GAQL reference проверка. Несколько вариантов → explicit error с кандидатами,
 не guessed first result; ID уточнения выбирается только среди Google suggestions. Duplicate/conflicting
 include/exclude запрещены; нужен хотя бы один include. Include/exclude mode PRESENCE.
-Proximity/radius **не реализованы**, запрос с такими полями отклоняется.
+Optional `proximities[{latitude,longitude,radius,unit}]` поддерживает положительный radius
+1–500 KM/MILES, coordinates до шести decimal places и PRESENCE. Нет address geocoding
+или proximity exclusions; privacy/eligibility проверяет Google validate_only. Clone proximity
+остаётся отдельным неподдерживаемым source component, не молча урезается.
 Languages: aliases Russian/русский/ru, Kazakh/казахский/kk, English/английский/en → реальные targetable
 LanguageConstants; неизвестные/недоступные языки отвергаются, ID не хардкодится.
 

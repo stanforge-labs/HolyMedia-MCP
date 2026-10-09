@@ -81,7 +81,7 @@ BigInt conversion и half-up quantization сохраняют requested/effective
 
 ### Stage 0 — P67–128
 
-Search brief создаёт PAUSED budget/campaign/groups/keywords/RSA, geo/languages,
+Search brief создаёт budget и PAUSED campaign/groups/keywords/RSA, geo/languages,
 optional schedule, validated goals/config, negative criteria, supported assets и UTM.
 Search Partners и Display expansion OFF; geo default PRESENCE. Non-shared budget name
 provider-derived от campaign, а readable display label не является фальшивым provider name.
@@ -93,6 +93,9 @@ Stage 0 Search brief использует owned image/logo references. Stage 4 �
 Checklist читает фактические объекты/goals/policy и безопасно проверяет URLs.
 Activation отдельная, campaign-only, не включает groups/ads и не обходит FAIL checklist.
 Historical T/U/V/W PASS не подтверждает live каждую позднюю feature этого профиля.
+Новый Stage 0 keyword-default теперь явно PAUSED, вместо наследования Stage 1 ENABLED;
+atomic stock mock проверяет все 10 keyword statuses до и после commit. Historical fixtures
+и их 20 ENABLED originals не изменялись; новый default ещё требует отдельного live evidence.
 
 Clone P104–106 — обязательный **частично реализованный** профиль:
 Search MANUAL_CPC/MAXIMIZE_CONVERSIONS, standard groups, keyword criteria, одно-URL RSA,

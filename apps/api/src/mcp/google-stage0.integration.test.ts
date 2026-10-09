@@ -108,6 +108,14 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
       .filter((o) => o.method === "create" && o.resource_name)
       .map((o) => o.resource_name!.split("/").at(-1));
     expect(new Set(names).size).toBe(names.length);
+    const plannedKeywords = plan.operations.filter(
+      (o) =>
+        o.kind === "adGroupCriterion" && o.fields.keyword && !o.fields.negative,
+    );
+    expect(plannedKeywords).toHaveLength(10);
+    expect(plannedKeywords.every((o) => o.fields.status === "PAUSED")).toBe(
+      true,
+    );
     const result = await f.commit(p);
     expect(result.status).toBe("VERIFIED");
     expect(result.partial_failure).toBe(false);
@@ -126,6 +134,11 @@ describe("Google Stage 0 atomic campaign lifecycle — no real external calls", 
     expect(resource(f, "adGroupAd").every((a) => a.status === "PAUSED")).toBe(
       true,
     );
+    const actualKeywords = resource(f, "adGroupCriterion").filter(
+      (k) => k.keyword && !k.negative,
+    );
+    expect(actualKeywords).toHaveLength(10);
+    expect(actualKeywords.every((k) => k.status === "PAUSED")).toBe(true);
     expect(mutationRequests(f, false)).toHaveLength(1);
     expect(
       f.events.filter((e) => e.eventType === "mcp_google_stage1_operation"),
