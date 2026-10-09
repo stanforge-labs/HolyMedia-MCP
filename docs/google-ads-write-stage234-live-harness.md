@@ -15,14 +15,35 @@ The runner checks persisted immutable plan/version/digest/audit, then rereads th
 ## Exact-code runtime prerequisites (root preparation, not performed by this package)
 
 1. Linux CI builds the final integrated source SHA into an API image with OCI `org.opencontainers.image.revision=<exact SHA>`. Pull its **immutable digest**, not production/latest. Image must contain all stock compiled packages and Prisma client matching migrated acceptance DB. No dist JS bind patch, old-image/new-harness masquerade or product file overlay.
-2. Verify five production services remain healthy/unchanged; keep their environment, DB, Redis, network and ports untouched. Existing acceptance stack `/opt/holymedia-google-acceptance` remains isolated on `holymedia-google-acceptance_default`, DB `postgres/google_acceptance`, Redis `redis`, own volumes. Old acceptance API is never restarted/recreated. No migrations in this launcher.
+2. Verify five production services remain healthy/unchanged; keep their environment, DB, Redis, network and ports untouched. Existing acceptance stack `/opt/holymedia-google-acceptance` retains its original network. The new one-off runtime uses the separate labelled `holymedia-google-acceptance_stage234` network, with only the existing disposable PostgreSQL/Redis connected as secondary aliases `postgres`/`redis` and their own volumes. The legacy approval container from another compose project is not admitted by weakening the ownership guard. `--prepare-network` validates dependencies and creates/connects only this secondary network: no restart/recreate, migration, production connection or provider call.
 3. Existing acceptance env and `state/fixture-context.json` must be root-owned protected mode 600, not symlinks; context has the existing fixture preview ID and scoped service token. DB token must be unexpired/unrevoked, read+write scoped, STATIC_ALLOWLIST of the single selected internal provider-account ID. Enabled Google account inventory must contain only TEST customer. Existing encrypted vault stays in acceptance; decrypt only in memory for bounded reads/refresh, never output.
 4. Upload this harness into an acceptance-only directory, without provider secrets. Each run receives a new unique run ID/directory (0700). Evidence/proof/claims/protected preview context are 0600, exclusive writes. Previous evidence/claims are never overwritten. Docker-compatible runtime env conversion stays protected inside that new directory; original Compose-quoted acceptance env is unchanged.
 5. `run-live.py --check-only --head <40-hex> --image ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:<64-hex> --run-id <UTC>-<suffix>` checks local Docker/config only, no provider calls. Launch without `--check-only` only after root/user authorizes the bounded live READ+validate-only phase. There is no SSH auto-launch or real-write mode.
 6. A one-off container runs the exact image plus read-only harness mount, never mounts compiled product files. Gates are enabled for Stage 2 preview in this child only; confirmed write/public writes remain OFF and preview-only remains TRUE. Stage 3/4 gates remain OFF. Existing acceptance env does not change. HTTP child API is `127.0.0.1:4000` inside the one-off container.
 7. `--hold-api` starts root's new `stage234/approval-gateway.mjs`, checks its readiness before JIT preview, keeps the exact-code API/gateway alive and binds only VPS `127.0.0.1:4402` to gateway container port 4001. Stock MCP remains private at container `127.0.0.1:4000`; it is not proxied publicly by the gateway. Existing readonly `harness:/acceptance:ro` supplies the stock human approval assets. Otherwise the API stops after preview. Root must prepare that gateway and verify auth/CSRF/owner/session flow before asking approval. Existing old gateway hardcodes 4401 and must not be represented as new-code approval. The launcher intentionally does not approve, expose a substitute confirmation page or commit. Human approval URL exists only in protected preview context / intended user-facing response; no internal nonce is output separately.
 
-No real commit or rollback can be executed with this guard. Future N bid change/rollback needs a separate approved controlled flow and explicit authorization; G/H/I/J/K/L likewise need distinct typed scenarios and evidence. Do not announce LIVE Stage 2–4 acceptance based on this package.
+No real commit or rollback can be executed with the preview guard. G/H/I/J/K/L likewise need distinct typed scenarios and evidence. Do not announce LIVE Stage 2–4 acceptance based on this package.
+
+## Separately authorized N continuation
+
+`run-commit.py` and `commit-runner.mjs` are prepared but not launched by the preview
+workflow. The supervisor requires a specific human-authorized preview UUID, protected
+context/evidence, exact immutable image revision/digest and source-hash manifest of
+the mounted runner/guards. Its check-only mode never starts a container or calls Google.
+Only a new isolated one-off may enable confirmed writes; production and the running
+approval gateway remain unchanged. No external port or alternate approval route opens.
+
+Immediately before the one stock `commit_preview` call, the runner rereads persisted
+confirmedAt, matching human session/audit, scope/account ownership, TTL/consumption,
+payload digest and fresh TEST/MCC/provider snapshot. Independent transport claims
+permit exactly one CPC 110000-micros mutation. No self approval, raw adapter mutate,
+automatic retry or replacement payload is present. An uncertain result stops.
+
+After VERIFIED provider reread and journal checks, only the stock
+`preview_rollback_commit` prepares a new inverse to 100000 micros with validate_only.
+It does not execute restoration: a new human approval is mandatory. Original evidence
+and claims are not overwritten; the original gateway stays available for that approval.
+The manifest and context never expose service keys or provider credentials in reports.
 
 ## Local/mock verification
 
