@@ -265,14 +265,21 @@ export async function runIRemovePreview() {
       stdio: "ignore",
       env: { ...env, LOG_LEVEL: "error" },
     });
+    let gatewayReady = false;
     for (let i = 0; i < 12; i++) {
+      if (gateway.exitCode !== null)
+        fail("stage234_i_remove_gateway_start_failed");
       try {
-        if ((await globalThis.fetch("http://127.0.0.1:4001/ready")).ok) break;
+        if ((await globalThis.fetch("http://127.0.0.1:4001/ready")).ok) {
+          gatewayReady = true;
+          break;
+        }
       } catch {
         /* bounded local readiness only */
       }
       await new Promise((r) => setTimeout(r, 500));
     }
+    if (!gatewayReady) fail("stage234_i_remove_gateway_not_ready");
     const bootstrap = await globalThis.fetch(
       "http://127.0.0.1:4001/acceptance/session",
       {

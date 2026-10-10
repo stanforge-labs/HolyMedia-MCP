@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 
 spec=importlib.util.spec_from_file_location('base',Path(__file__).with_name('run-live.py'))
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
@@ -16,6 +17,9 @@ ORIGIN='stage234-i-commit-20261010T163550Z-ic1'
 RECONCILE='stage234-i-reconcile-20261010T165000Z-ir1'
 RECONCILE_SHA='95ade1e14a04475a85f685b8b37b2412cb86c93851f0402667984063f379dae7'
 
+def startup_recovery_allowed(blocked, names):
+    return blocked.get('failure_stage')=='stock_api_ready' and blocked.get('real_provider_write_call_count')==0 and blocked.get('validate_only_call_count')==0 and not set(names).intersection({'i-remove-preview.claim','validation.claim','validation.json','protected-preview-context.json','evidence.json'})
+
 def execute(opts):
     base.validate_options(SOURCE,IMAGE,opts.run_id)
     base.require(os.geteuid()==0 and re.fullmatch(r'[a-f0-9]{40}',opts.harness_head or ''),'stage234_i_remove_options_invalid')
@@ -25,12 +29,20 @@ def execute(opts):
     base.require(hashlib.sha256(reconcile.read_bytes()).hexdigest()==RECONCILE_SHA,'stage234_i_remove_origin_hash_invalid')
     evidence=json.loads(reconcile.read_text())
     base.require(evidence.get('result')=='I_ADD_VERIFIED_REMOVE_PENDING' and evidence.get('created_audience',{}).get('criterion_id')=='51668099935','stage234_i_remove_origin_invalid')
-    old=json.loads(base.capture(['docker','inspect','hm-'+PARENT]))[0]
-    labels=old.get('Config',{}).get('Labels') or {}
-    base.require(labels.get('com.docker.compose.project')==base.PROJECT and labels.get('org.holymedia.acceptance-purpose')=='I-preview' and old.get('State',{}).get('Running') is True and (old.get('NetworkSettings',{}).get('Ports',{}).get('4001/tcp') or [])==[{'HostIp':'127.0.0.1','HostPort':'4403'}],'stage234_i_remove_parent_runtime_invalid')
+    lookup=subprocess.run(['docker','inspect','hm-'+PARENT],capture_output=True,text=True,timeout=30)
+    old=None
+    if lookup.returncode==0:
+        old=json.loads(lookup.stdout)[0];labels=old.get('Config',{}).get('Labels') or {}
+        base.require(not opts.prior_failed_run_id and labels.get('com.docker.compose.project')==base.PROJECT and labels.get('org.holymedia.acceptance-purpose')=='I-preview' and old.get('State',{}).get('Running') is True and (old.get('NetworkSettings',{}).get('Ports',{}).get('4001/tcp') or [])==[{'HostIp':'127.0.0.1','HostPort':'4403'}],'stage234_i_remove_parent_runtime_invalid')
+    else:
+        base.validate_options(SOURCE,IMAGE,opts.prior_failed_run_id or '')
+        failed=base.ROOT/'state'/('stage234-i-remove-'+opts.prior_failed_run_id)
+        base.permissions(failed/'blocked-evidence.json')
+        base.require(startup_recovery_allowed(json.loads((failed/'blocked-evidence.json').read_text()),[x.name for x in failed.iterdir()]),'stage234_i_remove_recovery_after_possible_preview_denied')
     # DB-only gate before retiring the consumed loopback gateway. No provider calls.
     js="""const {createDatabase,closeDatabase}=await import('/workspace/packages/database/dist/index.js');const {loadConfig}=await import('/workspace/packages/config/dist/index.js');const db=createDatabase(loadConfig().databaseUrl);try{const p=await db.client.mcpPreview.findUnique({where:{id:'080959b1-0413-4814-b656-9b03b187992e'},include:{account:true}});const pending=await db.client.mcpPreview.count({where:{workspaceId:p.workspaceId,provider:'GOOGLE_ADS',consumedAt:null,cancelledAt:null,expiresAt:{gt:new Date()}}});console.log(JSON.stringify({valid:p.commitStatus==='VERIFIED'&&!!p.consumedAt&&p.account.externalAccountId==='8590146099'&&pending===0}));}finally{await closeDatabase(db)}"""
-    checked=json.loads(base.capture(['docker','exec','hm-'+PARENT,'node','--input-type=module','-e',js]))
+    db_command=['docker','exec','hm-'+PARENT,'node','--input-type=module','-e',js] if old else ['docker','run','--rm','--network',base.NETWORK,'--label','com.docker.compose.project='+base.PROJECT,'--env-file',str(original/'runtime.env'),'--entrypoint','node',IMAGE,'--input-type=module','-e',js]
+    checked=json.loads(base.capture(db_command))
     base.require(checked.get('valid') is True,'stage234_i_remove_original_or_pending_invalid')
     directory=Path(__file__).resolve().parent
     manifest={'head':opts.harness_head,'source':SOURCE,'purpose':'I_REMOVE_PREVIEW_ONLY','files':{f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in directory.glob('*.mjs')}}
@@ -48,10 +60,10 @@ def execute(opts):
         with os.fdopen(fd,'wb') as stream:stream.write(data)
         os.chown(state/name,1000,1000)
     # ONLY this consumed disposable gateway; preserved state is not deleted.
-    base.capture(['docker','stop','--time','10','hm-'+PARENT])
+    if old:base.capture(['docker','stop','--time','10','hm-'+PARENT])
     args=['docker','run','--init','--rm','-d','--name','hm-'+state.name,'--network',base.NETWORK,'--label','com.docker.compose.project='+base.PROJECT,'--label','org.holymedia.acceptance-purpose=I-remove-preview','--memory','768m','--cpus','1','--env-file',str(state/'runtime.env'),'-p','127.0.0.1:4403:4001','-v',str(directory)+':/stage234:ro','-v',str(base.ROOT/'harness')+':/acceptance:ro','-v',str(state)+':/acceptance-state/'+state.name,'--entrypoint','node']
     flags={'STAGE234_SOURCE_HEAD':SOURCE,'STAGE234_IMAGE_DIGEST':IMAGE.split('@')[1],'STAGE234_HARNESS_HEAD':opts.harness_head,'STAGE234_RUN_DIR':'/acceptance-state/'+state.name,'STAGE234_I_ORIGIN_SHA256':RECONCILE_SHA,
-        'PROVIDER_GOOGLE_ADS_WRITE_ENABLED':'true','PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED':'false','PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED':'true','PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED':'false','GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST':'8590146099','PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID':'4378327049','PROVIDER_GOOGLE_API_VERSION':'v24','V2_PREVIEW_ONLY':'true','V2_CONFIRMED_WRITE_ENABLED':'false','PUBLIC_MCP_WRITE_SCOPE_ENABLED':'false','PUBLIC_MCP_CONTROLLED_WRITE_ENABLED':'false','STAGE234_GUARD_PRELOAD':'0','STAGE234_L_GUARD_PRELOAD':'0','STAGE234_I_GUARD_PRELOAD':'0','STAGE234_I_COMMIT_GUARD_PRELOAD':'0','STAGE234_COMMIT_GUARD_PRELOAD':'0','STAGE234_L_COMMIT_GUARD_PRELOAD':'0','STAGE234_I_REMOVE_GUARD_PRELOAD':'0','HOLYMEDIA_PUBLIC_BASE_URL':'http://localhost:4403','CORS_ORIGINS':'http://localhost:4403','COOKIE_DOMAIN':'','API_PORT':'4000','LOG_LEVEL':'error','NODE_OPTIONS':'--max-old-space-size=192'}
+        'PROVIDER_GOOGLE_ADS_WRITE_ENABLED':'true','PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED':'false','PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED':'true','PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED':'false','GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST':'8590146099','PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID':'4378327049','PROVIDER_GOOGLE_API_VERSION':'v24','V2_PREVIEW_ONLY':'true','V2_CONFIRMED_WRITE_ENABLED':'false','PUBLIC_MCP_WRITE_SCOPE_ENABLED':'false','PUBLIC_MCP_CONTROLLED_WRITE_ENABLED':'false','STAGE234_GUARD_PRELOAD':'0','STAGE234_L_GUARD_PRELOAD':'0','STAGE234_I_GUARD_PRELOAD':'0','STAGE234_I_COMMIT_GUARD_PRELOAD':'0','STAGE234_COMMIT_GUARD_PRELOAD':'0','STAGE234_L_COMMIT_GUARD_PRELOAD':'0','STAGE234_I_REMOVE_GUARD_PRELOAD':'0','STAGE234_APPROVAL_GATEWAY':'true','HOLYMEDIA_PUBLIC_BASE_URL':'http://localhost:4403','CORS_ORIGINS':'http://localhost:4403','COOKIE_DOMAIN':'','API_PORT':'4000','LOG_LEVEL':'error','NODE_OPTIONS':'--max-old-space-size=192'}
     for k,v in flags.items():args+=['-e',k+'='+v]
     try:base.capture(args+[IMAGE,'/stage234/audience-remove-runner.mjs'])
     finally:
@@ -59,7 +71,7 @@ def execute(opts):
         base.require(all(hashlib.sha256(sources[n].read_bytes()).hexdigest()==h for n,h in hashes.items()),'stage234_i_remove_history_changed')
     print(json.dumps({'result':'I_REMOVE_PREVIEW_ONLY_STARTED','state':str(state),'container':'hm-'+state.name,'real_writes_permitted':False}))
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--harness-head',required=True);p.add_argument('--run-id',required=True);p.add_argument('--check-only',action='store_true')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--harness-head',required=True);p.add_argument('--run-id',required=True);p.add_argument('--check-only',action='store_true');p.add_argument('--prior-failed-run-id')
     try:execute(p.parse_args())
     except Exception as error:
         code=str(error) if isinstance(error,RuntimeError) and re.fullmatch(r'stage234_[a-z0-9_]+',str(error)) else 'stage234_i_remove_supervisor_redacted'
