@@ -35,14 +35,6 @@ export const J_TOOL = Object.freeze({
     account_id: target.customer,
     items: [
       {
-        operation: "geo_add",
-        level: "CAMPAIGN",
-        campaign_id: target.campaign,
-        name: "Almaty",
-        country_code: "KZ",
-        geo_target_id: "9235214",
-      },
-      {
         operation: "geo_exclude",
         level: "CAMPAIGN",
         campaign_id: target.campaign,
@@ -115,6 +107,11 @@ export function assertJGeos(geos) {
   return geos;
 }
 export function assertPreparedJ(plan) {
+  // Almaty is already a historical positive criterion. Never remove/recreate it
+  // just to manufacture an add test or bypass the stock duplicate guard.
+  const plannedQueries = Object.values(J_QUERIES).filter(
+    (query) => query !== J_QUERIES.city,
+  );
   if (
     plan?.version !== 3 ||
     plan.account_id !== target.customer ||
@@ -122,21 +119,15 @@ export function assertPreparedJ(plan) {
     plan.irreversible !== false ||
     canonical(plan.intent) !==
       canonical({ action: "targeting", items: J_TOOL.arguments.items }) ||
-    plan.items?.length !== 3 ||
-    plan.operations?.length !== 3 ||
+    plan.items?.length !== 2 ||
+    plan.operations?.length !== 2 ||
     !Array.isArray(plan.checks) ||
-    plan.checks.length !== Object.keys(J_QUERIES).length ||
-    plan.checks.some((c) => !Object.values(J_QUERIES).includes(c.query)) ||
+    plan.checks.length !== plannedQueries.length ||
+    plan.checks.some((c) => !plannedQueries.includes(c.query)) ||
     new Set(plan.checks.map((c) => c.query)).size !== plan.checks.length
   )
     fail("stage234_j_prepared_plan_invalid");
   const fields = [
-    {
-      campaign: campaignResource,
-      status: "ENABLED",
-      negative: false,
-      location: { geoTargetConstant: "geoTargetConstants/9235214" },
-    },
     {
       campaign: campaignResource,
       status: "ENABLED",
@@ -166,7 +157,7 @@ export function assertPreparedJ(plan) {
       op.before !== null ||
       op.row !== i ||
       op.response_key !== "campaignCriterion" ||
-      op.read_query !== (i === 2 ? J_QUERIES.proximity : J_QUERIES.locations) ||
+      op.read_query !== (i === 1 ? J_QUERIES.proximity : J_QUERIES.locations) ||
       canonical(op.fields) !== canonical(fields[i]) ||
       canonical(op.expected) !== canonical(fields[i]) ||
       canonical(plan.items[i].provider_operations) !== canonical([i]) ||
@@ -184,6 +175,24 @@ export function assertPreparedJ(plan) {
     campaign[0].campaign.advertisingChannelType !== "SEARCH"
   )
     fail("stage234_j_paused_parent_invalid");
+  const locations = plan.checks.find(
+    (c) => c.query === J_QUERIES.locations,
+  )?.rows;
+  const city = locations?.filter(
+    (r) =>
+      r.campaignCriterion?.location?.geoTargetConstant ===
+      "geoTargetConstants/9235214",
+  );
+  if (
+    city?.length !== 1 ||
+    city[0].campaignCriterion.resourceName !==
+      `${campaignResource.replace("/campaigns/", "/campaignCriteria/")}~9235214` ||
+    city[0].campaignCriterion.campaign !== campaignResource ||
+    city[0].campaignCriterion.type !== "LOCATION" ||
+    city[0].campaignCriterion.status !== "ENABLED" ||
+    city[0].campaignCriterion.negative !== false
+  )
+    fail("stage234_j_existing_city_not_proved");
   return {
     mutateOperations: fields.map((create) => ({
       campaignCriterionOperation: { create },
@@ -362,7 +371,7 @@ export function installJGuard({
           http_status: response.status,
           validate_only: true,
           partial_failure: true,
-          operation_count: 3,
+          operation_count: 2,
         }),
         { flag: "wx", mode: 0o600 },
       );

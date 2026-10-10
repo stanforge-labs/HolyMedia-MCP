@@ -13,7 +13,7 @@ import {
   target,
   digest,
 } from "./geo-preview-guard.mjs";
-import { assertJFixture } from "./geo-preview-runner.mjs";
+import { assertJFixture, safeJError } from "./geo-preview-runner.mjs";
 const { tsImport } = createRequire(
   new URL("../../../apps/api/package.json", import.meta.url),
 )("tsx/esm/api");
@@ -68,7 +68,7 @@ const geoProof = () =>
       },
     ]),
   );
-async function planFixture() {
+async function planFixture({ duplicateCity = false } = {}) {
   const { buildStage3Plan } = await tsImport(
     "../../../apps/api/src/providers/google-ads-stage3.ts",
     import.meta.url,
@@ -96,12 +96,41 @@ async function planFixture() {
     if (q === J_QUERIES.campaign) return [{ campaign }];
     if (q === J_QUERIES.city) return [{ geoTargetConstant: g["9235214"] }];
     if (q === J_QUERIES.district) return [{ geoTargetConstant: g["9196209"] }];
-    if ([J_QUERIES.locations, J_QUERIES.proximity].includes(q)) return [];
+    if (q === J_QUERIES.locations)
+      return [
+        {
+          campaignCriterion: {
+            resourceName: `customers/${target.customer}/campaignCriteria/${target.campaign}~9235214`,
+            criterionId: "9235214",
+            campaign: campaign.resourceName,
+            type: "LOCATION",
+            status: "ENABLED",
+            negative: false,
+            location: { geoTargetConstant: "geoTargetConstants/9235214" },
+          },
+        },
+      ];
+    if (q === J_QUERIES.proximity) return [];
     assert.fail("Unmanifested mock read: " + q);
   };
   const p = await buildStage3Plan(
     target.customer,
-    { action: "targeting", items: J_TOOL.arguments.items },
+    {
+      action: "targeting",
+      items: duplicateCity
+        ? [
+            {
+              operation: "geo_add",
+              level: "CAMPAIGN",
+              campaign_id: target.campaign,
+              name: "Almaty",
+              country_code: "KZ",
+              geo_target_id: "9235214",
+            },
+            ...J_TOOL.arguments.items,
+          ]
+        : J_TOOL.arguments.items,
+    },
     read,
     async (name, country) => {
       suggest.push({ name, country });
@@ -121,32 +150,62 @@ const request = (url, body) => [
   },
 ];
 const mutate = `https://googleads.googleapis.com/v24/customers/${target.customer}/googleAds:mutate`;
-test("J actual stock builder/schema yields exact three authorized operations, name resolution and frozen inventory", async () => {
+test("J actual stock builder preserves existing city and yields only district/radius creates with frozen inventory", async () => {
   const { plan, reads, suggest } = await planFixture();
   const payload = assertPreparedJ(plan);
   assert.equal(payload.validateOnly, true);
   assert.equal(payload.partialFailure, true);
-  assert.equal(payload.mutateOperations.length, 3);
-  assert.deepEqual(suggest, [
-    { name: "Almaty", country: "KZ" },
-    { name: "Almaly District", country: "KZ" },
-  ]);
-  assert.deepEqual(new Set(reads), new Set(Object.values(J_QUERIES)));
+  assert.equal(payload.mutateOperations.length, 2);
+  assert.deepEqual(suggest, [{ name: "Almaly District", country: "KZ" }]);
+  assert.deepEqual(
+    new Set(reads),
+    new Set(Object.values(J_QUERIES).filter((q) => q !== J_QUERIES.city)),
+  );
   assert.equal(
     classifyJ(...request(mutate, payload), { env, plan, proof, now }),
     "validate_only",
   );
   assert.equal(plan.items[0].before, null);
-  assert.equal(plan.items[1].after.negative, true);
+  assert.equal(plan.items[0].after.negative, true);
   assert.equal(
-    plan.items[2].after.proximity.geoPoint.latitudeInMicroDegrees,
+    plan.items[1].after.proximity.geoPoint.latitudeInMicroDegrees,
     43186900,
   );
   assert.equal(
-    plan.items[2].after.proximity.geoPoint.longitudeInMicroDegrees,
+    plan.items[1].after.proximity.geoPoint.longitudeInMicroDegrees,
     76887000,
   );
-  assert.equal(plan.items[2].after.proximity.radius, 2);
+  assert.equal(plan.items[1].after.proximity.radius, 2);
+});
+test("J reproduces real existing-city duplicate rejection; no silent create/remove or guard bypass", async () => {
+  await assert.rejects(
+    planFixture({ duplicateCity: true }),
+    /Targeting criterion уже существует/,
+  );
+  const { plan } = await planFixture();
+  assert.ok(
+    plan.operations.every(
+      (op) =>
+        op.fields.location?.geoTargetConstant !== "geoTargetConstants/9235214",
+    ),
+  );
+  for (const change of [
+    (p) => p.checks.find((c) => c.query === J_QUERIES.locations).rows.splice(0),
+    (p) => {
+      p.checks.find(
+        (c) => c.query === J_QUERIES.locations,
+      ).rows[0].campaignCriterion.negative = true;
+    },
+    (p) => {
+      p.checks.find(
+        (c) => c.query === J_QUERIES.locations,
+      ).rows[0].campaignCriterion.status = "PAUSED";
+    },
+  ]) {
+    const p = structuredClone(plan);
+    change(p);
+    assert.throws(() => assertPreparedJ(p));
+  }
 });
 test("J exact city/district/country chain rejects wrong parent, country, type, status or resource identity", () => {
   assertJGeos(geoProof());
@@ -166,9 +225,9 @@ test("J exact city/district/country chain rejects wrong parent, country, type, s
 test("J plan cannot alter coordinates, radius, negatives, parent, update mask, status or operation set", async () => {
   const { plan } = await planFixture();
   for (const change of [
-    (p) => (p.operations[0].fields.negative = true),
-    (p) => (p.operations[2].fields.proximity.radius = 3),
-    (p) => p.operations[2].fields.proximity.geoPoint.latitudeInMicroDegrees++,
+    (p) => (p.operations[0].fields.negative = false),
+    (p) => (p.operations[1].fields.proximity.radius = 3),
+    (p) => p.operations[1].fields.proximity.geoPoint.latitudeInMicroDegrees++,
     (p) =>
       (p.operations[0].fields.campaign = "customers/9999999999/campaigns/1"),
     (p) => (p.operations[0].method = "update"),
@@ -199,7 +258,7 @@ test("J preview transport forbids commit, approval, real writes, foreign account
     "mcp_preview",
   );
   const altered = structuredClone(rpc);
-  altered.params.arguments.items[2].radius = 3;
+  altered.params.arguments.items[1].radius = 3;
   for (const args of [
     request(mutate, { ...payload, validateOnly: false }),
     request(mutate.replace(target.customer, target.mcc), payload),
@@ -306,4 +365,18 @@ test("J preparation is before JIT; no fake provider recovery IDs, retries or app
   assert.match(guard, /flag:\s*"wx"/u);
   assert.ok(digest(J_TOOL));
   assert.equal(typeof assertJFixture, "function");
+});
+test("J diagnostic exposes only exact known local product codes, never error bodies or credentials", () => {
+  assert.equal(
+    safeJError({ writeCode: "google_stage3_duplicate", message: "secret" }),
+    "google_stage3_duplicate",
+  );
+  assert.equal(
+    safeJError({ writeCode: "secret", message: "credential" }),
+    "stage234_unclassified_failure_redacted",
+  );
+  assert.equal(
+    safeJError(Error("stage234_j_geo_proof_invalid")),
+    "stage234_j_geo_proof_invalid",
+  );
 });

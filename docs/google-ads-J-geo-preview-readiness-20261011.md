@@ -11,17 +11,27 @@ The human authorized the exact following preparation, not any Google commit:
 Fresh Google constant READ proved ENABLED City9235214 and District9196209,
 district parent9235214, city parent Country2398 (Kazakhstan). Province9070290
 is Almaty Region, a different resource; it is not the selected City's parent.
-The exact fixture/code checks and both GeoTargetConstantService.suggest→GAQL
+The exact fixture/code checks and district GeoTargetConstantService.suggest→GAQL
 bindings run again before creating the preview. Parent metadata is independently
 read/frozen in protected evidence and rechecked immediately before preview.
 The stock immutable plan freezes its exact selected constant/criteria queries.
 
-The ordinary Stage3 builder/MCP tool generates three campaignCriterion create
-operations: positive LOCATION, negative LOCATION, positive PROXIMITY. Micros are
+The first READ-only stock build correctly rejected `google_stage3_duplicate`:
+Almaty is already included as campaignCriteria/24324170853~9235214. This failed
+preparation used 24 READ, 0 validation and 0 writes; its evidence is retained.
+No product guard is weakened and no existing city is removed/recreated to
+manufacture an add test. Original city-add LIVE coverage is historical, not replayed.
+
+The ordinary Stage3 builder/MCP tool now generates only two new campaignCriterion
+create operations: negative LOCATION and positive PROXIMITY. The existing positive
+City criterion is independently proved and frozen in the stock LOCATION inventory.
+The city stays included, unchanged; its exact original resource/negative/status
+must match the harness's fixed contract. Both city/district constants and their
+administrative chain are read independently. Micros are
 43186900 latitude and76887000 longitude. Criteria are ENABLED inside the PAUSED
 campaign; campaign/group/RSA/keywords/budget/presence/language are not updated.
 Stage3 preserves `partial_failure=true`, unlike Stage0 atomic creation. All
-three validation results must PASS; one successful HTTP response alone is not
+two validation results must PASS; one successful HTTP response alone is not
 acceptance. Full neighbors and fixture snapshots must remain identical.
 
 The new harness is preview-only with closed exact transport/semantic payloads.
@@ -44,12 +54,13 @@ session bootstrap and fresh fixture/geo proof precede the one JIT preview.
 After a separate manual approval, a future controlled exact commit must prove
 persisted owner/session/audit/confirmedAt, TTL, immutable plan and fresh stale
 snapshot. Actual created criterion IDs are collected by reread/audit. Recovery
-is a new approved stock `criterion_remove` batch for only those three returned
+is a new approved stock `criterion_remove` batch for only those two returned
 IDs, with irreversible acknowledgement and unchanged original neighbors. No
 resource ID is fabricated, no automated cleanup and no source criterion removed.
 J remains LIVE PENDING until both approved creation and approved recovery verify.
 
-Six Node regressions cover actual stock builder payloads, changed fields,
+Seven Node regressions cover the actual existing-city duplicate failure and
+preservation contract as well as stock builder payloads, changed fields,
 parent/type/country proofs, foreign/MCC/real-write/approval rejection, stale/OFF
 guards, closed name-resolution READ and preparation-before-TTL. Two Python
 supervisor regressions prove exact disposable parent identity and no gateway

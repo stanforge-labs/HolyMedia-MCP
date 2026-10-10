@@ -57,6 +57,18 @@ export function assertJFixture(snapshot, origin) {
   )
     fail("stage234_j_keyword_fixture_changed");
 }
+export function safeJError(error) {
+  // Exact local product codes only, never Google bodies, OAuth or arbitrary text.
+  const code = error?.writeCode;
+  return [
+    "google_stage3_duplicate",
+    "google_stage3_geo_ambiguous",
+    "google_stage3_geo_invalid",
+    "google_stage3_geo_limit",
+  ].includes(code)
+    ? code
+    : safeError(error);
+}
 export async function runJPreview() {
   installJGuard();
   const env = process.env,
@@ -291,7 +303,8 @@ export async function runJPreview() {
         geo_proof: geos,
         fixture_sha256: digest(before),
         exact_validate_only_payload: validation,
-        planned_operations: 3,
+        planned_operations: 2,
+        existing_city_preserved: true,
         ...counts(),
         preview_created: false,
         committed: false,
@@ -303,7 +316,7 @@ export async function runJPreview() {
       console.log(
         JSON.stringify({
           result: ready.result,
-          planned_operations: 3,
+          planned_operations: 2,
           ...counts(),
         }),
       );
@@ -424,11 +437,11 @@ export async function runJPreview() {
       preview.provider !== "GOOGLE_ADS" ||
       preview.account_id !== target.customer ||
       preview.provider_validation !== "passed" ||
-      preview.operation_count !== 3 ||
+      preview.operation_count !== 2 ||
       preview.partial_failure !== true ||
       preview.atomic !== false ||
       preview.irreversible !== false ||
-      preview.items?.length !== 3 ||
+      preview.items?.length !== 2 ||
       preview.items.some(
         (item, i) =>
           canonical(item.before) !== canonical(plan.items[i].before) ||
@@ -487,7 +500,7 @@ export async function runJPreview() {
     if (
       accounting.validate_only_call_count !== 1 ||
       checked.http_status !== 200 ||
-      checked.operation_count !== 3
+      checked.operation_count !== 2
     )
       fail("stage234_j_validation_not_proved");
     save(
@@ -511,6 +524,15 @@ export async function runJPreview() {
       key_id: key.id,
       key_expires_at: key.expiresAt,
       semantic_payload: J_TOOL,
+      existing_city: {
+        geo_target_id: "9235214",
+        resource_name:
+          "customers/8590146099/campaignCriteria/24324170853~9235214",
+        status: "ENABLED",
+        negative: false,
+        disposition: "already included; preserved without mutation",
+        original_city_add_live_acceptance: "NOT_REPLAYED; HISTORICAL_FIXTURE",
+      },
       geo_proof: geos,
       coordinate_source: "EXPLICIT_USER_TEST_INPUT_PARK_FIRST_PRESIDENT",
       exact_validate_only_payload: validation,
@@ -521,7 +543,7 @@ export async function runJPreview() {
       preview_expires_at: preview.expires_at,
       preview_items: preview.items,
       provider_validation: "passed",
-      operation_count: 3,
+      operation_count: 2,
       partial_failure: true,
       atomic: false,
       irreversible: false,
@@ -557,7 +579,7 @@ export async function runJPreview() {
     const blocked = {
       result: "BLOCKED",
       failure_stage: stage,
-      code: safeError(error),
+      code: safeJError(error),
       preview_id: preview?.preview_id ?? null,
       ...counts(),
       startup: startup?.() ?? null,
