@@ -711,6 +711,7 @@ export function prepareGeoJScenario(raw, expectedSource, now = Date.now()) {
           "district_candidates",
           "existing_criteria",
           "proximity",
+          "selected_city_id",
         ],
         [
           "fixture",
@@ -734,8 +735,17 @@ export function prepareGeoJScenario(raw, expectedSource, now = Date.now()) {
       );
     duplicate(cities, (x) => x.resourceName, "J.city_candidates");
     duplicate(districts, (x) => x.resourceName, "J.district_candidates");
+    // A provider-returned ID disambiguates names; never choose the first match.
+    // Default historical Astana preparation remains unchanged. Selection does
+    // not supply coordinates or bypass exact district-parent/fixture proofs.
+    if (r.selected_city_id !== undefined)
+      id(r.selected_city_id, "J.selected_city_id");
     const cityCandidates = cities.filter(
-      (x) => x.name === "Astana" && x.targetType === "City",
+      (x) =>
+        x.targetType === "City" &&
+        (r.selected_city_id !== undefined
+          ? x.id === r.selected_city_id
+          : x.name === "Astana"),
     );
     if (cityCandidates.length !== 1)
       fail("scenario_city_not_resolved", "J.city_candidates");
@@ -761,7 +771,7 @@ export function prepareGeoJScenario(raw, expectedSource, now = Date.now()) {
           blocker(
             "scenario_proximity_coordinates_required",
             "J.proximity",
-            "GeoTargetConstant не содержит координат центра. Нужны отдельные explicit TEST latitude/longitude; координаты Astana не угадываются.",
+            "GeoTargetConstant не содержит координат центра. Нужны отдельные explicit TEST latitude/longitude; координаты выбранного города не угадываются.",
           ),
         ],
         resolved_city_id: city.id,

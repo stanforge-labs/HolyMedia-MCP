@@ -1,0 +1,147 @@
+{
+  "result": "PARTIAL_LIVE_ACCEPTANCE_PREREQUISITES",
+  "test_customer_id": "8590146099",
+  "test_account": true,
+  "currency": "USD",
+  "conversion_customer": "customers/8590146099",
+  "api_source_head": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+  "harness_head_at_execution": "44100164884564423f061b4931288054492734fc",
+  "protected_vps_evidence": "/opt/holymedia-google-acceptance/state/stage234-i-remove-20261010T183900Z-irp3/prerequisite-discovery-after-i-20261010.json",
+  "evidence_sha256": "55956a42ae71b709801a3c4f564626790c8584001edda5eacda2840c48a0127f",
+  "G": {
+    "live": "BLOCKED",
+    "paused_automatic_search_campaign_count": 0,
+    "inventory_bound": 21,
+    "keyword_resource": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+    "raw_cpc_bid_micros": "ABSENT_IN_PROVIDER_JSON",
+    "effective_cpc_bid_micros": "100000",
+    "effective_cpc_bid_source": "AD_GROUP",
+    "keyword_status": "ENABLED",
+    "setup_proposal": "Six separately approved controlled operations: explicit keyword override, paused campaign MAXIMIZE_CLICKS setup, +10% CPC, G rollback, strategy rollback, inherited override rollback. Do not infer raw override from effective CPC or change a historical fixture without agreement."
+  },
+  "H": {
+    "nonshared_live_warning_validation": "PASS_PREVIOUS_NO_REPEAT",
+    "full_live_change_restore": "NOT_RUN",
+    "shared_impact": "MOCK_PASS_LIVE_BLOCKED",
+    "budgets": [
+      {
+        "id": "15934365976",
+        "campaign_id": "24324170853",
+        "amount_micros": "2000000",
+        "explicitly_shared": false,
+        "period": "DAILY",
+        "delivery_method": "STANDARD"
+      },
+      {
+        "id": "15932267169",
+        "campaign_id": "24339483523",
+        "amount_micros": "2000000",
+        "explicitly_shared": false,
+        "period": "DAILY",
+        "delivery_method": "STANDARD"
+      }
+    ],
+    "shared_budget_count": 0,
+    "budget_and_consumer_inventory_complete_within_101_bound": true,
+    "all_consumers_paused": true,
+    "setup_blocker": "No current stock typed shared-budget create/attach tool. Separate authorized TEST UI setup or reviewed controlled implementation required; no raw mutation."
+  },
+  "J": {
+    "live": "BLOCKED_RADIUS_INPUT_REQUIRED",
+    "astana_city_id": "1009806",
+    "astana_direct_district_count": 0,
+    "astana_city_parent_id": "9249890",
+    "astana_district_absence_globally_claimed": false,
+    "almaty_name_matches": ["9063099", "9235214"],
+    "explicit_proposed_city": {
+      "id": "9235214",
+      "canonical_name": "Almaty,Kazakhstan"
+    },
+    "explicit_proposed_exclusion": {
+      "id": "9196209",
+      "name": "Almaly District",
+      "parent_id": "9235214"
+    },
+    "direct_almaty_district_count": 6,
+    "direct_almaty_catalog_complete_within_101_bound": true,
+    "kz_district_sample_rows": 101,
+    "kz_district_inventory_complete": false,
+    "existing_owned_proximity_center_count": 0,
+    "radius_coordinates_invented": false,
+    "next_input": "Legitimate explicit TEST latitude, longitude, radius and unit; city/exclusion and center must be reviewed in the eventual single three-row preview."
+  },
+  "PMax": {
+    "live": "BLOCKED",
+    "owned_enabled_conversion_actions": 0,
+    "actual_image_assets": 0,
+    "text_assets_observed": 9,
+    "branding_verified": false,
+    "conversion_and_asset_inventory_complete_within_101_bound": true,
+    "required_inputs": [
+      "Legitimate same-account conversion action and goal eligibility",
+      "Authorized landscape and square PNG/JPEG plus square logo",
+      "Reviewed business name and brand guidelines",
+      "Separate manual approval for the exact atomic paused PMax plan"
+    ]
+  },
+  "Q_R_S": {
+    "native_client_live": "BLOCKED_PRIVATE_TRANSPORT_AND_CLIENTS_NOT_CONNECTED",
+    "stock_private_oauth_metadata": "HTTP200",
+    "stock_private_resource_metadata": "HTTP200",
+    "issuer": "http://localhost:4403",
+    "resource": "http://localhost:4403/mcp",
+    "pkce": "S256",
+    "approval_gateway_resource_metadata": "HTTP404",
+    "approval_gateway_is_native_mcp_endpoint": false,
+    "human_browser_consent": "PROVED_SEPARATELY_NOT_NATIVE_CLIENT_PASS",
+    "instructions": "docs/google-ads-private-client-next-actions-20261010.md"
+  },
+  "auth": {
+    "key_id": "2b21e15f-c015-450f-8d36-8b24ce1c6ef6",
+    "expires_at": "2026-10-11T16:23:20.552Z",
+    "scopes": ["adforge:mcp:read", "adforge:mcp:write"],
+    "resource_access_mode": "STATIC_ALLOWLIST",
+    "only_test_client": true,
+    "owner_workspace_valid": true,
+    "new_keys_created": 0,
+    "pending_unconsumed_previews": 0
+  },
+  "runtime": {
+    "ready_route": "/ready",
+    "independent_ready_checks": 3,
+    "http": 200,
+    "postgres": "ok",
+    "redis": "ok",
+    "authenticated_tools_list": "PASS",
+    "typed_tool_schemas_descriptions_annotations": "PASS_TARGETING_PREVIEW_COMMIT_JOURNAL",
+    "public_write": false,
+    "confirmed_write": false,
+    "preview_only": true,
+    "write_allowlist": ["8590146099"],
+    "diagnostic_corrections": [
+      "Use /ready, not nonexistent /health/ready",
+      "Stock dependency success is ok, not ready; ad hoc failed probes made zero provider calls"
+    ]
+  },
+  "counts_this_discovery": {
+    "read": 17,
+    "validate_only": 0,
+    "real_write": 0,
+    "oauth_refresh_separate": 0
+  },
+  "counts_this_whole_continuation": {
+    "read": 86,
+    "validate_only": 0,
+    "real_write": 1,
+    "oauth_refresh_separate": 0
+  },
+  "retained_stage234_counts": {
+    "read": 1057,
+    "validate_only": 10,
+    "real_write": 5
+  },
+  "counts_scope": "Stage234 retained ledger; historical Stage01 1794 READ / 27 validation / 17 writes excluded. Only current exact I REMOVE adds one write.",
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-10T19:05:10.923Z"
+}

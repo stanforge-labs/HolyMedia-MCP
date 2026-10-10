@@ -459,6 +459,96 @@ test("J produces city/exclusion/proximity typed rows with proven district parent
   assert.deepEqual(input, before);
   assert.equal(r.real_provider_writes, 0);
 });
+test("J explicit provider city ID disambiguates actual Almaty names without guessing coordinates", () => {
+  const input = jInput();
+  input.city_candidates = ["9063099", "9235214"].map((id) => ({
+    resourceName: `geoTargetConstants/${id}`,
+    id,
+    name: "Almaty",
+    canonicalName:
+      id === "9235214"
+        ? "Almaty,Kazakhstan"
+        : "Almaty,Almaty Region,Kazakhstan",
+    countryCode: "KZ",
+    targetType: "City",
+    status: "ENABLED",
+  }));
+  input.district_candidates = [
+    {
+      resourceName: "geoTargetConstants/9196209",
+      id: "9196209",
+      name: "Almaly District",
+      canonicalName: "Almaly District,Almaty,Kazakhstan",
+      countryCode: "KZ",
+      targetType: "District",
+      status: "ENABLED",
+      parentGeoTarget: "geoTargetConstants/9235214",
+    },
+  ];
+  input.selected_city_id = "9235214";
+  // Mock coordinates are deliberately not used to claim a real radius center.
+  delete input.proximity;
+  const before = structuredClone(input);
+  const result = prepareGeoJScenario(input, head, now);
+  assert.equal(result.result, "BLOCKED");
+  assert.equal(
+    result.blockers[0].code,
+    "scenario_proximity_coordinates_required",
+  );
+  assert.equal(result.resolved_city_id, "9235214");
+  assert.equal(result.resolved_district_count, 1);
+  assert.equal(result.preview_request, undefined);
+  assert.equal(result.real_provider_writes, 0);
+  assert.deepEqual(input, before);
+  input.selected_city_id = "9063099";
+  assert.equal(
+    prepareGeoJScenario(input, head, now).blockers[0].code,
+    "scenario_district_parent_unproven",
+  );
+});
+test("J explicit selection requires an actual unique City record, not name, number, unknown or foreign proof", () => {
+  for (const selected of [
+    "99999",
+    10001,
+    "Astana",
+    "geoTargetConstants/10001",
+  ]) {
+    const input = jInput();
+    input.selected_city_id = selected;
+    const result = prepareGeoJScenario(input, head, now);
+    assert.equal(result.result, "BLOCKED");
+    assert.equal(result.preview_request, undefined);
+  }
+  const input = jInput();
+  input.selected_city_id = "10001";
+  input.city_candidates[0].countryCode = "US";
+  assert.equal(
+    prepareGeoJScenario(input, head, now).blockers[0].code,
+    "scenario_geo_proof_invalid",
+  );
+});
+test("J explicit selection cannot weaken stale, duplicate, district ownership or proven coordinate guards", () => {
+  const input = jInput();
+  input.selected_city_id = "10001";
+  assert.equal(
+    prepareGeoJScenario(input, head, now).result,
+    "PREPARED_NOT_LIVE",
+  );
+  input.fixture.verified_at = new Date(now - 120001).toISOString();
+  assert.equal(prepareGeoJScenario(input, head, now).result, "BLOCKED");
+  input.fixture = proof();
+  input.city_candidates.push(structuredClone(input.city_candidates[0]));
+  assert.equal(
+    prepareGeoJScenario(input, head, now).blockers[0].code,
+    "scenario_duplicate_resource",
+  );
+  input.city_candidates.pop();
+  input.proximity.source = "INVENTED_CITY_CENTROID";
+  assert.equal(
+    prepareGeoJScenario(input, head, now).blockers[0].code,
+    "scenario_proximity_invalid",
+  );
+});
 const deviceCriteria = () =>
   ["MOBILE", "DESKTOP", "TABLET"].map((type, i) => ({
     resourceName: `${prefix}/campaignCriteria/${fixture.campaign}~${910 + i}`,
