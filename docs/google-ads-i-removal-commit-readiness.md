@@ -1,0 +1,11 @@
+# Exact approved I removal commit
+
+The removal continuation accepts only the encrypted preview record from a protected I removal parent. It does not create another preview or approve an operation. Approval ownership, scoped TEST key, owner membership, active session, human audit, precise TTL, unconsumed/unattempted record and immutable plan/check digests are checked twice, including immediately before the stock `commit_preview` call.
+
+The only mutation is the exact typed audience criterion REMOVE from the VERIFIED add origin in customer8590146099, campaign24324170853, group206587491811. Stock single-operation Stage3 semantics remain partial_failure=true; no status update, parent mode clear, keyword removal or caller payload changes are allowed. TEST hierarchy and all eleven fixture snapshots plus CPC are freshly read. Stale changes block before commit.
+
+`run-audience-remove-commit.py` uses a new disposable one-shot stock API container with the pinned source/image. The parent preview API/gateway, protected files and historical audit remain unchanged. A retained parent launch latch plus separate MCP/provider write claims prohibit retries, including after errors. All other writes and revalidation are blocked. Failed/ambiguous results require read-only reconciliation, never another commit.
+
+Reread requires the exact criterion REMOVED, the other inventories unchanged and explicit parent OBSERVATION preserved. Journal checks one attempted and one terminal-success operation event and a matching VERIFIED commit result. The removed criterion is not recreated. Its old identity is irrecoverable; human approval must acknowledge that. Exact recovery of the originally absent parent AUDIENCE restriction is not claimed.
+
+This document describes readiness, not live outcome. The separate live evidence must show the exact preview/commit/resource IDs, provider response/reread, journal, and accounting before I can be marked LIVE PASS.

@@ -92,9 +92,28 @@ export function assertCommitRuntime(env) {
   )
     fail("stage234_i_commit_runtime_invalid");
 }
-export function assertApprovedI(
+export function assertApprovedI(binding, expectedPreview, now = Date.now()) {
+  return assertApprovedStage3(
+    binding,
+    expectedPreview,
+    (plan) => {
+      assertPreparedI(plan, expectedTool);
+      if (
+        plan.operations.length !== 2 ||
+        plan.atomic !== true ||
+        plan.items.length !== 1
+      )
+        fail("stage234_i_commit_immutable_profile_invalid");
+    },
+    now,
+  );
+}
+// Shared identity/approval checks only; each closed harness profile MUST supply
+// its own exact plan validator. This is not a product/public tool surface.
+export function assertApprovedStage3(
   { context, stored, account, key, session, approval },
   expectedPreview,
+  validatePlan,
   now = Date.now(),
 ) {
   const active = (row) =>
@@ -178,13 +197,9 @@ export function assertApprovedI(
     canonical(stored.beforeState) !== canonical(stored.requestedState?.checks)
   )
     fail("stage234_i_commit_immutable_context_invalid");
-  assertPreparedI(stored.requestedState, expectedTool);
-  if (
-    stored.requestedState.operations.length !== 2 ||
-    stored.requestedState.atomic !== true ||
-    stored.requestedState.items.length !== 1
-  )
-    fail("stage234_i_commit_immutable_profile_invalid");
+  if (typeof validatePlan !== "function")
+    fail("stage234_i_commit_profile_missing");
+  validatePlan(stored.requestedState);
   return {
     preview_id: stored.id,
     snapshot_digest: stored.snapshotDigest,

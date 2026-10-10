@@ -97,7 +97,7 @@ export function assertRemovePlan(plan, origin) {
     op.before.type !== "USER_INTEREST" ||
     op.before.userInterest?.userInterestCategory !==
       origin.created_audience.audience_resource ||
-    op.before.negative === true
+    (op.before.negative !== undefined && op.before.negative !== false)
   )
     fail("stage234_i_remove_plan_invalid");
   return {
