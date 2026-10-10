@@ -43,14 +43,19 @@ export function assertRemovedAudience(before, after, result, removed, origin) {
         ops[0].actual.status !== "REMOVED"))
   )
     fail("stage234_i_remove_commit_result_invalid");
+  // Match the stock removal contract: a successfully acknowledged exact REMOVE
+  // can yield no rows (observed v24 USER_INTEREST behavior), or one REMOVED row.
+  // Never accept a failed/missing read, duplicates or a still-existing criterion.
   if (
-    removed?.length !== 1 ||
-    removed[0]?.adGroupCriterion?.resourceName !== resource ||
-    removed[0].adGroupCriterion.adGroup !== target.groupResource ||
-    removed[0].adGroupCriterion.status !== "REMOVED" ||
-    removed[0].adGroupCriterion.type !== "USER_INTEREST" ||
-    removed[0].adGroupCriterion.userInterest?.userInterestCategory !==
-      origin.created_audience.audience_resource
+    !Array.isArray(removed) ||
+    removed.length > 1 ||
+    (removed.length === 1 &&
+      (removed[0]?.adGroupCriterion?.resourceName !== resource ||
+        removed[0].adGroupCriterion.adGroup !== target.groupResource ||
+        removed[0].adGroupCriterion.status !== "REMOVED" ||
+        removed[0].adGroupCriterion.type !== "USER_INTEREST" ||
+        removed[0].adGroupCriterion.userInterest?.userInterestCategory !==
+          origin.created_audience.audience_resource))
   )
     fail("stage234_i_remove_provider_status_unverified");
   const original = before.groupAudiences.filter(
@@ -79,6 +84,9 @@ export function assertRemovedAudience(before, after, result, removed, origin) {
     criterion_id: origin.created_audience.criterion_id,
     resource_name: resource,
     status: "REMOVED",
+    provider_status_observation:
+      removed.length === 0 ? "EXACT_RESOURCE_NO_ROWS" : "REMOVED_ROW",
+    successful_exact_remove_and_neighbors_verified: true,
     residual_audience_mode: "OBSERVATION",
     original_absent_mode_restored: false,
   };

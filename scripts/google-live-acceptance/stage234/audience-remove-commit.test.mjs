@@ -335,7 +335,7 @@ test("provider removal proof requires REMOVED, preserves every neighbor and OBSE
     "REMOVED",
   );
   for (const edit of [
-    (f) => (f.removed = []),
+    (f) => (f.removed = undefined),
     (f) => (f.removed[0].adGroupCriterion.status = "ENABLED"),
     (f) =>
       (f.after.group[0].adGroup.targetingSetting.targetRestrictions[0].bidOnly = false),
@@ -348,6 +348,19 @@ test("provider removal proof requires REMOVED, preserves every neighbor and OBSE
       assertRemovedAudience(f.before, f.after, f.result, f.removed, f.origin),
     );
   }
+});
+test("v24 acknowledged I REMOVE with exact resource absence is verified, not recreated/retried", () => {
+  const f = poststate();
+  f.removed = [];
+  assert.equal(
+    assertRemovedAudience(f.before, f.after, f.result, f.removed, f.origin)
+      .provider_status_observation,
+    "EXACT_RESOURCE_NO_ROWS",
+  );
+  f.result.items[0].operations[0].success = false;
+  assert.throws(() =>
+    assertRemovedAudience(f.before, f.after, f.result, f.removed, f.origin),
+  );
 });
 test("remove audit separates attempted and terminal; actual null is valid removed post-state", () => {
   const f = poststate(),
