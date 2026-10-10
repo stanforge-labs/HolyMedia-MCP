@@ -9,6 +9,7 @@ import {
   keyRequest,
   validateKeyRequest,
   claimKeyCreate,
+  assertRenewalSource,
 } from "./key-guard.mjs";
 const env = {
   STAGE234_KEY_ISSUANCE_AUTHORIZED: "true",
@@ -80,6 +81,47 @@ test("one TEST static key 24h via exact stock admin route + human auth/CSRF", ()
         { env, authority },
       ),
     );
+});
+test("new explicit renewal binds one expired key without rounding or authority reuse", () => {
+  const id = "34cd413a-8aff-4677-9439-abf2a9fb473a";
+  const expiry = "2026-10-10T12:51:17.677Z";
+  const context = { key_id: id, expires_at: expiry };
+  const old = {
+    id,
+    expiresAt: new Date(expiry),
+    revokedAt: null,
+    serviceIdentity: { revokedAt: null },
+  };
+  const renewalEnv = { ...env, STAGE234_KEY_RENEW_EXPIRED_ID: id };
+  const now = Date.parse(expiry) + 1;
+  assert.doesNotThrow(() => assertRenewalSource(context, old, renewalEnv, now));
+  for (const patch of [
+    { id: "11111111-1111-4111-8111-111111111111" },
+    { expiresAt: new Date(now + 1) },
+    { expiresAt: new Date(Number.NaN) },
+    { revokedAt: new Date() },
+    { serviceIdentity: { revokedAt: new Date() } },
+  ])
+    assert.throws(() =>
+      assertRenewalSource(context, { ...old, ...patch }, renewalEnv, now),
+    );
+  assert.throws(() =>
+    assertRenewalSource(
+      { ...context, expires_at: "2026-10-10T12:51:17.676Z" },
+      old,
+      renewalEnv,
+      now,
+    ),
+  );
+  assert.throws(() =>
+    assertRenewalSource({ ...context, key_id: "wrong" }, old, renewalEnv, now),
+  );
+  const source = readFileSync(
+    new URL("./provision-key.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /assertRenewalSource\(context, old, process\.env\)/);
+  assert.match(source, /readAcceptanceContext/);
 });
 test("all provider/OAuth/prod/approval/commit and flags bypass denied", () => {
   for (const u of [

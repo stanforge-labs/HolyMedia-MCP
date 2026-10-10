@@ -11,6 +11,18 @@ runner=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 
 class KeySupervisorTests(unittest.TestCase):
+    def test_renewal_explicit_context_and_independent_durable_authority(self):
+        old='34cd413a-8aff-4677-9439-abf2a9fb473a'
+        name='stage234-scoped-context-20261009T125500Z.json'
+        authority=runner.renewal_authority(old,name)
+        self.assertEqual(authority.name,'stage234-key-renewal-'+old)
+        self.assertNotEqual(authority,runner.renewal_authority(None,None))
+        for ident,ctx in [(None,name),(old,None),('../escape',name),(old,'fixture-context.json')]:
+            with self.assertRaisesRegex(RuntimeError,'renewal_pair'):runner.renewal_authority(ident,ctx)
+        args=runner.command('ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:'+'b'*64,'a'*40,Path('/safe/harness'),Path('/safe/stage234-key-20261010T120000Z'),authority,old)
+        self.assertIn('STAGE234_KEY_RENEW_EXPIRED_ID='+old,args)
+        self.assertIn('hm-stage234-key-20261010T120000Z',args)
+
     def test_command_is_disposable_off_no_ports_and_only_minimum_mounts(self):
         args=runner.command('ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:'+'b'*64,'a'*40,Path('/safe/harness'),Path('/safe/stage234-key-20261009T120000Z'),Path('/safe/authority'))
         text=' '.join(args)

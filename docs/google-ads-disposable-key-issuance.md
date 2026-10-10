@@ -31,3 +31,14 @@ Tests: `node --test scripts/google-live-acceptance/stage234/*.test.mjs` and
 `python -m unittest discover -s scripts/google-live-acceptance/stage234 -p 'test_*.py'`.
 The stock AES-GCM helper test uses synthetic credentials only. Live issuance and
 live Google validation are recorded separately from these tests.
+
+# Explicit renewal after expiry
+
+A new human authorization is required; an old issuance claim is never removed or reused.
+`run-key.py --authorize-once-test-key --renew-expired-test-key-id <expired UUID> --context-basename <protected scoped-context basename>`
+binds the exact expired key and encrypted context. A separate durable authority directory,
+keyed by that predecessor UUID, permits one stock admin POST only; new run IDs do not reset it.
+The old key, preview, audit and encrypted context remain unchanged. Scopes, owner/workspace,
+STATIC_ALLOWLIST and TEST Client8590146099 remain exact. New keys expire after24hours and
+are sealed immediately into the existing disposable credential vault. No Google calls,
+confirmation, mutation, direct DB insert or automatic second key is permitted.

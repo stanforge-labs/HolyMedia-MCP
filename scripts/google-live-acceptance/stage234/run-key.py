@@ -12,32 +12,47 @@ spec=importlib.util.spec_from_file_location('key_preview_supervisor',Path(__file
 base=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(base)
 
-def command(image,head,directory,state,authority):
-    args=['docker','run','--rm','--init','--name','hm-stage234-key-once-20261009','--network',base.NETWORK,'--label','com.docker.compose.project='+base.PROJECT,'--memory','768m','--cpus','1','--env-file',str(state/'runtime.env'),'-v',str(directory)+':/stage234:ro','-v',str(state)+':/key-state','-v',str(authority)+':/key-authority','--entrypoint','node']
+def renewal_authority(expired_key_id, context_basename):
+    if expired_key_id is None:
+        base.require(context_basename is None,'stage234_key_renewal_pair_required')
+        return base.ROOT/'state/stage234-key-authority-20261009'
+    base.require(re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',expired_key_id or '') is not None
+        and re.fullmatch(r'stage234-scoped-context-[0-9]{8}T[0-9]{6}Z\.json',context_basename or '') is not None,'stage234_key_renewal_pair_required')
+    return base.ROOT/'state'/('stage234-key-renewal-'+expired_key_id)
+
+def command(image,head,directory,state,authority,expired_key_id=None):
+    args=['docker','run','--rm','--init','--name','hm-'+state.name,'--network',base.NETWORK,'--label','com.docker.compose.project='+base.PROJECT,'--memory','768m','--cpus','1','--env-file',str(state/'runtime.env'),'-v',str(directory)+':/stage234:ro','-v',str(state)+':/key-state','-v',str(authority)+':/key-authority','--entrypoint','node']
     values={'STAGE234_KEY_ISSUANCE_AUTHORIZED':'true','STAGE234_KEY_RUN_DIR':'/key-state','STAGE234_KEY_AUTHORITY_DIR':'/key-authority','STAGE234_KEY_NAME':'HM_TEST_STAGE234_'+state.name.split('stage234-key-')[1], 'STAGE234_GUARD_PRELOAD':'0','STAGE234_KEY_GUARD_PRELOAD':'0','STAGE234_SOURCE_HEAD':head,'PROVIDER_GOOGLE_ADS_WRITE_ENABLED':'false','PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED':'false','PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED':'false','PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED':'false','V2_PREVIEW_ONLY':'true','V2_CONFIRMED_WRITE_ENABLED':'false','PUBLIC_MCP_WRITE_SCOPE_ENABLED':'false','PUBLIC_MCP_CONTROLLED_WRITE_ENABLED':'false','HOLYMEDIA_PUBLIC_BASE_URL':'http://localhost:4402','CORS_ORIGINS':'http://localhost:4402','COOKIE_DOMAIN':'','API_PORT':'4000','LOG_LEVEL':'error','NODE_OPTIONS':'--max-old-space-size=192'}
+    if expired_key_id is not None:values['STAGE234_KEY_RENEW_EXPIRED_ID']=expired_key_id
     for k,v in values.items():args+=['-e',k+'='+v]
     return args+[image,'/stage234/provision-key.mjs']
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--head',required=True);parser.add_argument('--image',required=True);parser.add_argument('--utc-id',required=True);parser.add_argument('--authorize-once-test-key',action='store_true');parser.add_argument('--check-only',action='store_true')
+    parser.add_argument('--renew-expired-test-key-id');parser.add_argument('--context-basename')
     opts=parser.parse_args()
     base.require(opts.authorize_once_test_key,'stage234_key_explicit_authorization_required')
     base.validate_options(opts.head,opts.image,opts.utc_id+'-key')
     base.require(re.fullmatch(r'[0-9]{8}T[0-9]{6}Z',opts.utc_id) is not None,'stage234_key_run_id_invalid')
     base.require(os.geteuid()==0,'stage234_key_vps_sudo_required')
     before=base.production_state();env_hash=base.inspect_ready(opts.head,opts.image)
-    authority=base.ROOT/'state/stage234-key-authority-20261009'
+    authority=renewal_authority(opts.renew_expired_test_key_id,opts.context_basename)
     base.require(not authority.exists() or (not authority.is_symlink() and authority.is_dir() and not (authority/'issued-once.claim').exists()),'stage234_key_already_attempted_no_second_key')
+    source=base.ROOT/'state/fixture-context.json'
+    if opts.renew_expired_test_key_id is not None:
+        source=base.context_source(opts.context_basename);base.permissions(source)
+        envelope=json.loads(source.read_text())
+        base.require(envelope.get('purpose')=='STAGE234_ACCEPTANCE_CONTEXT' and envelope.get('public',{}).get('key_id')==opts.renew_expired_test_key_id and 'service_token' not in envelope,'stage234_key_renewal_source_mismatch')
     if opts.check_only:
         print(json.dumps({'result':'KEY_RUNTIME_CHECK_ONLY_PASS','provider_reads':0,'validate_only':0,'real_writes':0}));return
     if not authority.exists():authority.mkdir(mode=0o700);os.chown(authority,1000,1000)
     state=base.ROOT/'state'/('stage234-key-'+opts.utc_id);state.mkdir(mode=0o700);os.chown(state,1000,1000)
-    for name,data in [('fixture-context.json',(base.ROOT/'state/fixture-context.json').read_bytes()),('runtime.env',''.join(k+'='+v+'\n' for k,v in base.docker_env_values((base.ROOT/'acceptance.env').read_text()).items()).encode())]:
+    for name,data in [('fixture-context.json',source.read_bytes()),('runtime.env',''.join(k+'='+v+'\n' for k,v in base.docker_env_values((base.ROOT/'acceptance.env').read_text()).items()).encode())]:
         fd=os.open(state/name,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         with os.fdopen(fd,'wb') as f:f.write(data)
         os.chown(state/name,1000,1000)
-    output=subprocess.run(command(opts.image,opts.head,Path(__file__).resolve().parent,state,authority),capture_output=True,text=True,timeout=150)
+    output=subprocess.run(command(opts.image,opts.head,Path(__file__).resolve().parent,state,authority,opts.renew_expired_test_key_id),capture_output=True,text=True,timeout=150)
     base.require(base.production_state()==before,'stage234_key_production_state_changed_stop')
     base.require(hashlib.sha256((base.ROOT/'acceptance.env').read_bytes()).hexdigest()==env_hash,'stage234_key_original_env_changed')
     lines=[s for s in output.stdout.splitlines() if s.startswith('{')]

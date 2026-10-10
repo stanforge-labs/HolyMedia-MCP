@@ -1,17 +1,26 @@
 // Authorized once; all creation is through stock admin API. DB is READ-only here.
-import { lstatSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { URL } from "node:url";
 import process from "node:process";
-import { installKeyGuard, keyRequest, fail } from "./key-guard.mjs";
+import {
+  installKeyGuard,
+  keyRequest,
+  fail,
+  assertRenewalSource,
+} from "./key-guard.mjs";
 import { canonical } from "./live-guard.mjs";
-import { sealAcceptanceContext } from "./context-vault.mjs";
+import {
+  sealAcceptanceContext,
+  readAcceptanceContext,
+} from "./context-vault.mjs";
 const { console, AbortSignal, setTimeout } = globalThis;
 const fetch = (...args) => globalThis.fetch(...args);
 let db,
+  closeDatabase,
   server,
   stage = "protected_preflight",
   createdId = null;
@@ -33,12 +42,15 @@ try {
     st = lstatSync(oldContextFile);
   if (!st.isFile() || st.isSymbolicLink() || st.mode & 0o077)
     fail("stage234_key_old_context_not_protected");
-  const context = JSON.parse(readFileSync(oldContextFile, "utf8"));
   createRequire("/workspace/apps/api/package.json")("reflect-metadata");
+  const context = await readAcceptanceContext(oldContextFile, {
+    allowLegacyExpired: true,
+  });
   const { loadConfig } =
     await import("/workspace/packages/config/dist/index.js");
-  const { createDatabase } =
-    await import("/workspace/packages/database/dist/index.js");
+  const database = await import("/workspace/packages/database/dist/index.js");
+  const { createDatabase } = database;
+  closeDatabase = database.closeDatabase;
   const { CredentialVaultService } =
     await import("/workspace/apps/api/dist/providers/credential-vault.service.js");
   const config = loadConfig(),
@@ -54,6 +66,7 @@ try {
     where: { tokenDigest: digest(context.service_token ?? "") },
     include: { serviceIdentity: { include: { createdBy: true } } },
   });
+  assertRenewalSource(context, old, process.env);
   const baseline = await db.client.mcpPreview.findUnique({
       where: { id: context.preview?.preview_id },
       include: { account: true },
@@ -286,6 +299,7 @@ try {
     fail("stage234_key_historical_identity_or_evidence_changed");
   const evidence = {
     result: "CREATED",
+    renewed_expired_key_id: process.env.STAGE234_KEY_RENEW_EXPIRED_ID ?? null,
     key_id: record.id,
     fingerprint: record.tokenDigest,
     expires_at: record.expiresAt.toISOString(),
@@ -329,5 +343,5 @@ try {
   process.exitCode = 1;
 } finally {
   server?.kill("SIGTERM");
-  if (db) await db.client.$disconnect();
+  if (db) await closeDatabase(db);
 }

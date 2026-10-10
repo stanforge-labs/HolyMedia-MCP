@@ -4,10 +4,29 @@ import { join } from "node:path";
 import { URL } from "node:url";
 import process from "node:process";
 import { canonical } from "./live-guard.mjs";
+import { timestampMillis } from "./timestamp.mjs";
 const { Headers } = globalThis;
 export const fail = (code) => {
   throw new Error(code);
 };
+export function assertRenewalSource(context, old, env, now = Date.now()) {
+  const id = env.STAGE234_KEY_RENEW_EXPIRED_ID;
+  if (id === undefined) return;
+  const expiry = timestampMillis(old?.expiresAt);
+  if (
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
+      id,
+    ) ||
+    old?.id !== id ||
+    context?.key_id !== id ||
+    !Number.isFinite(expiry) ||
+    expiry > now ||
+    expiry !== timestampMillis(context?.expires_at) ||
+    old.revokedAt ||
+    old.serviceIdentity?.revokedAt
+  )
+    fail("stage234_key_renewal_source_mismatch");
+}
 export function assertKeyRuntime(env) {
   const expected = {
     STAGE234_KEY_ISSUANCE_AUTHORIZED: "true",
