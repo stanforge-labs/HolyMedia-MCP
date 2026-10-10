@@ -4,6 +4,12 @@ import unittest
 spec=importlib.util.spec_from_file_location('remove',Path(__file__).with_name('run-audience-remove.py'))
 remove=importlib.util.module_from_spec(spec);spec.loader.exec_module(remove)
 class RemovalStartupTests(unittest.TestCase):
+    def test_expired_immutable_unattempted_owned_preview_only_can_be_superseded(self):
+        row={'id':'preview','customer':'8590146099','same_workspace':True,'expired':True,'consumed':False,'attempted':False,'cancelled':False,'status':'PREVIEWED','snapshot_digest':'hash','immutable':True}
+        self.assertTrue(remove.expired_preview_renewal_allowed(row,'preview','hash'))
+        self.assertTrue(remove.expired_preview_renewal_allowed({**row,'status':'CONFIRMED'},'preview','hash'))
+        for edit in [{'id':'other'},{'customer':'4378327049'},{'same_workspace':False},{'expired':False},{'consumed':True},{'attempted':True},{'cancelled':True},{'status':'VERIFIED'},{'snapshot_digest':'other'},{'immutable':False}]:
+            self.assertFalse(remove.expired_preview_renewal_allowed({**row,**edit},'preview','hash'))
     def test_only_no_preview_no_validation_no_write_startup_failure_is_recoverable(self):
         blocked={'failure_stage':'stock_api_ready','real_provider_write_call_count':0,'validate_only_call_count':0}
         self.assertTrue(remove.startup_recovery_allowed(blocked,['blocked-evidence.json','calls.jsonl']))
