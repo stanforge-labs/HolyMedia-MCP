@@ -324,3 +324,98 @@ test("J reread verifies both actual new IDs and exact geo/proximity, rejects par
     assert.throws(() => assertCreatedJ(...a));
   }
 });
+test("J campaign journal uses exact stock empty adGroupId, not null; both ordered successes and immutable scope required", async () => {
+  const f = await fixture(),
+    result = {
+      commit_id: "hmc_" + "a".repeat(43),
+      items: [0, 1].map((i) => ({
+        operations: [
+          {
+            resource_name: "mock-resource-" + i,
+            actual: { status: "ENABLED" },
+          },
+        ],
+      })),
+    };
+  const original = {
+      snapshotDigest: digest(f.plan),
+      requestedState: f.plan,
+      beforeState: f.plan.checks,
+    },
+    stored = {
+      ...original,
+      id,
+      workspaceId: "workspace",
+      consumedAt: new Date(now).toISOString(),
+      commitStatus: "VERIFIED",
+    };
+  const events = [];
+  for (let i = 0; i < 2; i++)
+    for (const phase of ["attempted", "success"])
+      events.push({
+        eventType: "mcp_google_stage1_operation",
+        success: true,
+        targetId: id,
+        workspaceId: "workspace",
+        createdAt: new Date(
+          now + (phase === "attempted" ? 0 : 1),
+        ).toISOString(),
+        metadata: {
+          commitId: result.commit_id,
+          previewId: id,
+          accountId: target.customer,
+          provider: "GOOGLE_ADS",
+          campaignId: target.campaign,
+          adGroupId: "",
+          operation: "targeting",
+          googleErrorCode: null,
+          providerOperation: i,
+          result: phase,
+          objectId:
+            phase === "success"
+              ? result.items[i].operations[0].resource_name
+              : null,
+          before: "null",
+          after: canonical(f.plan.operations[i].expected),
+          actual:
+            phase === "success"
+              ? canonical(result.items[i].operations[0].actual)
+              : null,
+        },
+      });
+  events.push({
+    eventType: "mcp_google_commit_result",
+    success: true,
+    targetId: id,
+    workspaceId: "workspace",
+    createdAt: new Date(now + 2).toISOString(),
+    metadata: {
+      commitId: result.commit_id,
+      previewId: id,
+      accountId: target.customer,
+      provider: "GOOGLE_ADS",
+      result: "VERIFIED",
+      operation: "GOOGLE_STAGE3_TARGETING",
+    },
+  });
+  assert.equal(
+    assertJJournal({ stored, original, result, events })
+      .terminal_success_operations,
+    2,
+  );
+  for (const change of [
+    (x) => (x[0].metadata.adGroupId = null),
+    (x) => (x[0].metadata.adGroupId = target.group),
+    (x) => (x[0].metadata.campaignId = "other"),
+    (x) => (x[1].metadata.objectId = "other"),
+    (x) => (x[1].metadata.actual = "{}"),
+    (x) => x.splice(0, 1),
+    (x) => (x[4].metadata.result = "UNVERIFIED"),
+  ]) {
+    const x = structuredClone(events);
+    change(x);
+    assert.throws(() =>
+      assertJJournal({ stored, original, result, events: x }),
+    );
+  }
+});

@@ -146,7 +146,7 @@ export function assertJJournal({ stored, original, result, events }) {
       [a[0], f[0]].some(
         (e) =>
           e.metadata.campaignId !== target.campaign ||
-          (e.metadata.adGroupId ?? null) !== null ||
+          e.metadata.adGroupId !== "" ||
           e.metadata.operation !== "targeting" ||
           e.metadata.googleErrorCode !== null,
       ) ||

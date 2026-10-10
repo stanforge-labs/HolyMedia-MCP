@@ -161,6 +161,8 @@ export function assertPreparedJ(plan) {
       canonical(op.fields) !== canonical(fields[i]) ||
       canonical(op.expected) !== canonical(fields[i]) ||
       canonical(plan.items[i].provider_operations) !== canonical([i]) ||
+      plan.items[i].campaign_id !== target.campaign ||
+      plan.items[i].ad_group_id !== "" ||
       plan.items[i].before !== null
     )
       fail("stage234_j_exact_operation_invalid");
