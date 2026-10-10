@@ -12,6 +12,7 @@ const fetch = (...args) => globalThis.fetch(...args);
 import { queries, sanitized, safeError } from "./live-guard.mjs";
 import { waitLocalReady } from "./wait-local-ready.mjs";
 import { startupDiagnostics } from "./startup-diagnostics.mjs";
+import { assertIJournal } from "./audience-journal.mjs";
 import {
   target,
   canonical,
@@ -515,30 +516,12 @@ export async function runICommit() {
       },
       orderBy: { createdAt: "asc" },
     });
-    if (
-      !committed?.consumedAt ||
-      committed.commitStatus !== "VERIFIED" ||
-      committed.snapshotDigest !== bound.stored.snapshotDigest ||
-      canonical(committed.requestedState) !==
-        canonical(bound.stored.requestedState) ||
-      !events.some(
-        (e) =>
-          e.eventType === "mcp_google_commit_result" &&
-          e.success === true &&
-          e.metadata?.commitId === result.commit_id,
-      ) ||
-      !events.some(
-        (e) =>
-          e.eventType === "mcp_google_stage1_operation" && e.success === true,
-      ) ||
-      events.filter(
-        (e) =>
-          e.eventType === "mcp_google_stage1_operation" &&
-          e.success === true &&
-          e.metadata?.accountId === target.customer,
-      ).length !== 2
-    )
-      fail("stage234_commit_journal_missing_or_immutable_changed");
+    report.journal = assertIJournal({
+      stored: committed,
+      original: bound.stored,
+      result,
+      events,
+    });
     report.provider_state_before = before;
     report.provider_state_after_commit = after;
     report.audit = events.map((e) => ({
