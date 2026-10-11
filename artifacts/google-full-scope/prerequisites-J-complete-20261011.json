@@ -1,0 +1,150 @@
+{
+  "result": "Fresh TEST prerequisites after J restored VERIFIED",
+  "test_customer_id": "8590146099",
+  "key": {
+    "id": "2b21e15f-c015-450f-8d36-8b24ce1c6ef6",
+    "expires_at": "2026-10-11T16:23:20.552Z",
+    "scopes": [
+      "adforge:mcp:read",
+      "adforge:mcp:write"
+    ],
+    "account_access": "STATIC_ALLOWLIST"
+  },
+  "rows": {
+    "customer": [
+      {
+        "customer": {
+          "resourceName": "customers/8590146099",
+          "id": "8590146099",
+          "currencyCode": "USD",
+          "timeZone": "Asia/Almaty",
+          "testAccount": true
+        }
+      }
+    ],
+    "hierarchy": [
+      {
+        "customerClient": {
+          "resourceName": "customers/4378327049/customerClients/8590146099",
+          "level": "1",
+          "testAccount": true,
+          "id": "8590146099"
+        }
+      }
+    ],
+    "auto": [],
+    "keyword": [
+      {
+        "adGroupCriterion": {
+          "resourceName": "customers/8590146099/adGroupCriteria/206587491811~11743561",
+          "effectiveCpcBidSource": "AD_GROUP",
+          "effectiveCpcBidMicros": "100000"
+        }
+      }
+    ],
+    "budgets": [
+      {
+        "campaignBudget": {
+          "resourceName": "customers/8590146099/campaignBudgets/15932267169",
+          "name": "HM_MCP_STAGE0_T_20261008T121731Z",
+          "amountMicros": "2000000",
+          "explicitlyShared": false
+        }
+      },
+      {
+        "campaignBudget": {
+          "resourceName": "customers/8590146099/campaignBudgets/15934365976",
+          "name": "HM_MCP_WRITE_ACCEPTANCE_20261007T134837Z",
+          "amountMicros": "2000000",
+          "explicitlyShared": false
+        }
+      }
+    ],
+    "consumers": [
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24324170853",
+          "status": "PAUSED",
+          "id": "24324170853",
+          "campaignBudget": "customers/8590146099/campaignBudgets/15934365976"
+        }
+      },
+      {
+        "campaign": {
+          "resourceName": "customers/8590146099/campaigns/24339483523",
+          "status": "PAUSED",
+          "id": "24339483523",
+          "campaignBudget": "customers/8590146099/campaignBudgets/15932267169"
+        }
+      }
+    ],
+    "audience": [],
+    "conversions": [],
+    "assets": [
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428412289294",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428412289297",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428412289300",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428412289303",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428412289306",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428791309301",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428791309304",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428791309307",
+          "type": "TEXT"
+        }
+      },
+      {
+        "asset": {
+          "resourceName": "customers/8590146099/assets/428791309310",
+          "type": "TEXT"
+        }
+      }
+    ],
+    "pmax": [],
+    "attachments": []
+  },
+  "failures": {},
+  "provider_read_call_count": 11,
+  "validate_only_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "oauth_refresh_call_count": 0,
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-11T08:49:51.587Z"
+}

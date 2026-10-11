@@ -2313,6 +2313,12 @@ export async function buildClonePlan(
   const devices = criteria.filter(
     (c) => c.type === "DEVICE" || Object.keys(row(c.device)).length > 0,
   );
+  const criterionModifiers: {
+    source: string;
+    kind: "location" | "adSchedule";
+    selector: JsonRow;
+    value: number;
+  }[] = [];
   for (const c of criteria) {
     owned(c.resourceName, "campaignCriteria");
     if (
@@ -2325,11 +2331,54 @@ export async function buildClonePlan(
         "Source campaign criterion parent/status не подтверждён.",
       );
     if (c.type === "DEVICE") continue;
-    if (!neutralModifier(c.bidModifier))
-      error(
-        "google_clone_unsupported_components",
-        "Source criterion bid modifier не neutral: typed clone не переносит custom geo/schedule adjustments молча.",
-      );
+    if (!neutralModifier(c.bidModifier)) {
+      const modifier = c.bidModifier,
+        location = c.type === "LOCATION" && row(c.location).geoTargetConstant,
+        adSchedule = c.type === "AD_SCHEDULE" && c.adSchedule;
+      if (
+        typeof modifier !== "number" ||
+        !Number.isFinite(modifier) ||
+        modifier < 0.1 ||
+        modifier > 10 ||
+        campaign.biddingStrategyType !== "MANUAL_CPC" ||
+        (c.negative !== false && c.negative !== undefined) ||
+        (!location && !adSchedule) ||
+        Object.keys(c).filter((key) =>
+          [
+            "location",
+            "adSchedule",
+            "proximity",
+            "language",
+            "keyword",
+            "device",
+          ].includes(key),
+        ).length !== 1
+      )
+        error(
+          "google_clone_unsupported_components",
+          "Clone custom modifier поддерживает только positive LOCATION/AD_SCHEDULE, MANUAL_CPC и finite диапазон 0.1–10; другие semantics не нормализуются.",
+        );
+      if (location && raw.new_locations)
+        error(
+          "google_clone_geo_override_requires_modifier",
+          "new_locations не определяет перенос source geo bid modifier; требуется отдельное typed сопоставление, modifier не опускается.",
+        );
+      const s = row(c.adSchedule);
+      criterionModifiers.push({
+        source: String(c.resourceName),
+        kind: location ? "location" : "adSchedule",
+        selector: location
+          ? { geoTargetConstant: location }
+          : {
+              dayOfWeek: s.dayOfWeek,
+              startHour: s.startHour ?? 0,
+              startMinute: s.startMinute ?? "ZERO",
+              endHour: s.endHour ?? 0,
+              endMinute: s.endMinute ?? "ZERO",
+            },
+        value: modifier as number,
+      });
+    }
     if (row(c.location).geoTargetConstant) {
       const resource = String(row(c.location).geoTargetConstant);
       if (!/^geoTargetConstants\/[0-9]{1,20}$/.test(resource))
@@ -2830,6 +2879,54 @@ export async function buildClonePlan(
       "Clone builder не вернул единственную новую PAUSED campaign выбранного account.",
     );
   const targetResource = targetCampaign!.resource_name!;
+  const mappedModifiers = new Set<number>();
+  for (const modifier of criterionModifiers) {
+    const matches = plan.operations
+      .map((op, i) => ({ op, i }))
+      .filter(
+        ({ op }) =>
+          op.kind === "campaignCriterion" &&
+          op.method === "create" &&
+          op.fields.campaign === targetResource &&
+          (op.fields.negative === undefined || op.fields.negative === false) &&
+          canonical(row(op.fields[modifier.kind])) ===
+            canonical(modifier.selector),
+      );
+    if (matches.length !== 1 || mappedModifiers.has(matches[0]!.i))
+      error(
+        "google_clone_target_invalid",
+        "Source modifier должен соответствовать ровно одному новому owned criterion; missing/duplicate mapping запрещён.",
+      );
+    const { op, i } = matches[0]!;
+    mappedModifiers.add(i);
+    op.fields = { ...op.fields, negative: false, bidModifier: modifier.value };
+    op.expected = {
+      ...op.expected,
+      negative: false,
+      bidModifier: modifier.value,
+    };
+    const items = plan.items.filter((item) =>
+      item.provider_operations.includes(i),
+    );
+    if (items.length !== 1)
+      error(
+        "google_clone_target_invalid",
+        "Modifier preview row не связан однозначно с criterion operation.",
+      );
+    items[0]!.after = op.expected;
+    items[0]!.warnings.push(
+      "Source MANUAL_CPC geo/schedule bid modifier перенесён точно; immutable snapshot и provider reread обязательны, source campaign не меняется.",
+    );
+  }
+  plan.summary.clone_criterion_bid_modifiers = criterionModifiers.map(
+    (modifier, index) => ({
+      source_resource: modifier.source,
+      criterion_type: modifier.kind === "location" ? "LOCATION" : "AD_SCHEDULE",
+      bid_modifier: modifier.value,
+      target_operation: [...mappedModifiers][index],
+      readonly_source: true,
+    }),
+  );
   // The normal builder may share fields/expected by reference. Clone inheritance
   // has distinct omitted request leaves vs semantic-empty provider expectations.
   targetCampaign!.fields = { ...targetCampaign!.fields };

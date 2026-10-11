@@ -492,9 +492,12 @@ Supported profile: Search MANUAL_CPC/MAXIMIZE_CONVERSIONS, standard groups, keyw
 RSA с одним URL, known geo/language/schedule, campaign/group negatives, sitelinks/callouts/snippets,
 existing image/logo links, owned CALL/BUSINESS_NAME reuse, positive proximity, same-account
 shared negative-list associations, compatible full-category goals/tracking. Все target delivery entities PAUSED.
+Positive MANUAL_CPC campaign LOCATION/AD_SCHEDULE modifiers 0.1–10 сохраняются точно
+из provider source в payload/preview/expectations; никакого generic raw modifier input.
 Source snapshots входят в stale protection. Past dates могут потребовать explicit new_dates.
 Unsupported source parts fail the **whole clone preview**, не silently omitted:
-audience/device criteria, negative proximity or ambiguous radius relocation, non-keyword/non-RSA groups/ads,
+audience/custom device criteria, ad-group modifiers, automated-strategy modifiers,
+ambiguous new geo mapping of nonneutral location modifiers, negative proximity or ambiguous radius relocation, non-keyword/non-RSA groups/ads,
 multi-final-URL overrides, custom/cross-account goals, unknown asset details,
 unsupported networks/bidding/geo modes. Поэтому clone статус **PARTIAL support**, не full Google clone.
 

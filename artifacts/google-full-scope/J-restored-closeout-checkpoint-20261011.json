@@ -1,0 +1,93 @@
+{
+  "result": "J restored VERIFIED; remaining required PPC gates PARTIAL",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "baseline_head": "fa3812acd26bd8d374615a6bd1d336a13a48403e",
+  "parent_checkpoint": "artifacts/google-full-scope/J-restore-renewal-checkpoint-20261011.json",
+  "running_source": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+  "running_image": "sha256:2d7cd20cb25c268f74abd16f324d7b92ce5d804989a8de9b3fa062a0ca138d35",
+  "J": {
+    "result": "LIVE PASS",
+    "preview_id": "a059f115-771d-416f-8565-c06a1d8538aa",
+    "commit_id": "hmc_AvZZRKcF9xbqnGB9IsX1zeiOdxHuvs1_PTdbVkc8nWA",
+    "evidence": "artifacts/google-full-scope/J-restored-live-20261011.json",
+    "sha256": "9f2ec36026a4ae3775e7f7ac900853f5964bae027209fb30657958c2943ff412",
+    "full_original_snapshot_restored": true,
+    "journal": "VERIFIED"
+  },
+  "live_matrix": {
+    "Stage01": "historical LIVE PASS; not replayed",
+    "I": "historical LIVE PASS; removed criterion absent",
+    "K": "PASS previous",
+    "L": "LIVE PASS previous; PAUSED residual RSA",
+    "N": "LIVE PASS previous; 0.10 USD restored",
+    "J": "LIVE PASS",
+    "G": "BLOCKED real automatic Search setup prerequisite",
+    "H": "nonshared warning/validation PASS; shared impact MOCK"
+  },
+  "fixture": {
+    "campaigns": "PAUSED",
+    "groups": "PAUSED",
+    "rsa": "PAUSED",
+    "original_keywords": "20 ENABLED",
+    "phrase11479221": "PAUSED",
+    "group_cpc_micros": "100000",
+    "Almaty9235214": "unchanged INCLUDED",
+    "J_test_criteria": "REMOVED",
+    "I51668099935": "absent",
+    "shared_set12261567996_attachments": 0,
+    "observation_mode_residual": "retained, disclosed from prior approved I acceptance"
+  },
+  "provider_calls_this_turn": {
+    "read": 54,
+    "validate_only": 0,
+    "real_write": 1,
+    "semantic_write_operations": 2,
+    "oauth_refresh": 0
+  },
+  "stage234_retained_ledger": {
+    "read": 1448,
+    "validate_only": 13,
+    "real_write": 7,
+    "historical_stage01_separate": true
+  },
+  "current_test_key": {
+    "id": "2b21e15f-c015-450f-8d36-8b24ce1c6ef6",
+    "expires_at": "2026-10-11T16:23:20.552Z",
+    "scopes": ["adforge:mcp:read", "adforge:mcp:write"],
+    "account_access": "STATIC_ALLOWLIST 8590146099 only",
+    "created_this_turn": false
+  },
+  "pending_approval": null,
+  "next_manual_actions": [
+    "Choose/authorize isolated G fixture setup; stock preview/validate_only then separate human approval, no existing historical strategy change",
+    "Authorize private TEST native ingress or OpenAI tunnel/workspace association for Q/R; select Gemini CLI or Cursor",
+    "Provide genuine PMax media/business identity and authorize usable TEST conversion prerequisite setup"
+  ],
+  "missing_H_setup": "Typed shared budget create/consumer assignment prerequisite not yet supported; targeted implementation or separately approved TEST UI setup",
+  "restore_supervisor": "run-geo-restore-commit.py",
+  "restore_run_id": "20261011T082900Z-jrestore2",
+  "old_preview_not_reused": true,
+  "new_key_not_created": true,
+  "raw_mutations": 0,
+  "automatic_retries": 0,
+  "report": "docs/acceptance/google-ads-final-ppc-review-20261011.md",
+  "requirements": "artifacts/google-full-scope/PPC-closeout-review-20261011.json",
+  "quality": {
+    "local_tests_pass": 1669,
+    "local_integration_skipped": 26,
+    "python_pass": 60,
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma": "PASS",
+    "standard_secret_scan": "PASS before final evidence; rerun required",
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "linux_ci": "Pending new pushed HEAD; previous fa3812a CI PASS 1681 zero skipped"
+  },
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-11T08:52:24.240Z"
+}

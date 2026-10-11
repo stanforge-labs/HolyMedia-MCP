@@ -46,8 +46,20 @@ limits, not claims that Google API lacks those capabilities.
 The exact three provider-managed neutral Search devices are now supported through
 an explicit source proof and mandatory full target reread, with zero device
 mutations; see [default-device boundary](google-ads-clone-default-devices.md).
-Custom campaign/device/geo/schedule or ad-group adjustments are not silently
-normalized away.
+Positive campaign LOCATION/AD_SCHEDULE bid modifiers are now preserved for
+MANUAL_CPC: finite provider-derived values 0.1–10, exact source-to-target selector
+mapping and PAUSED campaign. The values are in create payloads, preview AFTER,
+immutable snapshots and exact provider expectations. Source resources stay inert.
+Custom device/ad-group adjustments and automated-strategy modifiers remain
+explicit local profile gaps, not silently normalized away. Geo replacement with
+a nonneutral source location modifier is rejected: no implicit modifier mapping
+to a different location is invented.
+
+The v24 [CampaignCriterion contract](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign_criterion.proto)
+defines the modifier range and criterion oneof;
+[Google's bid-modifier guide](https://developers.google.com/google-ads/api/docs/campaigns/bidding/manage-bid-modifiers)
+confirms LOCATION/AD_SCHEDULE use CampaignCriterion, not CampaignBidModifier.
+This addition is unit/mock coverage, not a new live clone PASS or deployment.
 
 Tracking fields are selected/frozen and included in the immutable target plan,
 human preview and exact reread expectations. Group/keyword/ad overrides stay on
@@ -112,6 +124,11 @@ Inheritance regressions cover raw absent/empty suffix, frozen customer settings,
 template-only campaign overrides, unchanged standard brief defaults, missing or
 foreign independent proof and genuinely wrong/null provider post-state.
 These are code/mock evidence, not new LIVE acceptance.
+Modifier regressions cover both bounds, invalid/NaN/string/null values, nonmanual
+strategies, exclusions/oneof confusion, geo replacement ambiguity, missing/duplicate
+target mapping, changed source as a stale dependency, preview fields and wrong or
+missing actual modifiers failing provider verification. No global verifier
+normalization or arbitrary public bid-modifier input was added.
 No real Google READ, validate-only or mutation was performed for this package.
 
 API v24 references: [CampaignSharedSet proto](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign_shared_set.proto),

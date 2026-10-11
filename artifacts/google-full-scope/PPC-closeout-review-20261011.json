@@ -1,0 +1,468 @@
+{
+  "result": "Original PPC PARTIAL; J LIVE PASS; supported clone profile expanded in mock only",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "baseline_head": "fa3812acd26bd8d374615a6bd1d336a13a48403e",
+  "implementation_revision": "Containing Git commit; separate CI evidence pins the final pushed HEAD",
+  "original_basis": "artifacts/google-full-scope/requirements-matrix-20261009.json",
+  "prior_review": "artifacts/google-full-scope/PPC-requirements-review-renewal-20261011.json",
+  "original_docx_reread_this_turn": false,
+  "original_audit_preserved": true,
+  "requirements": [
+    {
+      "id": "shared-flow",
+      "stage": "SHARED",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "ownership-flags",
+      "stage": "SHARED",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "batch-errors",
+      "stage": "SHARED",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "audit-rollback",
+      "stage": "SHARED",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "money",
+      "stage": "SHARED",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "all-paused",
+      "stage": "SHARED",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "client-schemas",
+      "stage": "CLIENT",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "native-write-oauth",
+      "stage": "CLIENT",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "rest-openapi",
+      "stage": "CLIENT",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "cross-client-QRS",
+      "stage": "CLIENT",
+      "classification": "REQUIREDGAP",
+      "current_status": "Native Q/R clients and private TEST transport not connected; browser consent proven, native client S pending"
+    },
+    {
+      "id": "s0-budget-search",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s0-geo-language",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s0-schedule",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s0-goals",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s0-groups-keywords",
+      "stage": "0",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "s0-rsa-assets",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s0-tracking-atomic",
+      "stage": "0",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "s0-clone-profile",
+      "stage": "0",
+      "classification": "REQUIREDGAP",
+      "current_status": "PARTIAL: MANUAL_CPC campaign geo/schedule modifiers now preserved and regression-tested; audience/custom-device/group and other unsupported source profiles remain explicit local gaps; new clone LIVE pending"
+    },
+    {
+      "id": "s0-checklist-activation",
+      "stage": "0",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate"
+    },
+    {
+      "id": "s1-keyword-lifecycle",
+      "stage": "1",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s1-negatives-lists-terms",
+      "stage": "1",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s2-foundation",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s2-strategies",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s2-portfolios",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s2-device-modifiers",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s2-geo-schedule-modifiers",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s2-filtered-bulk",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s3-audiences-modes",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s3-custom-contextual",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s3-demographics",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s3-geo",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "J city/exclusion/proximity LIVE PASS including restoration; remaining targeting combinations retain mock/profile limitations"
+    },
+    {
+      "id": "s3-language-schedule-device",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-rsa",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-assets",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-tracking",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-read-link-utm-audit",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-campaign-groups",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-pmax-required",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance"
+    },
+    {
+      "id": "s4-pmax-new-creation",
+      "stage": "4",
+      "classification": "OPTIONALbeyondoriginal",
+      "current_status": "OPTIONAL / later authorized extension; not inferred mandatory original scope"
+    },
+    {
+      "id": "acceptance-A",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-B",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-C",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-D",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-E",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-F",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-M",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-O",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-P",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-G",
+      "stage": "ACCEPTANCE",
+      "classification": "REQUIREDGAP",
+      "current_status": "BLOCKED prerequisites: no owned paused automatic Search campaign; original raw keyword CPC absent. Isolated approved TEST fixture proposed, not created"
+    },
+    {
+      "id": "acceptance-H",
+      "stage": "ACCEPTANCE",
+      "classification": "REQUIREDGAP",
+      "current_status": "Nonshared +60% warning/provider validation PASS; shared impact MOCK only. No real shared budget consumers in fresh discovery"
+    },
+    {
+      "id": "acceptance-I",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-J",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS: Google ADD2 and approved RESTORE2 verified; original provider snapshot restored"
+    },
+    {
+      "id": "acceptance-K",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-L",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-N",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-T",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-U",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-V",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "acceptance-W",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed"
+    },
+    {
+      "id": "operational-readiness",
+      "stage": "OPERATIONS",
+      "classification": "REQUIREDGAP",
+      "current_status": "Release NOT READY: required LIVE/client/scope gates remain; no production merge/deploy"
+    },
+    {
+      "id": "immutable-match-api",
+      "stage": "API_BOUNDARY",
+      "classification": "UNSUPPORTEDbyAPI",
+      "current_status": "UNSUPPORTED BY API as documented in baseline; supported replacement flow separate"
+    },
+    {
+      "id": "optional-expansions",
+      "stage": "OPTIONAL",
+      "classification": "OPTIONALbeyondoriginal",
+      "current_status": "OPTIONAL / later authorized extension; not inferred mandatory original scope"
+    }
+  ],
+  "J": {
+    "result": "LIVE PASS",
+    "preview_id": "a059f115-771d-416f-8565-c06a1d8538aa",
+    "commit_id": "hmc_AvZZRKcF9xbqnGB9IsX1zeiOdxHuvs1_PTdbVkc8nWA",
+    "evidence": "artifacts/google-full-scope/J-restored-live-20261011.json",
+    "sha256": "9f2ec36026a4ae3775e7f7ac900853f5964bae027209fb30657958c2943ff412",
+    "full_original_snapshot_restored": true,
+    "journal": "VERIFIED"
+  },
+  "fresh_prerequisites": {
+    "evidence": "artifacts/google-full-scope/prerequisites-J-complete-20261011.json",
+    "sha256": "52edc8b226578fdc5b09ec38e03b5111388ab71b5e81b58b2831eedce36fa79f",
+    "timestamp": "2026-10-11T08:49:51.587Z",
+    "auto_search_campaigns": 0,
+    "shared_budgets": 0,
+    "enabled_conversion_actions": 0,
+    "image_assets": 0,
+    "text_assets": 9,
+    "pmax_campaigns": 0,
+    "probe_exit_code": 1,
+    "probe_cleanup_error": "closeDatabase invoked without db after complete reads and evidence save; no provider retry"
+  },
+  "clone": {
+    "profile_added": "Source-owned positive campaign LOCATION/AD_SCHEDULE modifiers 0.1..10 for MANUAL_CPC",
+    "added_regression_cases": 14,
+    "targeted_tests_pass": 222,
+    "live_status": "NOT RUN",
+    "unsupported_not_silently_dropped": true,
+    "account_stale_atomic_paused_contract_unchanged": true
+  },
+  "quality": {
+    "local_tests_pass": 1669,
+    "local_integration_skipped": 26,
+    "python_pass": 60,
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma": "PASS",
+    "standard_secret_scan": "PASS before final evidence; rerun required",
+    "critical": 0,
+    "high": 0,
+    "moderate": 6,
+    "linux_ci": "Pending new pushed HEAD; previous fa3812a CI PASS 1681 zero skipped"
+  },
+  "provider_calls_this_turn": {
+    "read": 54,
+    "validate_only": 0,
+    "real_write": 1,
+    "semantic_write_operations": 2,
+    "oauth_refresh": 0
+  },
+  "stage234_retained_ledger": {
+    "read": 1448,
+    "validate_only": 13,
+    "real_write": 7,
+    "historical_stage01_separate": true
+  },
+  "fixture": {
+    "campaigns": "PAUSED",
+    "groups": "PAUSED",
+    "rsa": "PAUSED",
+    "original_keywords": "20 ENABLED",
+    "phrase11479221": "PAUSED",
+    "group_cpc_micros": "100000",
+    "Almaty9235214": "unchanged INCLUDED",
+    "J_test_criteria": "REMOVED",
+    "I51668099935": "absent",
+    "shared_set12261567996_attachments": 0,
+    "observation_mode_residual": "retained, disclosed from prior approved I acceptance"
+  },
+  "current_test_key": {
+    "id": "2b21e15f-c015-450f-8d36-8b24ce1c6ef6",
+    "expires_at": "2026-10-11T16:23:20.552Z",
+    "scopes": ["adforge:mcp:read", "adforge:mcp:write"],
+    "account_access": "STATIC_ALLOWLIST 8590146099 only",
+    "created_this_turn": false
+  },
+  "setups_and_onboarding": "docs/acceptance/google-ads-final-ppc-review-20261011.md",
+  "production_changed": false,
+  "main_changed": false,
+  "historical_evidence_preserved": true,
+  "no_original_tz_complete_claim": true,
+  "timestamp": "2026-10-11T08:52:24.240Z"
+}

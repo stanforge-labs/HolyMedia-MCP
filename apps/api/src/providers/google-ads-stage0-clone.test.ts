@@ -410,6 +410,170 @@ function mockCreated(plan: Stage0Plan) {
     );
   return { results, actual, read };
 }
+describe("Provider-derived clone campaign geo/schedule modifiers: mock only", () => {
+  const addSchedule = (f: ReturnType<typeof fixture>, value = 0.7) => {
+    const source = {
+      resourceName: `${prefix}/campaignCriteria/1~7`,
+      campaign: f.campaign.resourceName,
+      type: "AD_SCHEDULE",
+      status: "ENABLED",
+      negative: false,
+      bidModifier: value,
+      adSchedule: {
+        dayOfWeek: "MONDAY",
+        startHour: 9,
+        startMinute: "ZERO",
+        endHour: 18,
+        endMinute: "FIFTEEN",
+      },
+    };
+    f.criteria.push(source);
+    return source;
+  };
+  it("keeps exact MANUAL_CPC geo/schedule create fields, explicit preview and full provider expectations; source inert", async () => {
+    const f = fixture();
+    f.criteria[0]!.bidModifier = 1.2;
+    addSchedule(f);
+    const before = canonical(f.criteria),
+      plan = await f.clone();
+    const modifiers = plan.operations.filter(
+      (o) => o.fields.bidModifier !== undefined,
+    );
+    expect(modifiers).toHaveLength(2);
+    expect(modifiers.map((o) => o.fields.bidModifier)).toEqual([1.2, 0.7]);
+    expect(
+      modifiers.every(
+        (o) =>
+          o.kind === "campaignCriterion" &&
+          o.method === "create" &&
+          o.fields.campaign ===
+            plan.operations.find((x) => x.kind === "campaign")!.resource_name,
+      ),
+    ).toBe(true);
+    for (const op of modifiers) {
+      expect(op.expected.bidModifier).toBe(op.fields.bidModifier);
+      const item = plan.items.find((i) =>
+        i.provider_operations.includes(plan.operations.indexOf(op)),
+      )!;
+      expect(item.after).toEqual(op.expected);
+      expect(item.warnings.some((w) => w.includes("modifier"))).toBe(true);
+    }
+    const payload = stage0ProviderOperations(plan);
+    expect(
+      payload.filter(
+        (o) =>
+          row(row(o.campaignCriterionOperation).create).bidModifier !==
+          undefined,
+      ),
+    ).toHaveLength(2);
+    expect(plan.summary.clone_criterion_bid_modifiers).toHaveLength(2);
+    expect(canonical(f.criteria)).toBe(before);
+    const made = mockCreated(plan);
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("VERIFIED");
+    const actual = [...made.actual.values()].find(
+      (r) => row(r.campaignCriterion).bidModifier === 1.2,
+    )!;
+    row(actual.campaignCriterion).bidModifier = 1.3;
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("UNVERIFIED");
+    row(actual.campaignCriterion).bidModifier = 1.2;
+    delete row(actual.campaignCriterion).bidModifier;
+    expect(
+      (await verifyStage0Mutation(plan, made.results, made.read)).status,
+    ).toBe("UNVERIFIED");
+  });
+  it.each([0.1, 10])(
+    "accepts exact documented modifier boundary %s, not percentage rounding",
+    async (value) => {
+      const f = fixture();
+      f.criteria[0]!.bidModifier = value;
+      expect(
+        (await f.clone()).operations.find((o) => o.fields.location)?.fields
+          .bidModifier,
+      ).toBe(value);
+    },
+  );
+  it.each([0, 0.099, 10.01, NaN, Infinity, null, "1.2", false])(
+    "invalid source modifier %s fails before target build",
+    async (value) => {
+      const f = fixture();
+      f.criteria[0]!.bidModifier = value;
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_unsupported_components",
+      });
+      expect(f.build).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects automated strategy, negative/type-confused source and geo override instead of silently normalizing modifiers", async () => {
+    for (const change of [
+      (f: ReturnType<typeof fixture>) =>
+        (f.campaign.biddingStrategyType = "MAXIMIZE_CONVERSIONS"),
+      (f: ReturnType<typeof fixture>) => (f.criteria[0]!.negative = true),
+      (f: ReturnType<typeof fixture>) => (f.criteria[0]!.type = "LANGUAGE"),
+      (f: ReturnType<typeof fixture>) =>
+        (f.criteria[0]!.proximity = { radius: 2 }),
+    ]) {
+      const f = fixture();
+      f.criteria[0]!.bidModifier = 1.2;
+      change(f);
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_unsupported_components",
+      });
+      expect(f.build).not.toHaveBeenCalled();
+    }
+    const f = fixture();
+    f.criteria[0]!.bidModifier = 1.2;
+    await expect(
+      f.clone({ new_locations: [{ name: "Астана" }] }),
+    ).rejects.toMatchObject({
+      writeCode: "google_clone_geo_override_requires_modifier",
+    });
+    expect(f.build).not.toHaveBeenCalled();
+  });
+  it("source modifier changes are frozen stale dependencies, no reread or provider error bypass", async () => {
+    const f = fixture();
+    f.criteria[0]!.bidModifier = 1.2;
+    const plan = await f.clone();
+    expect(canonical(await rereadStage0Checks(plan, f.read))).toBe(
+      canonical(plan.checks),
+    );
+    f.criteria[0]!.bidModifier = 1.3;
+    expect(canonical(await rereadStage0Checks(plan, f.read))).not.toBe(
+      canonical(plan.checks),
+    );
+  });
+  it("duplicate source-to-target modifier binding or missing target operation fails closed", async () => {
+    const f = fixture();
+    f.criteria[0]!.bidModifier = 1.2;
+    f.build.mockImplementationOnce(async (brief) => {
+      const p = await buildStage0Plan(account, brief, f.read, async () => [
+        f.geo,
+      ]);
+      p.operations = p.operations.filter((o) => !o.fields.location);
+      return p;
+    });
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode: "google_clone_target_invalid",
+    });
+    const d = fixture();
+    d.criteria[0]!.bidModifier = 1.2;
+    d.build.mockImplementationOnce(async (brief) => {
+      const p = await buildStage0Plan(account, brief, d.read, async () => [
+        d.geo,
+      ]);
+      p.operations.push(
+        structuredClone(p.operations.find((o) => o.fields.location)!),
+      );
+      return p;
+    });
+    await expect(d.clone()).rejects.toMatchObject({
+      writeCode: "google_clone_target_invalid",
+    });
+  });
+});
 describe("Bounded Search clone P104–106: atomic reusable references, mock only", () => {
   it("proximity, call/business and shared negatives reuse the genuine Stage0 PAUSED builder", async () => {
     const f = fixture();
@@ -1360,12 +1524,8 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
       (await verifyStage0Mutation(p, created.results, readFailure)).status,
     ).toBe("UNVERIFIED");
   });
-  it("non-neutral source geo and any ad-group bid modifiers are not silently dropped", async () => {
+  it("ad-group bid modifiers remain explicit unsupported profile, never silently dropped", async () => {
     const f = fixture();
-    f.criteria[0]!.bidModifier = 1.2;
-    await expect(f.clone()).rejects.toMatchObject({
-      writeCode: "google_clone_unsupported_components",
-    });
     f.criteria[0]!.bidModifier = 1;
     const customRead = async (q: string) =>
       q.includes("FROM ad_group_bid_modifier")
