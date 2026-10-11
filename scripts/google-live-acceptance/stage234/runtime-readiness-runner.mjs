@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { readAcceptanceContext } from "./context-vault.mjs";
-import { readinessOnlyFetch } from "./runtime-readiness-guard.mjs";
+import {
+  readinessOnlyFetch,
+  assertReadinessKey,
+} from "./runtime-readiness-guard.mjs";
 import { waitLocalReady } from "./wait-local-ready.mjs";
 import { canonical, digest } from "./live-guard.mjs";
 const { AbortSignal, console } = globalThis;
@@ -54,7 +57,7 @@ try {
   });
   if (
     !key ||
-    key.id !== "34cd413a-8aff-4677-9439-abf2a9fb473a" ||
+    key.id !== context.key_id ||
     key.revokedAt ||
     key.expiresAt <= new Date() ||
     key.serviceIdentity.revokedAt ||
@@ -77,6 +80,8 @@ try {
     !account.connection.credential
   )
     fail("stage234_readiness_account_invalid");
+  // Protected vault/DB binding, not a permanently pinned expired key ID.
+  assertReadinessKey(context, key, account);
   report.key = {
     id: key.id,
     expires_at: key.expiresAt,
