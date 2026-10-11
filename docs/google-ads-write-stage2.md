@@ -1,6 +1,6 @@
 # Google Ads Stage 2 foundation
 
-Base: Stage 0+1 integration `221371fd2c488a128c44c9f37b9de7195748a3c7`, verified Ubuntu CI run 37837941865. Branch: `codex/google-ads-write-stage2-foundation`. This implementation is mock-tested, NOT live accepted; no Stage 2 provider calls or writes have been authorized or made.
+Historical foundation base: Stage 0+1 integration `221371fd2c488a128c44c9f37b9de7195748a3c7`, verified Ubuntu CI run 37837941865. Original branch: `codex/google-ads-write-stage2-foundation`. Current acceptance is tracked separately: N bid change and approved rollback are historical LIVE PASS; H nonshared warning/validation PASS, shared impact LIVE pending; G automatic-bidding context LIVE pending. This document does not promote the entire Stage 2 profile to LIVE PASS.
 
 ## Implemented package A
 
@@ -53,7 +53,19 @@ Ad-group device modifiers resolve absent, inherited CAMPAIGN and explicit AD_GRO
 
 All extensions retain the existing controlled-write architecture, gates OFF by default, <=500 provider operations, ownership checks, stale checks, immutable payload, per-row HOLYMEDIA errors, approval and provider reread. Stage 0 stays atomic with partial_failure=false; independent Stage 1/2 operations use partial_failure=true.
 
-No Stage 2 live acceptance is claimed. The original Stage 2 required Search profile is mock-tested; non-Search, manager-owned cross-account portfolios, hotel modifiers and unlisted audience types remain outside the supported profile. Creation rollback does not silently delete a portfolio or local device override. See the advanced document for exact compatibility, regression evidence and remaining limitations.
+The original Stage 2 required Search profile is mock-tested; N has separate historical live change/rollback evidence, not complete strategy/modifier acceptance. Non-Search, manager-owned cross-account portfolios, hotel modifiers and unlisted audience types remain outside the supported profile. Creation rollback does not silently delete a portfolio or local device override. See the advanced document for exact compatibility, regression evidence and remaining limitations.
+
+## TEST shared-budget setup (2026-10-11)
+
+Private `google_ads_shared_budget_setup_preview` now supports a closed TEST-only profile: `create_and_attach` creates one genuine DAILY shared budget and assigns exactly two existing PAUSED BASE Search MANUAL_CPC campaigns; `assign` restores one or two campaign budget references. Production, auto/portfolio/experiment consumers, unknown ownership, mismatched currency, duplicate IDs, unsupported budgets and unbounded consumer inventory reject before mutation.
+
+This setup graph is atomic (`partial_failure=false`), unlike independent bid/budget rows. Creation uses one negative temporary budget ID and two exact `campaign_budget` leaf masks. All consumers and source budgets are provider-derived and frozen. Status, networks, strategy, tracking and geo settings stay unchanged. Full selected reread and stock journal verification are required, not HTTP success alone.
+
+Creation has no automatic inverse that deletes a budget. Recovery is a NEW `assign` preview with the original budget IDs and its own manual approval; the detached shared budget remains a disclosed TEST residual. Existing-budget assignment has a typed inverse. If Google changes old budget eligibility unexpectedly, verification stops dependent writes and recovery requires fresh read-only proof, not retry or a raw cleanup.
+
+The new setup is unit/mock-tested, NOT LIVE. Both serving TEST account proof and the ordinary principal/allowlist/Stage 2/stale/browser approval gates remain required; default flags and Public MCP stay OFF. H can pass shared-impact preview acceptance only after reread proves two genuine consumers and +60% preview shows both. No extra budget commit is needed solely to test a warning.
+
+[Google shared-budget semantics](https://developers.google.com/google-ads/api/docs/campaigns/budgets/share-budgets) and the [v24 CampaignBudget fields](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/resources/campaign_budget.proto) are the provider contract; this TEST setup is not a generic production shared-budget migration tool.
 
 ## API v24 references
 

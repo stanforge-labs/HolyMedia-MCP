@@ -7,6 +7,7 @@ import {
 export const GOOGLE_STAGE2_ADVANCED_TOOLS = [
   "google_ads_strategy_modifier_preview",
   "google_ads_bulk_bid_budget_preview",
+  "google_ads_shared_budget_setup_preview",
 ];
 const id = { type: "string", pattern: "^[0-9]{1,20}$" };
 const decimal = {
@@ -141,6 +142,94 @@ export function stage2AdvancedToolSchema(
   name: string,
 ): Record<string, unknown> | undefined {
   if (!GOOGLE_STAGE2_ADVANCED_TOOLS.includes(name)) return undefined;
+  if (name === "google_ads_shared_budget_setup_preview") {
+    const base = {
+      provider: { const: "GOOGLE_ADS" },
+      account_id: { type: "string", pattern: "^[0-9]{10}$" },
+    };
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["provider", "account_id", "operation"],
+      properties: {
+        ...base,
+        operation: { enum: ["create_and_attach", "assign"] },
+        name: {
+          type: "string",
+          pattern: "^HM_MCP_ACCEPTANCE_SHARED_[A-Za-z0-9_-]{1,210}$",
+        },
+        daily_budget: money,
+        campaign_ids: {
+          type: "array",
+          minItems: 2,
+          maxItems: 2,
+          uniqueItems: true,
+          items: id,
+        },
+        assignments: {
+          type: "array",
+          minItems: 1,
+          maxItems: 2,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["campaign_id", "budget_id"],
+            properties: { campaign_id: id, budget_id: id },
+          },
+        },
+      },
+      oneOf: [
+        {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "provider",
+            "account_id",
+            "operation",
+            "name",
+            "daily_budget",
+            "campaign_ids",
+          ],
+          properties: {
+            ...base,
+            operation: { const: "create_and_attach" },
+            name: {
+              type: "string",
+              pattern: "^HM_MCP_ACCEPTANCE_SHARED_[A-Za-z0-9_-]{1,210}$",
+            },
+            daily_budget: money,
+            campaign_ids: {
+              type: "array",
+              minItems: 2,
+              maxItems: 2,
+              uniqueItems: true,
+              items: id,
+            },
+          },
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["provider", "account_id", "operation", "assignments"],
+          properties: {
+            ...base,
+            operation: { const: "assign" },
+            assignments: {
+              type: "array",
+              minItems: 1,
+              maxItems: 2,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["campaign_id", "budget_id"],
+                properties: { campaign_id: id, budget_id: id },
+              },
+            },
+          },
+        },
+      ],
+    };
+  }
   const properties: Record<string, unknown> = {
     provider: { const: "GOOGLE_ADS" },
     account_id: { type: "string", pattern: "^[0-9]{10}$" },
@@ -220,18 +309,29 @@ export function stage2AdvancedToolIntent(
 ) {
   if (!GOOGLE_STAGE2_ADVANCED_TOOLS.includes(name)) return null;
   const allowed =
-    name === "google_ads_strategy_modifier_preview"
-      ? ["provider", "account_id", "items"]
-      : [
-          "provider",
-          "account_id",
-          "field",
-          "campaign_ids",
-          "date_range",
-          "filters",
-          "change",
-          "max_items",
-        ];
+    name === "google_ads_shared_budget_setup_preview"
+      ? args.operation === "create_and_attach"
+        ? [
+            "provider",
+            "account_id",
+            "operation",
+            "name",
+            "daily_budget",
+            "campaign_ids",
+          ]
+        : ["provider", "account_id", "operation", "assignments"]
+      : name === "google_ads_strategy_modifier_preview"
+        ? ["provider", "account_id", "items"]
+        : [
+            "provider",
+            "account_id",
+            "field",
+            "campaign_ids",
+            "date_range",
+            "filters",
+            "change",
+            "max_items",
+          ];
   extClosed(args, allowed, allowed);
   if (
     args.provider !== "GOOGLE_ADS" ||
@@ -249,9 +349,11 @@ export function stage2AdvancedToolIntent(
   );
   return parseStage2AdvancedIntent({
     action:
-      name === "google_ads_strategy_modifier_preview"
-        ? "stage2_advanced"
-        : "stage2_bulk",
+      name === "google_ads_shared_budget_setup_preview"
+        ? "stage2_shared_budget"
+        : name === "google_ads_strategy_modifier_preview"
+          ? "stage2_advanced"
+          : "stage2_bulk",
     ...input,
   });
 }

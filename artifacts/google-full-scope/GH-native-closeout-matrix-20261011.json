@@ -1,0 +1,571 @@
+{
+  "result": "PARTIAL — not ORIGINAL PPC TZ COMPLETE",
+  "timestamp": "2026-10-11 17:44:15 UTC",
+  "branch": "codex/google-ads-write-full-scope-final",
+  "baseline_head": "8909c769824cd21d46fc9e0026eaa3277e19eea6",
+  "prior_matrix": "artifacts/google-full-scope/PPC-closeout-review-20261011.json",
+  "original_source": "artifacts/google-full-scope/original-tz-source-20261009.json",
+  "original_docx_reread_this_cycle": false,
+  "requirements": [
+    {
+      "id": "shared-flow",
+      "stage": "SHARED",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "ownership-flags",
+      "stage": "SHARED",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "batch-errors",
+      "stage": "SHARED",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "audit-rollback",
+      "stage": "SHARED",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "money",
+      "stage": "SHARED",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "all-paused",
+      "stage": "SHARED",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "client-schemas",
+      "stage": "CLIENT",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "native-write-oauth",
+      "stage": "CLIENT",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "rest-openapi",
+      "stage": "CLIENT",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "cross-client-QRS",
+      "stage": "CLIENT",
+      "classification": "REQUIREDGAP",
+      "current_status": "Native Q/R clients and private TEST transport not connected; browser consent proven, native client S pending",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-budget-search",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-geo-language",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-schedule",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-goals",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-groups-keywords",
+      "stage": "0",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-rsa-assets",
+      "stage": "0",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-tracking-atomic",
+      "stage": "0",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-clone-profile",
+      "stage": "0",
+      "classification": "REQUIREDGAP",
+      "current_status": "PARTIAL: supported tracking, default devices, geo/schedule modifiers and proved OBSERVATION mode settings preserved. Audience/custom-device/group/complex source profiles explicitly reject; expanded clone LIVE pending.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s0-checklist-activation",
+      "stage": "0",
+      "classification": "DONE+TESTED",
+      "current_status": "DONE + TESTED; profile-specific live coverage separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s1-keyword-lifecycle",
+      "stage": "1",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s1-negatives-lists-terms",
+      "stage": "1",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s2-foundation",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "Supported profile MOCK PASS; N explicit CPC change and rollback historical LIVE PASS; G/H shared-impact pending.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s2-strategies",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s2-portfolios",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s2-device-modifiers",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s2-geo-schedule-modifiers",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s2-filtered-bulk",
+      "stage": "2",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s3-audiences-modes",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "Supported profile MOCK PASS; I OBSERVATION add/remove historical LIVE PASS. Remaining combinations not promoted to LIVE.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s3-custom-contextual",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s3-demographics",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s3-geo",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "J city/exclusion/proximity LIVE PASS including restoration; remaining targeting combinations retain mock/profile limitations",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s3-language-schedule-device",
+      "stage": "3",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-rsa",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "Supported profile MOCK PASS; K rejection and L PAUSED creation historical LIVE PASS. Other edits/removal profiles LIVE pending.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-assets",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-tracking",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-read-link-utm-audit",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-campaign-groups",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "DONE + LIVE PENDING; no promotion of subset acceptance",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-pmax-required",
+      "stage": "4",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "Required existing PMax editing supported MOCK profile; fresh bounded inventory has no proved goal/eligible image/logo or PMax object. LIVE BLOCKED genuine prerequisites.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "s4-pmax-new-creation",
+      "stage": "4",
+      "classification": "OPTIONALbeyondoriginal",
+      "current_status": "OPTIONAL / later authorized extension; not inferred mandatory original scope",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "acceptance-A",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-B",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-C",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-D",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-E",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-F",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-M",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-O",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-P",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-G",
+      "stage": "ACCEPTANCE",
+      "classification": "REQUIREDGAP",
+      "current_status": "BLOCKED fixture: fresh TEST auto Search candidate count zero within observed inventory. Closed seven-create PAUSED proposal/raw CPC checks MOCK PASS; supervised live runner and separate create/strategy approvals required.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "acceptance-H",
+      "stage": "ACCEPTANCE",
+      "classification": "REQUIREDGAP",
+      "current_status": "Nonshared warning/validation historical PASS. TEST-only shared setup and reference restoration stock MOCK PASS; genuine two-consumer shared impact LIVE pending. No new shared objects created.",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "acceptance-I",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-J",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS: Google ADD2 and approved RESTORE2 verified; original provider snapshot restored",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-K",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-L",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-N",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+LIVEPENDING",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-T",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-U",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-V",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "acceptance-W",
+      "stage": "ACCEPTANCE",
+      "classification": "DONE+TESTED",
+      "current_status": "LIVE PASS previous; not replayed",
+      "live_status": "HISTORICAL LIVE PASS"
+    },
+    {
+      "id": "operational-readiness",
+      "stage": "OPERATIONS",
+      "classification": "REQUIREDGAP",
+      "current_status": "Release NOT READY: required LIVE/client/scope gates remain; no production merge/deploy",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "immutable-match-api",
+      "stage": "API_BOUNDARY",
+      "classification": "UNSUPPORTEDbyAPI",
+      "current_status": "UNSUPPORTED BY API as documented in baseline; supported replacement flow separate",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    },
+    {
+      "id": "optional-expansions",
+      "stage": "OPTIONAL",
+      "classification": "OPTIONALbeyondoriginal",
+      "current_status": "OPTIONAL / later authorized extension; not inferred mandatory original scope",
+      "live_status": "PROFILE COVERAGE / LIVE PENDING"
+    }
+  ],
+  "engineering_delta": {
+    "shared_budget_setup": "DONE + MOCK PASS; stock approval/immutable/stale/audit and explicit reference restoration, production TEST-proof rejection",
+    "g_isolated_setup": "Closed seven-operation PAUSED graph, explicit 0.10 USD CPC, automatic-context and warning tests; LIVE runner adaptation pending",
+    "clone_observation": "Provider-derived mode preservation with narrow source-proof comparison, malformed/TARGETING profiles reject",
+    "pmax_tool_metadata": "Corrected stale description to match bounded implemented creation/media profile; no extra capability claimed"
+  },
+  "auth": {
+    "result": "CREATED",
+    "renewed_expired_key_id": "2b21e15f-c015-450f-8d36-8b24ce1c6ef6",
+    "key_id": "d800a22e-64a1-4cd2-94bb-cfc85008f4fc",
+    "fingerprint": "f018aa7d103fd22abf3df3c45a044571792e6da324cc81fd07dcfc4847ac0010",
+    "expires_at": "2026-10-12T17:47:51.051Z",
+    "scopes": ["adforge:mcp:read", "adforge:mcp:write"],
+    "resource_access_mode": "STATIC_ALLOWLIST",
+    "test_customer_id": "8590146099",
+    "restricted_account_count": 1,
+    "same_owner_workspace": true,
+    "stock_human_auth_and_csrf": true,
+    "creation_audit": true,
+    "mcp_access": true,
+    "secret_storage": "DISPOSABLE_ENCRYPTED_VAULT_ONLY",
+    "provider_read_calls": 0,
+    "validate_only_calls": 0,
+    "real_provider_write_calls": 0,
+    "production_changed": false,
+    "main_changed": false,
+    "timestamp": "2026-10-11T17:47:51.419Z",
+    "issuance_source": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+    "authorization": "Explicit human response in this thread: one 24-hour TEST key",
+    "stock_administrative_api": "POST /api/v1/workspaces/:workspaceId/service-tokens",
+    "key_create_post_count": 1,
+    "automatic_retry": false,
+    "previous_probe": {
+      "expired": true,
+      "valid_successors_at_probe": 0,
+      "probe_timestamp": "2026-10-11T17:24:27.727Z"
+    }
+  },
+  "runtime": {
+    "running_source": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+    "new_code_loaded": false,
+    "restarted": false,
+    "public_write_flags": false,
+    "native_transport": "BLOCKED: approval-only gateway not native MCP/OAuth/human web ingress; new Internet route not authorized"
+  },
+  "provider_accounting": {
+    "this_cycle": {
+      "read": 46,
+      "validate_only": 0,
+      "real_write": 0,
+      "oauth_refresh_http": 1
+    },
+    "stage234_ledger_before_cycle": {
+      "read": 1448,
+      "validate_only": 13,
+      "real_write": 7
+    },
+    "stage01_separate_historical_ledger": {
+      "read": 1794,
+      "validate_only": 27,
+      "real_write": 17
+    },
+    "stage234_ledger_after_cycle": {
+      "read": 1494,
+      "validate_only": 13,
+      "real_write": 7
+    }
+  },
+  "fixture": {
+    "fresh_provider_reconciliation_this_cycle": true,
+    "last_verified_evidence": "artifacts/google-full-scope/GH-native-fresh-read-20261011.json",
+    "last_verified_timestamp_utc": "2026-10-11T17:49:26.898Z",
+    "campaigns": "PAUSED",
+    "groups": "PAUSED",
+    "rsa": "PAUSED",
+    "original_keywords": "20 ENABLED",
+    "additional_phrase_11479221": "PAUSED",
+    "group_cpc_usd": "0.10",
+    "shared_set_12261567996": "3 EXACT, zero active attachments",
+    "i_criterion_51668099935": "ABSENT",
+    "j_test_geos": "REMOVED; original Almaty retained",
+    "new_objects_this_cycle": [],
+    "fixture_unchanged": true
+  },
+  "next_sequence": [
+    "Finish quality and pin candidate/source/image; do not mutate running approval runtime",
+    "ONE approved 24-hour key created and verified; never create a second key automatically after expiry.",
+    "Prove isolated G/H supervised runner readiness and fresh provider preflight before any JIT preview",
+    "G isolated fixture create approval, exact atomic commit and complete reread; separate strategy approval; warning-only CPC preview; separate MANUAL_CPC restoration approval",
+    "Create second NEW PAUSED compatible campaign with independent approved stock brief; do not assign historical campaign budgets without explicit consent",
+    "H create_and_attach approval for new pair; verify two consumers; +60% warning/validate-only; separately approved assign original budgets; leave detached shared budget disclosed",
+    "Operator-authorized native TEST transport and reachable TEST OAuth/human web routes; connect actual Q/R clients and capture S separately"
+  ],
+  "pmax": {
+    "last_inventory": "Bounded fresh inventory: 0 enabled conversion actions observed, 0 eligible IMAGE observed, 9 assets including BUSINESS_NAME text candidates; no PMax observed",
+    "live_status": "BLOCKED genuine goal/landscape/square/logo and verified brand associations",
+    "required_scope": "Existing PMax editing with supported text/image/signals/themes/brand profiles; LIVE pending genuine object",
+    "additional_creation": "Optional in original matrix / later expressly authorized extension, MOCK implemented; needs genuine conversions, eligible bounded PNG/JPEG landscape/square/logo and business identity",
+    "no_fake_resources": true,
+    "no_global_absence_claim": true
+  },
+  "quality": {
+    "status": "Local PASS; hosted final HEAD CI pending",
+    "moderate_risk_assessment": "artifacts/google-full-scope/moderate-security-risk-assessment-20261009.json",
+    "local_test_pass": 1747,
+    "local_test_skipped": 26,
+    "skip_reason": "DB/Redis integration environment unavailable locally; hosted Linux PG18/Redis gate must execute all",
+    "node_harness_pass": 256,
+    "python_regression_pass": 60,
+    "python_compile": "PASS",
+    "format": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "prisma": "PASS",
+    "secret_scan": "PASS",
+    "dependency_audit": {
+      "critical": 0,
+      "high": 0,
+      "moderate": 6
+    },
+    "early_lint_failure": "Unused test import corrected; full lint rerun PASS; no scanner/guard exemptions"
+  },
+  "production_changed": false,
+  "main_changed": false,
+  "release_ready": false
+}

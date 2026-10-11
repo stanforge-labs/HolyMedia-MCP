@@ -85,7 +85,7 @@ const resources = {
     "campaign",
     "campaign",
     "campaigns",
-    "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.campaign_budget, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type, campaign.start_date_time, campaign.end_date_time, campaign.final_url_suffix, campaign.tracking_url_template, campaign.url_custom_parameters",
+    "campaign.resource_name, campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.campaign_budget, campaign.bidding_strategy_type, campaign.maximize_conversions.target_cpa_micros, campaign.network_settings.target_google_search, campaign.network_settings.target_search_network, campaign.network_settings.target_content_network, campaign.network_settings.target_partner_search_network, campaign.geo_target_type_setting.positive_geo_target_type, campaign.geo_target_type_setting.negative_geo_target_type, campaign.start_date_time, campaign.end_date_time, campaign.final_url_suffix, campaign.tracking_url_template, campaign.url_custom_parameters, campaign.targeting_setting.target_restrictions",
   ],
   campaignCriterion: [
     "campaign_criterion",
@@ -97,7 +97,7 @@ const resources = {
     "ad_group",
     "adGroup",
     "adGroups",
-    "ad_group.resource_name, ad_group.id, ad_group.name, ad_group.campaign, ad_group.status, ad_group.type, ad_group.cpc_bid_micros, ad_group.tracking_url_template, ad_group.final_url_suffix, ad_group.url_custom_parameters",
+    "ad_group.resource_name, ad_group.id, ad_group.name, ad_group.campaign, ad_group.status, ad_group.type, ad_group.cpc_bid_micros, ad_group.tracking_url_template, ad_group.final_url_suffix, ad_group.url_custom_parameters, ad_group.targeting_setting.target_restrictions",
   ],
   adGroupCriterion: [
     "ad_group_criterion",
@@ -1413,12 +1413,20 @@ export async function verifyStage0Mutation(
       op.kind === "campaign"
         ? cloneInheritedTracking(plan, op, entity, result?.resource_name)
         : { comparison: entity, verified: true };
+    const observation = cloneObservationComparison(
+      plan,
+      op,
+      tracking.comparison,
+      expected,
+      result?.resource_name,
+    );
     const verified = Boolean(
       result?.success &&
       entity &&
       budgetAssociationVerified &&
       tracking.verified &&
-      contains(tracking.comparison, expected),
+      observation.verified &&
+      contains(observation.comparison, observation.expected),
     );
     actual.push(entity);
     items.push({
@@ -2087,6 +2095,124 @@ function defaultDevicesMatch(rows: JsonRow[], campaign: string): boolean {
     })
   );
 }
+function cloneObservationFields(value: unknown): JsonRow {
+  if (value === undefined) return {};
+  const r = row(value),
+    restrictions = r.targetRestrictions;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(r).some((k) => k !== "targetRestrictions") ||
+    (restrictions !== undefined && !Array.isArray(restrictions))
+  )
+    error(
+      "google_clone_targeting_mode_unsupported",
+      "Source targetingSetting не подтверждён; unsupported mode не опускается.",
+    );
+  if (restrictions === undefined || !(restrictions as unknown[]).length)
+    return {};
+  const allowed = [
+      "AUDIENCE",
+      "AGE_RANGE",
+      "GENDER",
+      "PARENTAL_STATUS",
+      "INCOME_RANGE",
+    ],
+    rows = restrictions as unknown[];
+  if (
+    rows.length > allowed.length ||
+    rows.some((v) => {
+      const x = row(v);
+      return (
+        !allowed.includes(String(x.targetingDimension)) ||
+        x.bidOnly !== true ||
+        Object.keys(x).some(
+          (k) => !["targetingDimension", "bidOnly"].includes(k),
+        )
+      );
+    }) ||
+    new Set(rows.map((v) => row(v).targetingDimension)).size !== rows.length
+  )
+    error(
+      "google_clone_targeting_mode_unsupported",
+      "Clone сохраняет только known unique OBSERVATION restrictions; TARGETING/unknown/duplicate mode требует другого typed profile, не silent omission.",
+    );
+  return { targetingSetting: structuredClone(r) };
+}
+function cloneObservationComparison(
+  plan: Stage0Plan,
+  op: Stage0Operation,
+  entity: JsonRow | null | undefined,
+  expected: JsonRow,
+  actualResource: string | null | undefined,
+) {
+  const result = { comparison: entity, expected, verified: true };
+  if (!op.fields.targetingSetting || !["campaign", "adGroup"].includes(op.kind))
+    return result;
+  try {
+    const table = resources[op.kind][0],
+      bindings = list(plan.summary.clone_observation_settings).filter(
+        (b) => b.target_resource === op.resource_name && b.kind === op.kind,
+      );
+    const binding = bindings[0],
+      source = String(binding?.source_resource);
+    if (
+      bindings.length !== 1 ||
+      !new RegExp(
+        `^customers/${plan.account_id}/${resources[op.kind][2]}/[1-9][0-9]*$`,
+      ).test(source) ||
+      op.method !== "create" ||
+      op.fields.status !== "PAUSED" ||
+      !entity ||
+      entity.resourceName !== actualResource ||
+      entity.status !== "PAUSED" ||
+      canonical(expected.targetingSetting) !==
+        canonical(op.fields.targetingSetting)
+    )
+      return { ...result, verified: false };
+    const sourceProof = plan.checks.some(
+      (c) =>
+        c.query
+          .split(" FROM ")[0]
+          ?.includes(`${table}.targeting_setting.target_restrictions`) &&
+        c.rows.some((r) => {
+          const v = row(r[op.kind]);
+          return (
+            v.resourceName === source &&
+            v.status !== "REMOVED" &&
+            canonical(
+              row(cloneObservationFields(v.targetingSetting)).targetingSetting,
+            ) === canonical(op.fields.targetingSetting)
+          );
+        }),
+    );
+    if (!sourceProof) return { ...result, verified: false };
+    const a = row(
+        cloneObservationFields(entity.targetingSetting),
+      ).targetingSetting,
+      e = row(
+        cloneObservationFields(expected.targetingSetting),
+      ).targetingSetting;
+    if (!a || !e) return { ...result, verified: false };
+    const sorted = (v: unknown) => ({
+      ...row(v),
+      targetRestrictions: list(row(v).targetRestrictions).sort((a, b) =>
+        String(a.targetingDimension).localeCompare(
+          String(b.targetingDimension),
+          "en",
+        ),
+      ),
+    });
+    return {
+      comparison: { ...structuredClone(entity), targetingSetting: sorted(a) },
+      expected: { ...structuredClone(expected), targetingSetting: sorted(e) },
+      verified: true,
+    };
+  } catch {
+    return { ...result, verified: false };
+  }
+}
 export async function buildClonePlan(
   account: string,
   input: unknown,
@@ -2498,7 +2624,11 @@ export async function buildClonePlan(
       keys: { source: JsonRow; fields: JsonRow }[];
       ads: JsonRow[];
     }[] = [];
-  const campaignTracking = cloneTrackingFields(campaign);
+  const campaignObservation = cloneObservationFields(campaign.targetingSetting);
+  const campaignTracking = {
+    ...cloneTrackingFields(campaign),
+    ...campaignObservation,
+  };
   for (const g of groups) {
     owned(g.resourceName, "adGroups");
     if (
@@ -2583,7 +2713,10 @@ export async function buildClonePlan(
         );
     groupTracking.push({
       group: g,
-      fields: cloneTrackingFields(g),
+      fields: {
+        ...cloneTrackingFields(g),
+        ...cloneObservationFields(g.targetingSetting),
+      },
       keys: keys
         .filter((k) => !k.negative)
         .map((source) => ({
@@ -3004,6 +3137,13 @@ export async function buildClonePlan(
     }
   };
   applyTracking(targetCampaign!, campaignTracking);
+  const observationBindings: JsonRow[] = [];
+  if (campaignObservation.targetingSetting)
+    observationBindings.push({
+      kind: "campaign",
+      source_resource: campaign.resourceName,
+      target_resource: targetCampaign!.resource_name,
+    });
   const targetGroups = plan.operations.filter(
     (o) => o.kind === "adGroup" && o.method === "create",
   );
@@ -3025,6 +3165,12 @@ export async function buildClonePlan(
         "Clone tracking target group identity/parent не подтверждены.",
       );
     applyTracking(targetGroup, source.fields);
+    if (source.fields.targetingSetting)
+      observationBindings.push({
+        kind: "adGroup",
+        source_resource: source.group.resourceName,
+        target_resource: targetGroup.resource_name,
+      });
     const keys = plan.operations.filter(
       (o) =>
         o.kind === "adGroupCriterion" &&
@@ -3065,6 +3211,17 @@ export async function buildClonePlan(
       applyTracking(ads[i]!, fields, true);
     }
   }
+  plan.summary.clone_observation_settings = observationBindings;
+  for (const binding of observationBindings)
+    plan.items
+      .find((i) =>
+        i.provider_operations.some(
+          (n) => plan.operations[n]?.resource_name === binding.target_resource,
+        ),
+      )
+      ?.warnings.push(
+        "Known OBSERVATION settings сохранены на source level; TARGETING не подменяется OBSERVATION, immutable snapshot и exact reread обязательны.",
+      );
   plan.summary.clone_tracking_profile = {
     source: "provider-derived same-account level-preserving",
     groups: groupTracking.length,

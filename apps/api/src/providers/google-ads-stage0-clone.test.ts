@@ -410,6 +410,195 @@ function mockCreated(plan: Stage0Plan) {
     );
   return { results, actual, read };
 }
+describe("Clone OBSERVATION collection preservation: source modes never silently omitted", () => {
+  const setting = () => ({
+    targetRestrictions: [
+      { targetingDimension: "AUDIENCE", bidOnly: true },
+      { targetingDimension: "AGE_RANGE", bidOnly: true },
+      { targetingDimension: "GENDER", bidOnly: true },
+    ],
+  });
+  it("selects/freezes and copies known source settings at their own levels, PAUSED target with explicit preview; source inert", async () => {
+    const f = fixture();
+    f.campaign.targetingSetting = setting();
+    f.group.targetingSetting = setting();
+    const before = canonical([f.campaign, f.group]),
+      p = await f.clone();
+    expect(
+      p.checks.some((c) =>
+        c.query.includes("campaign.targeting_setting.target_restrictions"),
+      ),
+    ).toBe(true);
+    expect(
+      p.checks.some((c) =>
+        c.query.includes("ad_group.targeting_setting.target_restrictions"),
+      ),
+    ).toBe(true);
+    expect(p.summary.clone_observation_settings).toHaveLength(2);
+    for (const kind of ["campaign", "adGroup"]) {
+      const op = p.operations.find((o) => o.kind === kind)!;
+      expect(op.fields.targetingSetting).toEqual(setting());
+      expect(op.expected.targetingSetting).toEqual(setting());
+      expect(op.fields.status).toBe("PAUSED");
+      const item = p.items.find((i) =>
+        i.provider_operations.includes(p.operations.indexOf(op)),
+      )!;
+      expect(row(item.after).targetingSetting).toEqual(setting());
+      expect(item.warnings.some((w) => w.includes("OBSERVATION"))).toBe(true);
+    }
+    expect(canonical([f.campaign, f.group])).toBe(before);
+    const made = mockCreated(p);
+    expect(
+      (await verifyStage0Mutation(p, made.results, made.read)).status,
+    ).toBe("VERIFIED");
+    const actual = [...made.actual.values()].find(
+      (r) => row(r.adGroup).targetingSetting,
+    )!;
+    const list = row(row(actual.adGroup).targetingSetting)
+      .targetRestrictions as JsonRow[];
+    list.reverse();
+    const raw = canonical(actual);
+    expect(
+      (await verifyStage0Mutation(p, made.results, made.read)).status,
+    ).toBe("VERIFIED");
+    expect(canonical(actual)).toBe(raw);
+  });
+  it.each([false, undefined, "true", 1])(
+    "missing/TARGETING/untyped bid_only %s rejects before target build",
+    async (value) => {
+      const f = fixture();
+      f.group.targetingSetting = {
+        targetRestrictions: [
+          { targetingDimension: "AUDIENCE", bidOnly: value },
+        ],
+      };
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_targeting_mode_unsupported",
+      });
+      expect(f.build).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["UNKNOWN", "UNSPECIFIED", "KEYWORD", "PLACEMENT", "TOPIC"])(
+    "unknown/unsupported Search mode dimension %s is explicit local rejection",
+    async (value) => {
+      const f = fixture();
+      f.group.targetingSetting = {
+        targetRestrictions: [{ targetingDimension: value, bidOnly: true }],
+      };
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_targeting_mode_unsupported",
+      });
+    },
+  );
+  it("duplicate dimensions, null/array/operations/malformed collections and campaign TARGETING reject, not default to OBSERVATION", async () => {
+    for (const value of [
+      null,
+      [],
+      { targetRestrictions: "bad" },
+      {
+        targetRestrictions: [
+          { targetingDimension: "GENDER", bidOnly: true },
+          { targetingDimension: "GENDER", bidOnly: true },
+        ],
+      },
+      { targetRestrictionOperations: [{ operator: "ADD" }] },
+      {
+        targetRestrictions: [
+          { targetingDimension: "GENDER", bidOnly: true, raw_override: true },
+        ],
+      },
+    ]) {
+      const f = fixture();
+      f.group.targetingSetting = value;
+      await expect(f.clone()).rejects.toMatchObject({
+        writeCode: "google_clone_targeting_mode_unsupported",
+      });
+    }
+    const f = fixture();
+    f.campaign.targetingSetting = {
+      targetRestrictions: [{ targetingDimension: "AUDIENCE", bidOnly: false }],
+    };
+    await expect(f.clone()).rejects.toMatchObject({
+      writeCode: "google_clone_targeting_mode_unsupported",
+    });
+  });
+  it("source mode change invalidates frozen checks and cannot be rebased by clone", async () => {
+    const f = fixture();
+    f.group.targetingSetting = setting();
+    const p = await f.clone();
+    expect(canonical(await rereadStage0Checks(p, f.read))).toBe(
+      canonical(p.checks),
+    );
+    row(f.group.targetingSetting).targetRestrictions = [
+      { targetingDimension: "AUDIENCE", bidOnly: false },
+    ];
+    expect(canonical(await rereadStage0Checks(p, f.read))).not.toBe(
+      canonical(p.checks),
+    );
+  });
+  it("post-state missing/extra/duplicate/TARGETING fields never verify; normalization needs exact selected source proof", async () => {
+    for (const value of [
+      undefined,
+      {
+        targetRestrictions: [
+          { targetingDimension: "AUDIENCE", bidOnly: false },
+        ],
+      },
+      {
+        targetRestrictions: [{ targetingDimension: "AUDIENCE", bidOnly: true }],
+      },
+      {
+        targetRestrictions: [
+          ...setting().targetRestrictions,
+          { targetingDimension: "INCOME_RANGE", bidOnly: true },
+        ],
+      },
+      {
+        targetRestrictions: [
+          ...setting().targetRestrictions,
+          { targetingDimension: "AUDIENCE", bidOnly: true },
+        ],
+      },
+    ]) {
+      const f = fixture();
+      f.group.targetingSetting = setting();
+      const p = await f.clone(),
+        made = mockCreated(p),
+        actual = [...made.actual.values()].find(
+          (r) => row(r.adGroup).targetingSetting,
+        )!;
+      row(actual.adGroup).targetingSetting = value;
+      expect(
+        (await verifyStage0Mutation(p, made.results, made.read)).status,
+      ).toBe("UNVERIFIED");
+    }
+    for (const tamper of [
+      (p: Stage0Plan) => {
+        p.summary.clone_observation_settings = [];
+      },
+      (p: Stage0Plan) => {
+        for (const c of p.checks)
+          c.query = c.query.replace(
+            ", ad_group.targeting_setting.target_restrictions",
+            "",
+          );
+      },
+      (p: Stage0Plan) => {
+        const b = p.summary.clone_observation_settings as JsonRow[];
+        b[0]!.source_resource = "customers/9999999999/adGroups/2";
+      },
+    ]) {
+      const f = fixture();
+      f.group.targetingSetting = setting();
+      const p = await f.clone(),
+        made = mockCreated(p);
+      tamper(p);
+      expect(
+        (await verifyStage0Mutation(p, made.results, made.read)).status,
+      ).toBe("UNVERIFIED");
+    }
+  });
+});
 describe("Provider-derived clone campaign geo/schedule modifiers: mock only", () => {
   const addSchedule = (f: ReturnType<typeof fixture>, value = 0.7) => {
     const source = {

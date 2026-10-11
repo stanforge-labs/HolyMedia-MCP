@@ -1,0 +1,402 @@
+{
+  "kind": "stage234_targeting_readiness_fixed_READ_only",
+  "source_head": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+  "harness_head": "fa3812acd26bd8d374615a6bd1d336a13a48403e",
+  "image_digest": "sha256:2d7cd20cb25c268f74abd16f324d7b92ce5d804989a8de9b3fa062a0ca138d35",
+  "result": "PASS_READ_ONLY",
+  "test_customer_id": "8590146099",
+  "mcc_id": "4378327049",
+  "fixture_unchanged": true,
+  "fixture_digest": "37750b8e3d92bbdbf969eb64bc6d851bb0cbd846ee83d6329d23b3be44f731ad",
+  "fixture_campaign_criteria": [
+    {
+      "resourceName": "customers/8590146099/campaignCriteria/24324170853~1031",
+      "campaign": "customers/8590146099/campaigns/24324170853",
+      "criterionId": "1031",
+      "type": "LANGUAGE",
+      "status": "ENABLED",
+      "negative": false,
+      "language": {
+        "languageConstant": "languageConstants/1031"
+      }
+    },
+    {
+      "resourceName": "customers/8590146099/campaignCriteria/24324170853~30000",
+      "campaign": "customers/8590146099/campaigns/24324170853",
+      "criterionId": "30000",
+      "type": "DEVICE",
+      "status": "ENABLED",
+      "negative": false,
+      "device": {
+        "type": "DESKTOP"
+      }
+    },
+    {
+      "resourceName": "customers/8590146099/campaignCriteria/24324170853~30001",
+      "campaign": "customers/8590146099/campaigns/24324170853",
+      "criterionId": "30001",
+      "type": "DEVICE",
+      "status": "ENABLED",
+      "negative": false,
+      "device": {
+        "type": "MOBILE"
+      }
+    },
+    {
+      "resourceName": "customers/8590146099/campaignCriteria/24324170853~30002",
+      "campaign": "customers/8590146099/campaigns/24324170853",
+      "criterionId": "30002",
+      "type": "DEVICE",
+      "status": "ENABLED",
+      "negative": false,
+      "device": {
+        "type": "TABLET"
+      }
+    },
+    {
+      "resourceName": "customers/8590146099/campaignCriteria/24324170853~9235214",
+      "campaign": "customers/8590146099/campaigns/24324170853",
+      "criterionId": "9235214",
+      "type": "LOCATION",
+      "status": "ENABLED",
+      "negative": false,
+      "location": {
+        "geoTargetConstant": "geoTargetConstants/9235214"
+      }
+    }
+  ],
+  "I": {
+    "acceptance_test": "I",
+    "real_provider_calls": 0,
+    "real_provider_writes": 0,
+    "production_changed": false,
+    "main_changed": false,
+    "result": "PREPARED_NOT_LIVE",
+    "source_head": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+    "fixture_digest": "ea0be560c7d129f378c7a3ce3d45bbc36cea7f9c16a5062625a75ec74e15018b",
+    "preserved_criteria_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "catalog_observed_count": 34,
+    "absence_of_eligible_catalog_proven": false,
+    "audience_mode": "OBSERVATION",
+    "mode_impact": "Only selected group audience dimension; stock builder proves parent compatibility and preserves other dimensions.",
+    "preview_request": {
+      "tool": "google_ads_targeting_preview",
+      "arguments": {
+        "provider": "GOOGLE_ADS",
+        "account_id": "8590146099",
+        "items": [
+          {
+            "operation": "audience_add",
+            "level": "AD_GROUP",
+            "campaign_id": "24324170853",
+            "ad_group_id": "206587491811",
+            "audience": {
+              "kind": "DETAILED_DEMOGRAPHIC",
+              "id": "30001"
+            },
+            "mode": "OBSERVATION"
+          }
+        ]
+      }
+    },
+    "restore_checkpoint": "After VERIFIED add, read exact created criterion ID; separate removal preview + irreversible acknowledgement + NEW human approval. Never remove an existing criterion or invent the future ID.",
+    "manual_approval_required": true,
+    "live_acceptance": "NOT_RUN",
+    "catalog_results": {
+      "eligibleInterests": {
+        "result": "BLOCKED",
+        "observed_count": 101,
+        "blockers": [
+          {
+            "source": "HOLYMEDIA",
+            "code": "audience_eligibility_not_proven",
+            "field_path": "I.catalog",
+            "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+          }
+        ]
+      },
+      "userLists": {
+        "result": "BLOCKED",
+        "observed_count": 0,
+        "blockers": [
+          {
+            "source": "HOLYMEDIA",
+            "code": "audience_eligibility_not_proven",
+            "field_path": "I.catalog",
+            "message": "В bounded inventory нет доказанного нового eligible Search audience; 100 VERTICAL_GEO не доказывают отсутствие IN_MARKET/AFFINITY. Нужен targeted provider catalog READ, IDs не выдумываются."
+          }
+        ]
+      },
+      "detailedDemographics": {
+        "result": "PREPARED_NOT_LIVE",
+        "observed_count": 34,
+        "blockers": []
+      }
+    }
+  },
+  "J": {
+    "acceptance_test": "J",
+    "real_provider_calls": 0,
+    "real_provider_writes": 0,
+    "production_changed": false,
+    "main_changed": false,
+    "result": "BLOCKED",
+    "blockers": [
+      {
+        "source": "HOLYMEDIA",
+        "code": "scenario_district_parent_unproven",
+        "field_path": "J.district_candidates",
+        "message": "TEST proof/typed inventory отсутствуют или не прошли guard; preview/commit не выполнялись."
+      }
+    ]
+  },
+  "PMax": {
+    "acceptance_test": "PMAX_PREREQUISITES",
+    "real_provider_calls": 0,
+    "real_provider_writes": 0,
+    "production_changed": false,
+    "main_changed": false,
+    "result": "BLOCKED",
+    "source_head": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+    "blockers": [
+      {
+        "source": "HOLYMEDIA",
+        "code": "pmax_existing_enabled_goal_missing",
+        "field_path": "PMax.conversion_actions",
+        "message": "Нет доказанного existing same-account ENABLED conversion action. Новую цель/конверсию этот readiness-пакет не создаёт."
+      },
+      {
+        "source": "HOLYMEDIA",
+        "code": "pmax_existing_media_missing",
+        "field_path": "PMax.assets.MARKETING_IMAGE",
+        "message": "Не доказан usable existing MARKETING_IMAGE; media/brand assets не генерируются и не загружаются автоматически."
+      },
+      {
+        "source": "HOLYMEDIA",
+        "code": "pmax_existing_media_missing",
+        "field_path": "PMax.assets.SQUARE_MARKETING_IMAGE",
+        "message": "Не доказан usable existing SQUARE_MARKETING_IMAGE; media/brand assets не генерируются и не загружаются автоматически."
+      },
+      {
+        "source": "HOLYMEDIA",
+        "code": "pmax_existing_media_missing",
+        "field_path": "PMax.assets.LOGO",
+        "message": "Не доказан usable existing LOGO; media/brand assets не генерируются и не загружаются автоматически."
+      }
+    ],
+    "same_account_goals": [],
+    "existing_media_by_role": {
+      "MARKETING_IMAGE": [],
+      "SQUARE_MARKETING_IMAGE": [],
+      "LOGO": [],
+      "BUSINESS_NAME": [
+        "428412289294",
+        "428412289297",
+        "428412289300",
+        "428791309301",
+        "428791309304"
+      ]
+    },
+    "existing_brand_guidelines": [],
+    "inventory_coverage": "BOUNDED_SAMPLE_ONLY",
+    "no_inventory_absence_claim": true,
+    "live_acceptance": "NOT_RUN",
+    "remaining": "Read exact selected resources again, prove asset associations/branding minima, launch checklist and Google validate_only via stock PMax preview. No new goals/uploads or live create are authorized by this artifact."
+  },
+  "inventory_read_errors": {},
+  "inventory_row_counts": {
+    "eligibleInterests": 101,
+    "userLists": 0,
+    "detailedDemographics": 34,
+    "city": 1,
+    "districts": 101,
+    "conversions": 0,
+    "assets": 9,
+    "pmaxCampaigns": 0
+  },
+  "catalog_sample_policy": "Bounded samples only; no zero-inventory global claims. No silent truncation may authorize a write.",
+  "cross_client": {
+    "Q": "NOT_RUN_NO_CLIENT_PROOF",
+    "R": "NOT_RUN_NO_CLIENT_PROOF",
+    "S": "NOT_RUN_HUMAN_CONSENT_REQUIRED"
+  },
+  "counts": {
+    "read": 46,
+    "oauth_refresh": 1,
+    "failed_http": 0,
+    "validate_only": 0,
+    "write": 0
+  },
+  "provider_read_call_count": 46,
+  "validate_only_call_count": 0,
+  "real_provider_write_call_count": 0,
+  "approval_performed": false,
+  "committed": false,
+  "production_changed": false,
+  "main_changed": false,
+  "timestamp": "2026-10-11T17:49:26.898Z",
+  "discovery": {
+    "source_head": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+    "result": "READ_ONLY_DISCOVERY",
+    "live_acceptance": "NOT_RUN",
+    "no_global_absence_claim": true,
+    "real_provider_write_calls": 0,
+    "G": {
+      "result": "BLOCKED",
+      "candidates": [],
+      "observed_campaign_count": 0,
+      "code": "discovery_auto_campaign_unproven"
+    },
+    "I": {
+      "IN_MARKET": {
+        "result": "BLOCKED",
+        "observed_count": 500,
+        "exhausted_within_bound": false,
+        "limit_reached": true,
+        "no_global_absence_claim": true,
+        "launched_filter": false,
+        "eligibility_diagnostics": {
+          "launched_true": 0,
+          "launched_false": 500,
+          "launched_omitted": 0,
+          "availability_records": 3477,
+          "search_channel_global_locale_rows": 0
+        },
+        "plan_blocker_codes": ["audience_eligibility_not_proven"],
+        "code": "discovery_catalog_bound_reached"
+      },
+      "AFFINITY": {
+        "result": "PREPARED_NOT_LIVE",
+        "observed_count": 190,
+        "exhausted_within_bound": true,
+        "limit_reached": false,
+        "no_global_absence_claim": true,
+        "launched_filter": false,
+        "eligibility_diagnostics": {
+          "launched_true": 0,
+          "launched_false": 190,
+          "launched_omitted": 0,
+          "availability_records": 953,
+          "search_channel_global_locale_rows": 145
+        },
+        "plan_blocker_codes": [],
+        "code": "eligible_audience_observed",
+        "candidate": {
+          "acceptance_test": "I",
+          "real_provider_calls": 0,
+          "real_provider_writes": 0,
+          "production_changed": false,
+          "main_changed": false,
+          "result": "PREPARED_NOT_LIVE",
+          "source_head": "55d9df3553ff1ad01586978b6e4ecc07913969c5",
+          "fixture_digest": "3ee474cfe1008c58bdd2c2a26205816b5c05028abe2200fb7b3ecd6a9324e221",
+          "preserved_criteria_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "catalog_observed_count": 100,
+          "absence_of_eligible_catalog_proven": false,
+          "audience_mode": "OBSERVATION",
+          "mode_impact": "Only selected group audience dimension; stock builder proves parent compatibility and preserves other dimensions.",
+          "preview_request": {
+            "tool": "google_ads_targeting_preview",
+            "arguments": {
+              "provider": "GOOGLE_ADS",
+              "account_id": "8590146099",
+              "items": [
+                {
+                  "operation": "audience_add",
+                  "level": "AD_GROUP",
+                  "campaign_id": "24324170853",
+                  "ad_group_id": "206587491811",
+                  "audience": {
+                    "kind": "AFFINITY",
+                    "id": "90100"
+                  },
+                  "mode": "OBSERVATION"
+                }
+              ]
+            }
+          },
+          "restore_checkpoint": "After VERIFIED add, read exact created criterion ID; separate removal preview + irreversible acknowledgement + NEW human approval. Never remove an existing criterion or invent the future ID.",
+          "manual_approval_required": true,
+          "live_acceptance": "NOT_RUN"
+        }
+      },
+      "GLOBAL_IN_MARKET": {
+        "result": "BLOCKED",
+        "observed_count": 0,
+        "exhausted_within_bound": true,
+        "limit_reached": false,
+        "no_global_absence_claim": true,
+        "launched_filter": true,
+        "eligibility_diagnostics": {
+          "launched_true": 0,
+          "launched_false": 0,
+          "launched_omitted": 0,
+          "availability_records": 0,
+          "search_channel_global_locale_rows": 0
+        },
+        "plan_blocker_codes": ["audience_eligibility_not_proven"],
+        "code": "discovery_audience_unproven"
+      },
+      "GLOBAL_AFFINITY": {
+        "result": "BLOCKED",
+        "observed_count": 0,
+        "exhausted_within_bound": true,
+        "limit_reached": false,
+        "no_global_absence_claim": true,
+        "launched_filter": true,
+        "eligibility_diagnostics": {
+          "launched_true": 0,
+          "launched_false": 0,
+          "launched_omitted": 0,
+          "availability_records": 0,
+          "search_channel_global_locale_rows": 0
+        },
+        "plan_blocker_codes": ["audience_eligibility_not_proven"],
+        "code": "discovery_audience_unproven"
+      }
+    },
+    "J": {
+      "result": "BLOCKED",
+      "city_id": "1009806",
+      "districts": [],
+      "existing_centers": [],
+      "district_bound_reached": false,
+      "no_global_absence_claim": true,
+      "criteria_digest": "527b00a16c55f67f0d6e2bf65e7d0a6fcc20ab45964caf336424a0c94bbd66a1",
+      "radius_plan_created": false,
+      "code": "discovery_city_district_unproven"
+    },
+    "errors": {}
+  },
+  "snapshot_attestation": {
+    "canonical_format": "sorted_object_keys_sorted_query_rows_v1",
+    "query_names": [
+      "campaign",
+      "group",
+      "keywords",
+      "ads",
+      "groupAudiences",
+      "campaignCriteria",
+      "deliveryCampaigns",
+      "deliveryGroups",
+      "deliveryAds",
+      "sharedSet",
+      "attachments"
+    ],
+    "sha256": "37750b8e3d92bbdbf969eb64bc6d851bb0cbd846ee83d6329d23b3be44f731ad"
+  },
+  "verified_l_residual": {
+    "source_head": "c11f14c263b8e3a27418d87146b1894c7d9107dc",
+    "harness_head": "9f267cf73d43047aef050a5e54006b6431fa6496",
+    "preview_id": "49e76856-b8a9-451a-a240-207d8bf7fa40",
+    "commit_id": "hmc_Wnhn4AOtMiJ7N0oYSTV3v_zB1t3HFnTzHNt7thTGp9Y",
+    "sha256": "962cdada67ba61df6f3cb67442c5855aa9aa8d961c18e0e0ee0a3e7acebc4017",
+    "ad_id": "827463920328",
+    "resource_name": "customers/8590146099/adGroupAds/206587491811~827463920328",
+    "status": "PAUSED",
+    "scenario_view": "ORIGINAL_RSA_ONLY",
+    "full_snapshot_digest": "37750b8e3d92bbdbf969eb64bc6d851bb0cbd846ee83d6329d23b3be44f731ad",
+    "full_delivery_rsa_count": 4,
+    "original_group_rsa_count": 2
+  }
+}

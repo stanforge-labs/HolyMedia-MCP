@@ -5,6 +5,11 @@ import {
 } from "./google-ads-stage1.js";
 import { GoogleAdsWriteError } from "./google-ads-write.js";
 import {
+  buildSharedBudgetSetupPlan,
+  parseSharedBudgetSetup,
+  SHARED_BUDGET_SETUP_ACTION,
+} from "./google-ads-shared-budget-setup.js";
+import {
   resolveGoogleMoneyUnit,
   quantizePositiveMicros,
   moneyUnitWarnings,
@@ -44,7 +49,11 @@ export const STAGE2_STRATEGIES = [
 type StrategyName = (typeof STAGE2_STRATEGIES)[number];
 type Strategy = ExtendedRow & { type: StrategyName };
 export type Stage2AdvancedIntent = ExtendedRow & {
-  action: "stage2_advanced" | "stage2_bulk" | "stage2_bulk_inverse";
+  action:
+    | "stage2_advanced"
+    | "stage2_bulk"
+    | "stage2_bulk_inverse"
+    | "stage2_shared_budget";
 };
 const strategyFields: Record<StrategyName, string> = {
   MANUAL_CPC: "manualCpc",
@@ -387,6 +396,8 @@ function parseAdvancedRow(raw: unknown) {
 }
 export function parseStage2AdvancedIntent(raw: unknown): Stage2AdvancedIntent {
   const r = extRow(raw);
+  if (r.action === SHARED_BUDGET_SETUP_ACTION)
+    return parseSharedBudgetSetup(raw) as Stage2AdvancedIntent;
   if (r.action === "stage2_bulk_inverse") {
     extClosed(raw, ["action", "items"], ["action", "items"]);
     const p = parseStage2Intent({
@@ -693,6 +704,8 @@ export async function buildStage2AdvancedPlan(
   read: Stage1Reader,
 ): Promise<ExtendedPlan> {
   const intent = parseStage2AdvancedIntent(raw);
+  if (intent.action === SHARED_BUDGET_SETUP_ACTION)
+    return buildSharedBudgetSetupPlan(account, intent, read);
   if (intent.action !== "stage2_advanced")
     return buildBulk(account, intent, read);
   const ctx = await extContext(account, read),

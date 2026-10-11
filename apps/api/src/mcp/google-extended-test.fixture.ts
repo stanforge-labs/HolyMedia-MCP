@@ -341,6 +341,11 @@ export function extendedFixture() {
             resourceName: resource,
             id: resource.split("/").at(-1),
           };
+          if (kind === "campaignBudgets") {
+            v.status = "ENABLED";
+            v.period ??= "DAILY";
+            v.type ??= "STANDARD";
+          }
           if (kind === "assets" && object(fields.imageAsset).data) {
             v.type = "IMAGE";
             v.imageAsset = images.get(String(object(fields.imageAsset).data));

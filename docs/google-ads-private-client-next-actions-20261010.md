@@ -80,6 +80,24 @@ write acceptance or S. Source: [official Gemini MCP configuration and OAuth](htt
 
 ## S and precise next action
 
+Preparation update, 2026-10-11 (not a native-client PASS): source inspection proves
+the private OAuth resource is `/mcp`; read/write grant checks bind client, user,
+workspace, token and refresh family. The private Google write gate controls its
+write scope separately from Public MCP. Public write flags must remain OFF.
+`oauthEndpoints()` also requires the same trusted issuer to serve `/auth` and
+`/connect/claude`. An API-only approval gateway does not supply those human web
+routes; a working TEST web/login/consent counterpart and its isolated owner/session
+mapping are prerequisites, not an optional cosmetic page.
+
+Do not publish a route merely to test reachability. First obtain operator approval
+for one isolated TEST transport and authorization-server route plan. A Secure MCP
+Tunnel carries MCP transport, but does not by itself make the OAuth authorization
+server reachable. Prove discovery, canonical issuer/resource, S256 PKCE,
+registration/client metadata, callback validation and TEST human login/consent
+before adding either native client. The current approval-only port4403 remains
+unchanged and is not advertised as this endpoint. No DNS, public route, tunnel,
+client grant or OAuth token was created by this preparation.
+
 Client tool confirmation and HolyMedia browser approval are separate controls.
 For the eventual client write, verify exact preview ID, human owner/session/audit,
 confirmedAt, expiry, snapshot digest, one commit, provider reread and journal.

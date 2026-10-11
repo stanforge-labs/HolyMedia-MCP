@@ -34,6 +34,22 @@ the preview explicitly warns about that shared impact.
 
 ## Explicit profile limits
 
+Campaign/ad-group `targeting_setting.target_restrictions` are now read and frozen.
+Known OBSERVATION restrictions (AUDIENCE, AGE_RANGE, GENDER, PARENTAL_STATUS,
+INCOME_RANGE with exact `bid_only=true`) are copied at the original level and
+shown in the immutable preview. TARGETING, unknown/duplicate dimensions and
+malformed settings explicitly reject; no mode is silently lost. This does not
+add copying of audience criteria themselves.
+
+Reread may reorder this set of restrictions. Comparison is order-independent
+only with exact same-account frozen source proof and the newly created PAUSED
+target identity. Raw evidence is retained unchanged; missing/extra restrictions,
+wrong values, foreign ownership or missing proof cannot normalize to success.
+This is regression/mock coverage, not a new live clone PASS.
+
+Provider references: [v24 TargetingSetting](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/common/targeting_setting.proto)
+and [targeting dimensions](https://github.com/googleapis/googleapis/blob/master/google/ads/googleads/v24/enums/targeting_dimension.proto).
+
 There is no silent omission of unsupported targeting or ads. Audience/custom device
 criteria, non-RSA ads, non-Search channels, custom goals and unsupported bidding
 parameters are rejected. Enhanced manual CPC and portfolio bidding remain outside

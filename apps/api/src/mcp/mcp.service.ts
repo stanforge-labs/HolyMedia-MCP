@@ -79,6 +79,8 @@ const providerAliases: Record<string, ProviderId> = {
   tiktok_ads: "TIKTOK_ADS",
 };
 const extendedDescriptions: Record<string, string> = {
+  google_ads_shared_budget_setup_preview:
+    "TEST-only typed shared-budget setup. Creates one DAILY shared budget and atomically assigns exactly two existing PAUSED BASE Search MANUAL_CPC campaigns, or restores one/two owned budget references with exact campaign_budget masks. Frozen full consumer inventory/currency; no production, status/strategy changes or auto deletion. Google validate_only, separate browser human approval and immutable commit required; Stage 2 gate OFF by default.",
   google_ads_strategy_modifier_preview:
     "Google Ads Stage 2 typed strategy/portfolio/modifier preview. Frozen shared impact, compatibility and currency checks; Google validate_only, browser human approval and immutable commit_preview. No hidden status or goal changes; new stage gate OFF by default.",
   google_ads_bulk_bid_budget_preview:
@@ -90,7 +92,7 @@ const extendedDescriptions: Record<string, string> = {
   google_ads_ads_assets_preview:
     "Google Ads Stage 4 typed RSA/assets/campaign/group/tracking preview. New delivery entities PAUSED, 30/90/15 validation, moderation warnings and scoped existing image references. Irreversible removal requires acknowledgement plus human approval; no immediate write.",
   google_ads_pmax_preview:
-    "Google Ads bounded existing PMax asset-group updates, signals/themes and PAUSED TEXT/IMAGE reference links. Full PMax creation, binary ingestion and unsupported brand/minimum-asset profiles explicitly rejected. Google validate_only and separate human approval/immutable commit required.",
+    "Google Ads bounded non-retail PMax atomic PAUSED creation and supported existing asset-group updates, signals/themes and asset links. Creation requires genuine owned conversion actions, brand identity, authorized bounded decoded PNG/JPEG/logo media and minimum asset proof. Unsupported profiles explicitly reject; no remote download or invented prerequisites. Google validate_only and separate browser human approval/immutable commit required; Stage 4 gate OFF by default.",
 };
 
 export const V1_COMPATIBLE_MCP_TOOLS = [
