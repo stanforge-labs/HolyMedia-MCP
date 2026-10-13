@@ -1,5 +1,7 @@
 # Q read-only incident — wrong ChatGPT connector (2026-10-13)
 
+**2026-10-14 local resolution of read-only retest:** the user selected `mcp__Mcp_test__` in ChatGPT and observed only `8590146099` plus three PAUSED TEST Search campaigns. New TEST audit rows `req-61`/`req-67` and the separate TEST ChatGPT OAuth grant match the call window; production had no tool invocation then. This closes the **wrong-connector READ incident**, not full Q A/B/C/M or Claude/S acceptance. See [new native-client evidence](qrs-chatgpt-real-read-20261014.md). The dated incident status below describes the original 64-account run.
+
 Status: **Q BLOCKED.** Incident correlation made no Google Ads provider call; after the guard deployment, one bounded TEST provider READ was made. No mutation occurred. This is a sanitized evidence record, not a native-client PASS.
 
 ## Correlation (UTC)
