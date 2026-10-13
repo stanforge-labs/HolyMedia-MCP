@@ -1,12 +1,20 @@
 # Q/R/S temporary TEST keyword-write activation — controlled checkpoint
 
-Status: **local code and preflight verified; TEST deployment and native write OAuth not yet performed**. This document is not a Google Ads commit authorization. Historical advertising acceptance remains 20/20 LIVE PASS; Q/R are real-client READ PASS only and S is OPEN.
+Status: **TEST-only API deployment verified; native write OAuth and Q/R/S write acceptance not yet performed**. This document is not a Google Ads commit authorization. Historical advertising acceptance remains 20/20 LIVE PASS; Q/R are real-client READ PASS only and S is OPEN.
 
 ## Exact boundary
 
 The restricted QRS API alone may temporarily set `PROVIDER_GOOGLE_ADS_WRITE_ENABLED=true` and `QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED=true`, with `GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST=8590146099`. The dedicated gate is OFF in the committed Compose template and config default. It permits **only** `GOOGLE_KEYWORD_STATUS` commits under the existing OAuth write scope, OWNER browser approval, immutable preview, expiry, stale/consumed and journal checks. It does not enable Stage 2/3/4, generic V2, Public MCP or production write gates. `V2_PREVIEW_ONLY=true`, `V2_CONFIRMED_WRITE_ENABLED=false`, both Public flags and all Stage 2/3/4 flags remain false. Startup rejects an unsafe combination or an origin other than `https://mcp-test.holymedia.kz` or an allowlist other than the single TEST client.
 
 The A preview and M unapproved-denial scenarios must not cause Google writes. B/C and their restorations each require a **new** JIT preview, Google validate_only, separate OWNER browser approval, exact one-time commit, provider reread and audit. A client OAuth grant never replaces HolyMedia browser approval. No preview is created in this preparation checkpoint.
+
+## TEST cutover actually performed (2026-10-13 UTC)
+
+Exact pushed source `0e379d58d1c612237cf641af2d354c175ea6b981` passed the Linux foundation, immutable API-image and TEST Web image workflows. The acceptance-only API image was pinned to `ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:4a231d24f6df323f91ce2463a5c03ef69f8d58a1e11829b0a330f850cf94141b`; its revision label matched the source and it runs as `node`. The existing Web was not replaced. The protected rollback directory is `/opt/holymedia-qrs-test/rollback/qrs-keyword-write-20261013T203852Z`; it contains the old Compose, old/new image identities and a 287709-byte TEST DB dump verified with `pg_restore -l`. It is root-only; no vault, Redis or audit data was removed.
+
+The old QRS API was stopped first (AutoRemove=false). Available RAM then measured 898 MiB, rising to 945 MiB after a short settle; free swap 1158 MiB, free disk 10876 MiB, production health/ready 200. A protected TEST-only Compose override was validated to set just the two authorized Google flags true and preserve 11 strict runtime flag values. The sole QRS API was recreated from the exact digest; `/ready` became 200, health healthy, OOM=false, restarts=0. After warmup, available RAM 698 MiB (the 800 MiB gate is **pre-start**), free swap 1156 MiB, free disk 10876 MiB, memory PSI full avg10 0.00, TEST API memory about 233 MiB / 512 MiB. Production health/ready remained 200 with about 0.02 s responses. No production container/image/vhost or main branch changed.
+
+External TEST protected-resource and authorization-server metadata returned 200 and advertised the canonical TEST resource/issuer and both scopes. Anonymous `tools/list` returned 401; unsafe OAuth redirect registration returned 400. Existing ChatGPT and Claude CIMD clients/grants remain READ-only with zero active write access/refresh tokens; they were not upgraded. A foreign-account TEST tool call was denied and audited (`mcp_test_tool_denied`, `policy_denied`, `req-e`); `list_accounts` returned only `8590146099` and a subsequent TEST provider campaign read returned the three PAUSED Search campaigns. These are TEST technical smokes, not new native ChatGPT/Claude A/B/C/M or S evidence. No preview, Google validate_only, Google mutation or new client grant occurred in this cutover.
 
 ## Current independently checked baseline
 
