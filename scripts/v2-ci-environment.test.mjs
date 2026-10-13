@@ -105,7 +105,7 @@ test("only isolated acceptance CI overrides Node image; default production base 
   );
   assert.match(
     workflow,
-    /build-args: \|\s+NODE_BASE_IMAGE=public\.ecr\.aws\/docker\/library\/node:24-bookworm-slim/,
+    /build-args: \|\s+NODE_BASE_IMAGE=docker\.io\/library\/node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20/,
   );
   assert.match(workflow, /target: api-runtime/);
   assert.match(workflow, /google-stage234-acceptance-\$\{\{ github\.sha \}\}/);
