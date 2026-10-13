@@ -181,6 +181,43 @@ describe("GoogleLoginService", () => {
     });
   });
 
+  it("rejects a Google profile without explicit email verification", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ access_token: "access" }))
+        .mockResolvedValueOnce(
+          jsonResponse({ email: "unverified@example.test" }),
+        ),
+    );
+    const service = new GoogleLoginService(databaseMock() as never);
+    await expect(service.exchangeCode("code")).rejects.toThrow(
+      "Google account profile could not be read",
+    );
+  });
+
+  it("returns to the TEST auth screen when there is no OAuth transaction", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    const database = databaseMock();
+    const service = new GoogleLoginService(database as never);
+    await service.start();
+    expect(database.client.googleLoginState.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ nextPath: "/auth?connected=1" }),
+    });
+    await service.start("https://evil.example/dashboard");
+    expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ nextPath: "/auth?connected=1" }),
+    });
+  });
+
   it("preserves localized frontend return URLs without changing OAuth callback or accepting EN technical paths", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");

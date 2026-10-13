@@ -15,6 +15,12 @@ test("TEST vhost is additive, exact-path and loopback-only", () => {
   assert.doesNotMatch(nginx, /server_name\s+mcp\.holymedia\.kz/);
   assert.match(nginx, /location = \/mcp\s*\{/);
   assert.match(nginx, /location = \/oauth\/token\s*\{/);
+  assert.match(nginx, /location = \/auth\/google\/start\s*\{/);
+  assert.match(nginx, /location = \/auth\/google\/callback\s*\{/);
+  assert.doesNotMatch(
+    nginx,
+    /location\s+(?:=\s+)?\/api\/v1\/auth\/(?:signup|forgot-password)\b/,
+  );
   assert.match(nginx, /location = \/api\/v1\/mcp\/public\/approval\s*\{/);
   assert.match(nginx, /location \/ \{ return 404; \}/);
   assert.doesNotMatch(nginx, /location\s+(?:=\s+)?\/mcp\/public\b/);
@@ -34,6 +40,7 @@ test("TEST compose does not reference production data or enable writes", () => {
     /holymedia-v2_default|holymedia-v2\/|holymedia-v2:/,
   );
   assert.match(compose, /GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099"/);
+  assert.match(compose, /QRS_TEST_RESTRICTED_AUTH: "true"/);
   for (const gate of [
     "PROVIDER_GOOGLE_ADS_WRITE_ENABLED",
     "PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED",
@@ -50,13 +57,17 @@ test("TEST compose does not reference production data or enable writes", () => {
   assert.doesNotMatch(compose, /^\s+worker:/m);
 });
 
-test("TEST Web build is pinned to TEST origin and hides unconfigured Google login", () => {
+test("TEST Web build is pinned to TEST origin and exposes only restricted login", () => {
   assert.match(dockerfile, /FROM base AS test-web-runtime/);
   assert.match(
     dockerfile,
     /NEXT_PUBLIC_API_BASE_URL=https:\/\/mcp-test\.holymedia\.kz/,
   );
-  assert.match(dockerfile, /NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED=false/);
+  assert.match(
+    dockerfile,
+    /NEXT_PUBLIC_TEST_RESTRICTED_AUTH=\$NEXT_PUBLIC_TEST_RESTRICTED_AUTH/,
+  );
+  assert.match(compose, /NEXT_PUBLIC_TEST_RESTRICTED_AUTH: "true"/);
   assert.match(
     login,
     /process\.env\.NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED !== "false"/,

@@ -7,6 +7,7 @@ import {
   Redirect,
   Req,
   Res,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { loadConfig } from "@holymedia/config";
 import type { FastifyReply } from "fastify";
@@ -59,6 +60,7 @@ export class LegacyGoogleLoginController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     if (error || !code || !state) {
+      if (this.config.qrsTestRestrictedAuth) return this.loginErrorRedirect();
       throw new BadRequestException("Google Login was not completed.");
     }
     if (
@@ -67,11 +69,25 @@ export class LegacyGoogleLoginController {
         request.cookies?.[GOOGLE_LOGIN_STATE_COOKIE],
       )
     ) {
+      if (this.config.qrsTestRestrictedAuth) return this.loginErrorRedirect();
       throw new BadRequestException("Google Login session is invalid.");
     }
-    const stateResult = await this.google.consumeState(state);
-    const profile = await this.google.exchangeCode(code);
-    const result = await this.auth.loginWithGoogle(profile, request);
+    let stateResult: Awaited<ReturnType<GoogleLoginService["consumeState"]>>;
+    let result: Awaited<ReturnType<AuthService["loginWithGoogle"]>>;
+    try {
+      stateResult = await this.google.consumeState(state);
+      const profile = await this.google.exchangeCode(code);
+      result = await this.auth.loginWithGoogle(profile, request);
+    } catch (caught) {
+      if (
+        this.config.qrsTestRestrictedAuth &&
+        (caught instanceof BadRequestException ||
+          caught instanceof UnauthorizedException)
+      ) {
+        return this.loginErrorRedirect();
+      }
+      throw caught;
+    }
     this.cookies.setSession(reply, result.sessionToken);
     cookieReply(reply).clearCookie(
       GOOGLE_LOGIN_STATE_COOKIE,
@@ -81,6 +97,10 @@ export class LegacyGoogleLoginController {
       url: result.onboardingRequired ? "/onboarding" : stateResult.nextPath,
       statusCode: 302,
     };
+  }
+
+  private loginErrorRedirect() {
+    return { url: "/auth?error=google_login", statusCode: 302 };
   }
 
   private cookieOptions() {

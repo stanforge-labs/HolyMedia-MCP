@@ -12,6 +12,8 @@ import {
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const googleLoginEnabled =
   process.env.NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED !== "false";
+const restrictedTestAuth =
+  process.env.NEXT_PUBLIC_TEST_RESTRICTED_AUTH === "true";
 type AuthMode = "login" | "signup" | "forgot";
 const copy = {
   ru: {
@@ -124,6 +126,13 @@ export default function AuthPage() {
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const requested = query.get("mode");
+    if (restrictedTestAuth && query.get("error") === "google_login") {
+      setError(
+        language === "ru"
+          ? "Вход через Google не завершён или этот аккаунт не допущен к TEST. Используйте разрешённый Google-аккаунт."
+          : "Google sign-in was not completed or this account has no TEST access. Use the approved Google account.",
+      );
+    }
     const transaction = query.get("oauth_transaction") ?? "";
     setNextPath(safeDashboardPath(query.get("next")));
     if (
@@ -133,10 +142,14 @@ export default function AuthPage() {
     ) {
       setOauthTransaction(transaction);
     }
-    if (requested === "signup" || requested === "forgot") setMode(requested);
+    if (
+      !restrictedTestAuth &&
+      (requested === "signup" || requested === "forgot")
+    )
+      setMode(requested);
     // Restore only ordinary login; consent/signup/reset flows keep their own lifecycle.
     const controller = new AbortController();
-    if ((!requested || requested === "login") && !transaction) {
+    if (!requested || requested === "login" || restrictedTestAuth) {
       void fetch(`${API}/api/v1/auth/session`, {
         credentials: "include",
         cache: "no-store",
@@ -147,8 +160,21 @@ export default function AuthPage() {
             response.ok &&
             (await response.json()).user &&
             !controller.signal.aborted
-          )
-            window.location.replace(safeDashboardPath(query.get("next")));
+          ) {
+            if (transaction) {
+              window.location.replace(
+                `${API}/oauth/authorize/continue?transaction=${encodeURIComponent(transaction)}`,
+              );
+            } else if (restrictedTestAuth) {
+              setMessage(
+                language === "ru"
+                  ? "Вход в TEST выполнен. Вернитесь к подключению ChatGPT или Claude."
+                  : "Signed in to TEST. Return to the ChatGPT or Claude connection.",
+              );
+            } else {
+              window.location.replace(safeDashboardPath(query.get("next")));
+            }
+          }
         })
         .catch(() => {
           /* A temporary API error does not invalidate the cookie. */
@@ -231,6 +257,12 @@ export default function AuthPage() {
       if (!response.ok) throw new Error("request_failed");
       if (mode === "forgot") {
         setMessage(t.resetSent);
+      } else if (restrictedTestAuth && mode === "login" && !oauthTransaction) {
+        setMessage(
+          language === "ru"
+            ? "Вход в TEST выполнен. Вернитесь к подключению ChatGPT или Claude."
+            : "Signed in to TEST. Return to the ChatGPT or Claude connection.",
+        );
       } else {
         navigating = true;
         window.location.assign(
@@ -268,7 +300,7 @@ export default function AuthPage() {
           </Link>
         )}
 
-        {mode !== "forgot" && (
+        {mode !== "forgot" && !restrictedTestAuth && (
           <div
             className="tabs"
             role="tablist"
@@ -306,11 +338,15 @@ export default function AuthPage() {
                 : t.forgotTitle}
           </h1>
           <p className="muted">
-            {mode === "login"
-              ? t.signInLead
-              : mode === "signup"
-                ? t.signupLead
-                : t.forgotLead}
+            {restrictedTestAuth
+              ? language === "ru"
+                ? "Доступ только для приглашённого владельца TEST workspace. Аккаунты и пароли production здесь не переносятся."
+                : "Only the invited TEST workspace owner can sign in. Production accounts and passwords are not copied here."
+              : mode === "login"
+                ? t.signInLead
+                : mode === "signup"
+                  ? t.signupLead
+                  : t.forgotLead}
           </p>
 
           {mode !== "forgot" && googleLoginEnabled && (
@@ -383,7 +419,7 @@ export default function AuthPage() {
                 hideLabel={t.hidePassword}
               />
             )}
-            {mode === "login" && (
+            {mode === "login" && !restrictedTestAuth && (
               <button
                 className="text-button forgot-link"
                 type="button"

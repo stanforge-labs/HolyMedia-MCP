@@ -66,6 +66,7 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
+  QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
   PROVIDER_META_CLIENT_SECRET: z.string().optional(),
   PROVIDER_META_REDIRECT_URI: z.string().url().optional(),
@@ -203,6 +204,7 @@ export type AppConfig = {
   providerGoogleLoginClientSecret: string | undefined;
   providerGoogleLoginRedirectUri: string | undefined;
   providerGoogleLoginScopes: string;
+  qrsTestRestrictedAuth: boolean;
   providerMetaClientId: string | undefined;
   providerMetaClientSecret: string | undefined;
   providerMetaRedirectUri: string | undefined;
@@ -503,6 +505,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginClientSecret: value.PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET,
     providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,
     providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
+    qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,
     providerMetaClientSecret: value.PROVIDER_META_CLIENT_SECRET,
     providerMetaRedirectUri: value.PROVIDER_META_REDIRECT_URI,

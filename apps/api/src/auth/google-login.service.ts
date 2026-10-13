@@ -43,13 +43,21 @@ export class GoogleLoginService {
     return 900;
   }
 
-  public async start(nextPath = "/dashboard"): Promise<GoogleLoginStart> {
+  public async start(
+    nextPath = this.config.qrsTestRestrictedAuth
+      ? "/auth?connected=1"
+      : "/dashboard",
+  ): Promise<GoogleLoginStart> {
     if (!this.configured()) {
       throw new ServiceUnavailableException("Google Login is not configured.");
     }
 
     const state = createOpaqueToken();
-    const safeNextPath = normalizeNextPath(nextPath, this.config.publicBaseUrl);
+    const safeNextPath = normalizeNextPath(
+      nextPath,
+      this.config.publicBaseUrl,
+      this.config.qrsTestRestrictedAuth,
+    );
     await this.database.client.googleLoginState.create({
       data: {
         stateDigest: digestToken(state, this.config.sessionHashSecret),
@@ -169,7 +177,7 @@ export class GoogleLoginService {
           ? profile.email.trim().toLowerCase()
           : "";
       const name = typeof profile.name === "string" ? profile.name.trim() : "";
-      if (!email.includes("@") || profile.email_verified === false) {
+      if (!email.includes("@") || profile.email_verified !== true) {
         throw new Error("invalid_profile");
       }
       return { email, name: name || email };
@@ -196,7 +204,14 @@ export class GoogleLoginService {
   }
 }
 
-function normalizeNextPath(value: string, baseUrl: string): string {
+function normalizeNextPath(
+  value: string,
+  baseUrl: string,
+  restrictedTestAuth = false,
+): string {
+  if (restrictedTestAuth && value === "/auth?connected=1") {
+    return value;
+  }
   try {
     const approval = new URL(value, baseUrl);
     if (
@@ -237,5 +252,5 @@ function normalizeNextPath(value: string, baseUrl: string): string {
   } catch {
     // Fall through to the safe default.
   }
-  return "/dashboard";
+  return restrictedTestAuth ? "/auth?connected=1" : "/dashboard";
 }

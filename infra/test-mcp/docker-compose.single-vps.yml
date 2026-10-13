@@ -14,8 +14,10 @@ services:
       NODE_ENV: production
       API_PORT: "4000"
       HOLYMEDIA_PUBLIC_BASE_URL: https://mcp-test.holymedia.kz
+      PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: https://mcp-test.holymedia.kz/auth/google/callback
       CORS_ORIGINS: https://mcp-test.holymedia.kz
       GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099"
+      QRS_TEST_RESTRICTED_AUTH: "true"
       PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
       PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false"
       PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false"
@@ -63,7 +65,8 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE_URL: https://mcp-test.holymedia.kz
       NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp-test.holymedia.kz
-      NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED: "false"
+      NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED: "true"
+      NEXT_PUBLIC_TEST_RESTRICTED_AUTH: "true"
     command: ["./node_modules/.bin/next", "start"]
     ports:
       - "127.0.0.1:13300:3000"

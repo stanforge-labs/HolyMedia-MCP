@@ -71,6 +71,9 @@ export class AuthService {
     input: SignupDto,
     request: RequestWithAuth,
   ): Promise<AuthResult> {
+    if (this.config.qrsTestRestrictedAuth) {
+      throw new UnauthorizedException("Registration is closed in TEST.");
+    }
     if (input.password !== input.confirmPassword) {
       throw new BadRequestException("Passwords do not match.");
     }
@@ -164,6 +167,18 @@ export class AuthService {
       });
       throw new UnauthorizedException("Invalid email or password.");
     }
+    const restrictedMembership = this.config.qrsTestRestrictedAuth
+      ? await this.testOwnerMembership(user.id)
+      : null;
+    if (this.config.qrsTestRestrictedAuth && !restrictedMembership) {
+      await this.record({
+        eventType: "login_failure",
+        success: false,
+        request,
+        metadata: { reason: "test_access_denied" },
+      });
+      throw new UnauthorizedException("TEST access is not granted.");
+    }
     if (this.passwords.needsRehash(user.passwordHash)) {
       await this.database.client.user.update({
         where: { id: user.id },
@@ -176,8 +191,9 @@ export class AuthService {
       request,
       actorUserId: user.id,
     });
-    const membership = await this.database.client.workspaceMembership.findFirst(
-      {
+    const membership =
+      restrictedMembership ??
+      (await this.database.client.workspaceMembership.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: "asc" },
         select: {
@@ -191,8 +207,7 @@ export class AuthService {
             },
           },
         },
-      },
-    );
+      }));
     return {
       user: this.publicUser(user),
       sessionToken: session.token,
@@ -214,6 +229,20 @@ export class AuthService {
     let user = await this.database.client.user.findUnique({
       where: { email },
     });
+
+    const restrictedMembership =
+      this.config.qrsTestRestrictedAuth && user?.status === "active"
+        ? await this.testOwnerMembership(user.id)
+        : null;
+    if (this.config.qrsTestRestrictedAuth && !restrictedMembership) {
+      await this.record({
+        eventType: "login_failure",
+        success: false,
+        request,
+        metadata: { method: "google", reason: "test_access_denied" },
+      });
+      throw new UnauthorizedException("TEST access is not granted.");
+    }
 
     if (!user) {
       const passwordHash = await this.passwords.hash(createOpaqueToken());
@@ -252,8 +281,9 @@ export class AuthService {
     }
 
     const session = await this.sessions.create(user.id, request);
-    const membership = await this.database.client.workspaceMembership.findFirst(
-      {
+    const membership =
+      restrictedMembership ??
+      (await this.database.client.workspaceMembership.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: "asc" },
         select: {
@@ -267,8 +297,7 @@ export class AuthService {
             },
           },
         },
-      },
-    );
+      }));
     await this.record({
       eventType: "login_success",
       request,
@@ -520,6 +549,43 @@ export class AuthService {
       name: user.name,
       emailVerified: Boolean(user.emailVerifiedAt),
     };
+  }
+
+  private async testOwnerMembership(userId: string) {
+    if (
+      this.config.publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      this.config.googleAdsWriteAccountAllowlist.length !== 1 ||
+      this.config.googleAdsWriteAccountAllowlist[0] !== "8590146099"
+    ) {
+      return null;
+    }
+    return this.database.client.workspaceMembership.findFirst({
+      where: {
+        userId,
+        role: "OWNER",
+        workspace: {
+          accessStatus: "ACTIVE",
+          providerAccounts: {
+            some: {
+              provider: "GOOGLE_ADS",
+              externalAccountId: "8590146099",
+              enabled: true,
+            },
+          },
+        },
+      },
+      select: {
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            accessStatus: true,
+            onboardingCompletedAt: true,
+          },
+        },
+      },
+    });
   }
 
   private expiresInMinutes(): Date {
