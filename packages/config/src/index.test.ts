@@ -28,6 +28,37 @@ describe("v2 configuration", () => {
       }),
     ).toThrow(/GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST/);
   });
+  it("keeps explicit TEST OWNER Google binding disabled and fail-closed outside the exact TEST runtime", () => {
+    const userId = randomUUID();
+    const binding = {
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: "google-owner@example.test",
+      QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: userId,
+    };
+    expect(loadConfig({ NODE_ENV: "test" })).toMatchObject({
+      qrsTestGoogleOwnerBindingEmail: undefined,
+      qrsTestGoogleOwnerBindingUserId: undefined,
+    });
+    expect(loadConfig(binding)).toMatchObject({
+      qrsTestGoogleOwnerBindingEmail: "google-owner@example.test",
+      qrsTestGoogleOwnerBindingUserId: userId,
+    });
+    for (const invalid of [
+      { QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: undefined },
+      { QRS_TEST_RESTRICTED_AUTH: "false" },
+      { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
+      { QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: "Google-Owner@example.test" },
+      { QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: "not-a-uuid" },
+    ]) {
+      expect(() => loadConfig({ ...binding, ...invalid })).toThrow(
+        /TEST Google OWNER binding/,
+      );
+    }
+  });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
     expect(
       loadConfig({

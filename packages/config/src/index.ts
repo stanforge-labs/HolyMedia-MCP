@@ -67,6 +67,8 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
   QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
+  QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: z.string().optional(),
+  QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: z.string().optional(),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
   PROVIDER_META_CLIENT_SECRET: z.string().optional(),
   PROVIDER_META_REDIRECT_URI: z.string().url().optional(),
@@ -205,6 +207,8 @@ export type AppConfig = {
   providerGoogleLoginRedirectUri: string | undefined;
   providerGoogleLoginScopes: string;
   qrsTestRestrictedAuth: boolean;
+  qrsTestGoogleOwnerBindingEmail: string | undefined;
+  qrsTestGoogleOwnerBindingUserId: string | undefined;
   providerMetaClientId: string | undefined;
   providerMetaClientSecret: string | undefined;
   providerMetaRedirectUri: string | undefined;
@@ -462,6 +466,27 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       "GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST must contain Google customer IDs.",
     );
 
+  const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
+  const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
+  if (Boolean(bindingEmail) !== Boolean(bindingUserId))
+    throw new Error("TEST Google OWNER binding requires both identity fields.");
+  if (bindingEmail) {
+    if (
+      !value.QRS_TEST_RESTRICTED_AUTH ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+      bindingEmail !== bindingEmail.toLowerCase() ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bindingEmail) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        bindingUserId!,
+      )
+    )
+      throw new Error(
+        "TEST Google OWNER binding is not valid for this runtime.",
+      );
+  }
+
   return {
     environment: value.NODE_ENV,
     configStrict,
@@ -506,6 +531,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,
     providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
     qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
+    qrsTestGoogleOwnerBindingEmail: bindingEmail,
+    qrsTestGoogleOwnerBindingUserId: bindingUserId,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,
     providerMetaClientSecret: value.PROVIDER_META_CLIENT_SECRET,
     providerMetaRedirectUri: value.PROVIDER_META_REDIRECT_URI,

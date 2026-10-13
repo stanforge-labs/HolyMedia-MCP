@@ -6,12 +6,17 @@ const request = { ip: "127.0.0.1", requestId: "test-request" } as never;
 function setup(
   user: Record<string, unknown> | null,
   membership: Record<string, unknown> | null,
+  binding?: { email: string; userId: string },
 ) {
   vi.stubEnv("NODE_ENV", "test");
   vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
   vi.stubEnv("CORS_ORIGINS", "https://mcp-test.holymedia.kz");
   vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
   vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+  if (binding) {
+    vi.stubEnv("QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL", binding.email);
+    vi.stubEnv("QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID", binding.userId);
+  }
   const database = {
     client: {
       user: {
@@ -130,6 +135,69 @@ describe("restricted TEST identity", () => {
         metadata: { method: "google" },
       }),
     );
+  });
+
+  it("can use a separately configured verified Google identity for the existing OWNER without changing DB identity", async () => {
+    const ownerId = "11111111-1111-4111-8111-111111111111";
+    const owner = {
+      id: ownerId,
+      email: "original-owner@example.test",
+      name: "TEST Owner",
+      status: "active",
+      emailVerifiedAt: null,
+    };
+    const membership = {
+      workspace: {
+        id: "workspace-id",
+        name: "TEST",
+        slug: "test",
+        accessStatus: "ACTIVE",
+        onboardingCompletedAt: new Date(),
+      },
+    };
+    const { service, database, sessions, audit } = setup(null, membership, {
+      email: "google-owner@example.test",
+      userId: ownerId,
+    });
+    database.client.user.findUnique.mockImplementation(({ where }) =>
+      Promise.resolve(where.id === ownerId ? owner : null),
+    );
+    const result = await service.loginWithGoogle(
+      { email: "google-owner@example.test", name: "Google Owner" },
+      request,
+    );
+    expect(result.user.id).toBe(ownerId);
+    expect(sessions.create).toHaveBeenCalledWith(ownerId, request);
+    expect(database.client.user.update).not.toHaveBeenCalled();
+    expect(database.client.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "login_success",
+        metadata: {
+          method: "google",
+          identityBinding: "explicit_test_owner",
+        },
+      }),
+    );
+  });
+
+  it("rejects a configured Google email that already belongs to a different TEST user", async () => {
+    const { service, database, sessions } = setup(
+      { id: "different-user", status: "active" },
+      null,
+      {
+        email: "google-owner@example.test",
+        userId: "11111111-1111-4111-8111-111111111111",
+      },
+    );
+    await expect(
+      service.loginWithGoogle(
+        { email: "google-owner@example.test", name: "Other" },
+        request,
+      ),
+    ).rejects.toThrow("TEST access is not granted");
+    expect(database.client.user.create).not.toHaveBeenCalled();
+    expect(sessions.create).not.toHaveBeenCalled();
   });
 
   it("closes public signup in restricted TEST mode", async () => {

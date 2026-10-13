@@ -230,6 +230,27 @@ export class AuthService {
       where: { email },
     });
 
+    const explicitlyBoundOwner =
+      this.config.qrsTestRestrictedAuth &&
+      this.config.qrsTestGoogleOwnerBindingEmail === email
+        ? this.config.qrsTestGoogleOwnerBindingUserId
+        : undefined;
+    if (explicitlyBoundOwner && !user) {
+      user = await this.database.client.user.findUnique({
+        where: { id: explicitlyBoundOwner },
+      });
+    }
+    if (explicitlyBoundOwner && user?.id !== explicitlyBoundOwner) {
+      await this.record({
+        eventType: "login_failure",
+        success: false,
+        request,
+        metadata: { method: "google", reason: "test_binding_conflict" },
+      });
+      throw new UnauthorizedException("TEST access is not granted.");
+    }
+    const boundToExistingOwner = Boolean(user && user.email !== email);
+
     const restrictedMembership =
       this.config.qrsTestRestrictedAuth && user?.status === "active"
         ? await this.testOwnerMembership(user.id)
@@ -273,7 +294,7 @@ export class AuthService {
       user = result.user;
     } else if (user.status !== "active") {
       throw new UnauthorizedException("Account is not active.");
-    } else if (!user.emailVerifiedAt) {
+    } else if (!boundToExistingOwner && !user.emailVerifiedAt) {
       user = await this.database.client.user.update({
         where: { id: user.id },
         data: { emailVerifiedAt: new Date() },
@@ -302,7 +323,12 @@ export class AuthService {
       eventType: "login_success",
       request,
       actorUserId: user.id,
-      metadata: { method: "google" },
+      metadata: {
+        method: "google",
+        ...(boundToExistingOwner
+          ? { identityBinding: "explicit_test_owner" }
+          : {}),
+      },
     });
     return {
       user: this.publicUser(user),
