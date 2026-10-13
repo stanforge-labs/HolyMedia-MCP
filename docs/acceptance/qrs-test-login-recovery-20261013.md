@@ -1,6 +1,14 @@
 # Q/R/S TEST login recovery — 2026-10-13
 
-Status: **CODE PREPARED / LIVE LOGIN BLOCKED**. This file contains no account emails or secrets. Production and main were not changed.
+Status: **TEST DEPLOYED / AUTOMATED LOGIN PREFLIGHT PASS / HUMAN LOGIN PENDING**. This file contains no account emails or secrets. Production and main application/data were not changed.
+
+## Deployment update — 2026-10-13
+
+- The user confirmed the TEST Google OAuth Web client secret was rotated. The supplied JSON passed local structural and exact origin/callback checks, was moved outside Git with restricted ACLs, and its ID/secret were installed through protected SSH stdin in the root-owned TEST vault (`0600`). No credential values were printed or committed.
+- A restricted-login callback continuation defect was fixed in source commit `9a563cfb64f6f7f2960eb1045c9ad7322851fdd5`: consuming Google state now retains the TEST-restricted return-path rule. Targeted auth tests passed 13/13; exact-HEAD Linux foundation and isolated API image CI succeeded.
+- TEST API runs immutable image `sha256:6352fc834b14770739f9eda7f2d2b00c610db05c19ca5f9d4f10228f8562f1d3`; TEST Web runs image `sha256:56e744992a6ff9b7bccfd6fa1608bd24d2108dc42cf5aea15d4f08088311d836`. Both are healthy with zero restarts/OOM. Only the TEST vhost gained exact `/auth/google/start` and `/auth/google/callback` routes; `nginx -t` passed before controlled reload and production health/ready remained HTTP 200.
+- External HTTPS checks passed for `/auth`, OAuth metadata, Google start redirect, anonymous-session denial and restricted routes. The start redirect requests only `openid email profile` and uses the exact `https://mcp-test.holymedia.kz/auth/google/callback`. Broad administrative paths remain 404; unauthenticated MCP remains 401. This is **not** a completed Google login, owner-email match, HolyMedia consent, authenticated tools/list or native-client acceptance.
+- The previously written section below is historical preparation evidence. Its “not deployed” statements no longer describe the current runtime. No Google Ads provider read, validate-only or write was executed during this deployment cycle.
 
 ## Verified cause
 
