@@ -2,6 +2,8 @@
 
 Verdict: **NOT READY**. Named TEST advertising acceptance A–P/T–W is 20/20 LIVE PASS, but cross-client Q/R/S, PMax eligibility/live proof, clone LIVE proof and security-owner review remain open. No main merge, production deployment, migration, OAuth change, Public MCP write enablement or production Google mutation is authorized by this review.
 
+2026-10-13 delta: the prior six Moderate dependency advisories are patched in the TEST feature branch and local audit is clear; this is not a production release. Exact-owner Google binding is approved in principle but awaits explicit protected email selection, TEST-only activation and real browser verification. Q/R/S remain NOT RUN, and PMax/Clone LIVE gates remain open. Keep release verdict **NOT READY**.
+
 ## Candidate and ancestry
 
 Audited base branch: `codex/google-ads-write-full-scope-final`, base HEAD `9e3a3dc70c4e000a2db789f292d6d853cae6dcb9`. Resolve the **current** candidate SHA with `git rev-parse HEAD`; a tracked document cannot safely self-reference its own final commit hash. `origin/codex/google-ads-stage01-integration-final` and `origin/codex/google-ads-write-stage234-integration` were Git ancestors of that base. Individual Stage 2/3/4 topic tips were **not** all literal ancestors; the integrated candidate must be reviewed by content/tests, not by claiming a straight merge of every topic branch. The existing Stage 0+1 release candidate is untouched. The private-readiness docs/probe were selectively committed and tested as an engineering checkpoint, **not** approved as a production release candidate.

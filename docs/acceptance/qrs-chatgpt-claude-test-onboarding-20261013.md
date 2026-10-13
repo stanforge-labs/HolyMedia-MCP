@@ -4,6 +4,8 @@ Status: **TEST HTTPS TRANSPORT DEPLOYED; Q/R/S LIVE NOT RUN**. The user approved
 
 **Current TEST login readiness (2026-10-13, after real user attempts):** the rotated Google Login credential is present only in the protected TEST vault. Two completed Google callbacks were denied at the existing-OWNER authorization check; six password attempts were rejected as invalid credentials. The real OWNER has **not** logged in. The TEST-only error UI and callback diagnostics were deployed; a dormant exact-owner Google binding is coded but intentionally not configured pending separate approval. Do not retry arbitrary passwords or assume production accounts exist in TEST. No real client OAuth grant or authenticated MCP call has yet been observed.
 
+The user subsequently approved an exact TEST-only binding, but the Google email must still be selected through protected local input; no address has been configured. The isolated API image containing the binding is built and staged, not deployed. One existing active OAuth public client is named ChatGPT (CIMD); a separate Claude registration has not occurred. Never invent either client's redirect URI: use the URI presented during its real registration/connection.
+
 Read-only external follow-up: authorization-server and protected-resource metadata each returned HTTP 200, canonical issuer `https://mcp-test.holymedia.kz`, resource `https://mcp-test.holymedia.kz/mcp`, and S256 PKCE; unauthenticated `/mcp?profile=google_ads_write` returned 401 and `/api/v1/admin` 404. These are transport/discovery proofs only. The running TEST API/Web remain at `367a634`; the newer dormant binding source is not deployed.
 
 ## One recommended transport
@@ -22,7 +24,7 @@ An OpenAI Secure MCP Tunnel only serves OpenAI clients and does not automaticall
 
 ## Q — ChatGPT
 
-In a ChatGPT workspace that permits custom MCP apps, use Settings or Workspace Settings → Apps → Create (developer mode may need an admin/owner) and enter `https://mcp-test.holymedia.kz/mcp?profile=google_ads_write`, then choose OAuth and complete HolyMedia interactive login/consent. Scan tools and test from a real ChatGPT chat. Record actual tools/list, TEST account READ and A/B/C/M client evidence. Do not claim Q PASS from Codex, REST or mock calls. Any TEST mutation needs its own JIT preview, HolyMedia human browser approval, immutable commit, provider reread, audit and separately approved restoration.
+After TEST OWNER login is verified, in a ChatGPT workspace that permits custom MCP plugins, open ChatGPT Plugins → plus → Add custom MCP server, enter `https://mcp-test.holymedia.kz/mcp?profile=google_ads_write`, select OAuth and complete HolyMedia interactive login/consent. Use the already registered public ChatGPT client only if the real flow resolves its exact redirect URI; otherwise verify CIMD/DCR through the supported registration path. Scan tools and test from a real ChatGPT chat. Record actual tools/list, TEST account READ and A/B/C/M client evidence. Do not claim Q PASS from Codex, REST or mock calls. Any TEST mutation needs its own JIT preview, HolyMedia human browser approval, immutable commit, provider reread, audit and separately approved restoration.
 
 ## R — Claude
 
