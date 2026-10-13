@@ -2,6 +2,8 @@
 
 Status: **LOCAL CODE/TEST PREPARATION PASS; real-client Q/R/S BLOCKED**. This is a design and read-only preparation record, not permission to publish an ingress, change DNS/firewall/production routing, issue a service key, or perform Google Ads mutations.
 
+The user selected `mcp-test.holymedia.kz`. Read-only DNS/VPS preflight found no existing record but also found shared 80/443 Nginx and current-host memory/swap pressure; [the TEST HTTPS plan](mcp-test-https-deployment-plan-20261013.md) recommends a separate TEST VPS/IP. The selected hostname is **not** a provisioned endpoint.
+
 ## Verified local boundary
 
 - Existing private Streamable HTTP transport is `POST /mcp?profile=google_ads_write`; a valid `GET /mcp` deliberately does not offer SSE. Public `/mcp/public` has separate read/write flags, which must remain OFF for writes.
