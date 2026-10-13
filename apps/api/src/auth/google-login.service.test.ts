@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GoogleLoginService } from "./google-login.service.js";
+import {
+  GoogleLoginService,
+  type GoogleLoginFailure,
+} from "./google-login.service.js";
 
 function databaseMock() {
   return {
@@ -195,9 +198,31 @@ describe("GoogleLoginService", () => {
         ),
     );
     const service = new GoogleLoginService(databaseMock() as never);
-    await expect(service.exchangeCode("code")).rejects.toThrow(
-      "Google account profile could not be read",
+    await expect(service.exchangeCode("code")).rejects.toMatchObject({
+      stage: "unverified_email",
+    });
+  });
+
+  it("classifies token exchange and UserInfo failures without returning provider payloads", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    const service = new GoogleLoginService(databaseMock() as never);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 400)));
+    await expect(service.exchangeCode("code")).rejects.toMatchObject({
+      stage: "token_exchange",
+    } satisfies Partial<GoogleLoginFailure>);
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ access_token: "access" }))
+        .mockResolvedValueOnce(jsonResponse({}, 500)),
     );
+    await expect(service.exchangeCode("code")).rejects.toMatchObject({
+      stage: "userinfo",
+    } satisfies Partial<GoogleLoginFailure>);
   });
 
   it("returns to the TEST auth screen when there is no OAuth transaction", async () => {

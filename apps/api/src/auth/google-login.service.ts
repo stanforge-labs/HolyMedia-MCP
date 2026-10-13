@@ -14,6 +14,15 @@ import {
 
 export const GOOGLE_LOGIN_STATE_COOKIE = "hm_v2_google_login_state";
 
+export class GoogleLoginFailure extends BadRequestException {
+  public constructor(
+    public readonly stage: "token_exchange" | "userinfo" | "unverified_email",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export type GoogleLoginProfile = {
   email: string;
   name: string;
@@ -148,7 +157,8 @@ export class GoogleLoginService {
       }
       tokenPayload = payload as Record<string, unknown>;
     } catch {
-      throw new BadRequestException(
+      throw new GoogleLoginFailure(
+        "token_exchange",
         "Google authorization could not be completed.",
       );
     }
@@ -158,7 +168,8 @@ export class GoogleLoginService {
         ? tokenPayload.access_token.trim()
         : "";
     if (!accessToken || accessToken.length > 4096) {
-      throw new BadRequestException(
+      throw new GoogleLoginFailure(
+        "token_exchange",
         "Google authorization could not be completed.",
       );
     }
@@ -181,12 +192,21 @@ export class GoogleLoginService {
           ? profile.email.trim().toLowerCase()
           : "";
       const name = typeof profile.name === "string" ? profile.name.trim() : "";
-      if (!email.includes("@") || profile.email_verified !== true) {
-        throw new Error("invalid_profile");
-      }
+      if (!email.includes("@"))
+        throw new GoogleLoginFailure(
+          "userinfo",
+          "Google account profile could not be read.",
+        );
+      if (profile.email_verified !== true)
+        throw new GoogleLoginFailure(
+          "unverified_email",
+          "Google account profile could not be read.",
+        );
       return { email, name: name || email };
-    } catch {
-      throw new BadRequestException(
+    } catch (caught) {
+      if (caught instanceof GoogleLoginFailure) throw caught;
+      throw new GoogleLoginFailure(
+        "userinfo",
         "Google account profile could not be read.",
       );
     }

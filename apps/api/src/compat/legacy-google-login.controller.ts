@@ -11,9 +11,11 @@ import {
 } from "@nestjs/common";
 import { loadConfig } from "@holymedia/config";
 import type { FastifyReply } from "fastify";
+import { AuditService } from "../audit/audit.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import {
   GOOGLE_LOGIN_STATE_COOKIE,
+  GoogleLoginFailure,
   GoogleLoginService,
 } from "../auth/google-login.service.js";
 import { cookieReply, CookieService } from "../auth/cookie.service.js";
@@ -28,6 +30,7 @@ export class LegacyGoogleLoginController {
     @Inject(GoogleLoginService) private readonly google: GoogleLoginService,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(CookieService) private readonly cookies: CookieService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Get("start")
@@ -60,7 +63,8 @@ export class LegacyGoogleLoginController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     if (error || !code || !state) {
-      if (this.config.qrsTestRestrictedAuth) return this.loginErrorRedirect();
+      if (this.config.qrsTestRestrictedAuth)
+        return this.loginErrorRedirect("google_oauth", request, reply);
       throw new BadRequestException("Google Login was not completed.");
     }
     if (
@@ -69,23 +73,45 @@ export class LegacyGoogleLoginController {
         request.cookies?.[GOOGLE_LOGIN_STATE_COOKIE],
       )
     ) {
-      if (this.config.qrsTestRestrictedAuth) return this.loginErrorRedirect();
+      if (this.config.qrsTestRestrictedAuth)
+        return this.loginErrorRedirect("state_cookie_mismatch", request, reply);
       throw new BadRequestException("Google Login session is invalid.");
     }
     let stateResult: Awaited<ReturnType<GoogleLoginService["consumeState"]>>;
-    let result: Awaited<ReturnType<AuthService["loginWithGoogle"]>>;
     try {
       stateResult = await this.google.consumeState(state);
-      const profile = await this.google.exchangeCode(code);
+    } catch (caught) {
+      if (
+        this.config.qrsTestRestrictedAuth &&
+        caught instanceof BadRequestException
+      )
+        return this.loginErrorRedirect("state_expired", request, reply);
+      throw caught;
+    }
+    let profile: Awaited<ReturnType<GoogleLoginService["exchangeCode"]>>;
+    try {
+      profile = await this.google.exchangeCode(code);
+    } catch (caught) {
+      if (
+        this.config.qrsTestRestrictedAuth &&
+        caught instanceof BadRequestException
+      )
+        return this.loginErrorRedirect(
+          caught instanceof GoogleLoginFailure ? caught.stage : "userinfo",
+          request,
+          reply,
+        );
+      throw caught;
+    }
+    let result: Awaited<ReturnType<AuthService["loginWithGoogle"]>>;
+    try {
       result = await this.auth.loginWithGoogle(profile, request);
     } catch (caught) {
       if (
         this.config.qrsTestRestrictedAuth &&
-        (caught instanceof BadRequestException ||
-          caught instanceof UnauthorizedException)
-      ) {
-        return this.loginErrorRedirect();
-      }
+        caught instanceof UnauthorizedException
+      )
+        return this.loginErrorRedirect("test_access_denied", request, reply);
       throw caught;
     }
     this.cookies.setSession(reply, result.sessionToken);
@@ -99,8 +125,30 @@ export class LegacyGoogleLoginController {
     };
   }
 
-  private loginErrorRedirect() {
-    return { url: "/auth?error=google_login", statusCode: 302 };
+  private async loginErrorRedirect(
+    reason: string,
+    request: RequestWithAuth,
+    reply: FastifyReply,
+  ) {
+    await this.audit.record({
+      eventType: "google_login_callback_failure",
+      success: false,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { reason },
+    });
+    cookieReply(reply).clearCookie(
+      GOOGLE_LOGIN_STATE_COOKIE,
+      this.cookieOptions(),
+    );
+    const userFacingError =
+      reason === "state_cookie_mismatch" || reason === "state_expired"
+        ? "google_session"
+        : reason === "test_access_denied"
+          ? "google_access"
+          : reason === "google_oauth"
+            ? "google_oauth"
+            : "google_provider";
+    return { url: `/auth?error=${userFacingError}`, statusCode: 302 };
   }
 
   private cookieOptions() {

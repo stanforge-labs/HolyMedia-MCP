@@ -43,7 +43,21 @@ const copy = {
     create: "Зарегистрироваться",
     send: "Отправить ссылку",
     passwordsMismatch: "Пароли не совпадают.",
-    requestFailed: "Не удалось выполнить запрос. Попробуйте ещё раз.",
+    invalidEmail: "Укажите корректный адрес электронной почты.",
+    invalidCredentials: "Неверный email или пароль.",
+    accessDenied: "Этой учётной записи не предоставлен доступ к TEST.",
+    invalidInput: "Проверьте введённые данные и попробуйте снова.",
+    rateLimited: "Слишком много попыток. Подождите и повторите вход.",
+    serviceUnavailable: "Сервис входа временно недоступен. Повторите позже.",
+    networkFailed:
+      "Нет связи с сервисом входа. Проверьте подключение и повторите попытку.",
+    googleOauth:
+      "Вход через Google был отменён или не завершился. Попробуйте снова.",
+    googleSession:
+      "Сессия входа через Google истекла или не совпала. Начните вход заново в этом браузере.",
+    googleProvider: "Google не подтвердил вход. Попробуйте снова позже.",
+    googleAccess:
+      "Этот Google-аккаунт не привязан к разрешённому владельцу TEST workspace.",
     resetSent:
       "Если такой аккаунт есть, мы отправили письмо со ссылкой для сброса пароля.",
   },
@@ -74,7 +88,21 @@ const copy = {
     create: "Create account",
     send: "Send link",
     passwordsMismatch: "Passwords do not match.",
-    requestFailed: "We could not complete the request. Please try again.",
+    invalidEmail: "Enter a valid email address.",
+    invalidCredentials: "Invalid email or password.",
+    accessDenied: "This account has not been granted TEST access.",
+    invalidInput: "Check the entered information and try again.",
+    rateLimited: "Too many attempts. Wait and try again.",
+    serviceUnavailable:
+      "Sign-in service is temporarily unavailable. Try again later.",
+    networkFailed:
+      "Cannot reach the sign-in service. Check your connection and try again.",
+    googleOauth: "Google sign-in was cancelled or did not finish. Try again.",
+    googleSession:
+      "Google sign-in session expired or did not match. Start again in this browser.",
+    googleProvider: "Google could not confirm sign-in. Try again later.",
+    googleAccess:
+      "This Google account is not linked to the authorized TEST workspace owner.",
     resetSent: "If an account exists, we sent an email with a reset link.",
   },
 };
@@ -83,7 +111,10 @@ async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
     credentials: "include",
   });
+  if (!response.ok) throw new Error("csrf_unavailable");
   const data = (await response.json()) as { csrfToken: string };
+  if (typeof data.csrfToken !== "string" || !data.csrfToken)
+    throw new Error("csrf_unavailable");
   return data.csrfToken;
 }
 
@@ -126,12 +157,13 @@ export default function AuthPage() {
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const requested = query.get("mode");
-    if (restrictedTestAuth && query.get("error") === "google_login") {
-      setError(
-        language === "ru"
-          ? "Вход через Google не завершён или этот аккаунт не допущен к TEST. Используйте разрешённый Google-аккаунт."
-          : "Google sign-in was not completed or this account has no TEST access. Use the approved Google account.",
-      );
+    if (restrictedTestAuth) {
+      const googleError = query.get("error");
+      if (googleError === "google_session") setError(t.googleSession);
+      else if (googleError === "google_provider") setError(t.googleProvider);
+      else if (googleError === "google_access") setError(t.googleAccess);
+      else if (googleError === "google_oauth" || googleError === "google_login")
+        setError(t.googleOauth);
     }
     const transaction = query.get("oauth_transaction") ?? "";
     setNextPath(safeDashboardPath(query.get("next")));
@@ -220,6 +252,16 @@ export default function AuthPage() {
     event.preventDefault();
     if (busy) return;
     const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const emailInput = event.currentTarget.elements.namedItem("email");
+    if (
+      !(emailInput instanceof HTMLInputElement) ||
+      !emailInput.checkValidity() ||
+      !email
+    ) {
+      setError(t.invalidEmail);
+      return;
+    }
     const password = String(form.get("password") ?? "");
     const confirmPassword = String(form.get("confirmPassword") ?? "");
     if (mode === "signup" && password !== confirmPassword) {
@@ -232,12 +274,12 @@ export default function AuthPage() {
     let navigating = false;
     const body =
       mode === "forgot"
-        ? { email: String(form.get("email") ?? "") }
+        ? { email }
         : mode === "login"
-          ? { email: String(form.get("email") ?? ""), password }
+          ? { email, password }
           : {
               name: String(form.get("name") ?? ""),
-              email: String(form.get("email") ?? ""),
+              email,
               password,
               confirmPassword,
             };
@@ -254,7 +296,20 @@ export default function AuthPage() {
           body: JSON.stringify(body),
         },
       );
-      if (!response.ok) throw new Error("request_failed");
+      if (!response.ok) {
+        setError(
+          response.status === 401
+            ? t.invalidCredentials
+            : response.status === 403
+              ? t.accessDenied
+              : response.status === 429
+                ? t.rateLimited
+                : response.status >= 500
+                  ? t.serviceUnavailable
+                  : t.invalidInput,
+        );
+        return;
+      }
       if (mode === "forgot") {
         setMessage(t.resetSent);
       } else if (restrictedTestAuth && mode === "login" && !oauthTransaction) {
@@ -274,7 +329,7 @@ export default function AuthPage() {
         );
       }
     } catch {
-      setError(t.requestFailed);
+      setError(t.networkFailed);
     } finally {
       if (!navigating) setBusy(false);
     }
