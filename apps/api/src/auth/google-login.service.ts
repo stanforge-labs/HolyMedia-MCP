@@ -110,7 +110,11 @@ export class GoogleLoginService {
       );
     }
     return {
-      nextPath: normalizeNextPath(record.nextPath, this.config.publicBaseUrl),
+      nextPath: normalizeNextPath(
+        record.nextPath,
+        this.config.publicBaseUrl,
+        this.config.qrsTestRestrictedAuth,
+      ),
     };
   }
 

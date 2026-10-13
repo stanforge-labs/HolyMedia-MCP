@@ -207,10 +207,20 @@ describe("GoogleLoginService", () => {
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
     const database = databaseMock();
+    database.client.googleLoginState.findUnique.mockResolvedValue({
+      id: "state-id",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      nextPath: "/auth?connected=1",
+    });
+    database.client.googleLoginState.updateMany.mockResolvedValue({ count: 1 });
     const service = new GoogleLoginService(database as never);
-    await service.start();
+    const started = await service.start();
     expect(database.client.googleLoginState.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ nextPath: "/auth?connected=1" }),
+    });
+    expect(await service.consumeState(started.state)).toEqual({
+      nextPath: "/auth?connected=1",
     });
     await service.start("https://evil.example/dashboard");
     expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
