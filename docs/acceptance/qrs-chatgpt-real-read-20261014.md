@@ -1,5 +1,7 @@
 # Q: ChatGPT TEST read — native-client evidence (2026-10-14 local)
 
+**Later update:** Claude's separate TEST grant and two real READ calls are now independently audited. See [dual-client checkpoint and controlled-write plan](qrs-claude-real-read-and-write-plan-20261014.md). The “R not connected” text below records the earlier time of this ChatGPT-only checkpoint, not current status.
+
 Status: **REAL CLIENT READ PASS; Q A/B/C/M INCOMPLETE.** The user reported that the ChatGPT `mcp__Mcp_test__` connector returned exactly the TEST Google Ads account `8590146099` and three PAUSED Search campaigns `24324170853`, `24339483523`, `24341802696`, each at USD 2/day. The server does not persist successful response bodies: exact account/campaign content is user-observed, while the authenticated invocation and success are independently server-audited. No preview or Google Ads mutation was made in this ChatGPT run.
 
 ## Sanitized correlation (UTC, 2026-10-13)
