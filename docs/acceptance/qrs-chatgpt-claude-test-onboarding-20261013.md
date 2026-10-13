@@ -4,7 +4,7 @@ Status: **TEST HTTPS TRANSPORT DEPLOYED; Q/R/S LIVE NOT RUN**. The user approved
 
 **Current TEST login readiness (2026-10-13, after real user attempts):** the rotated Google Login credential is present only in the protected TEST vault. Two completed Google callbacks were denied at the existing-OWNER authorization check; six password attempts were rejected as invalid credentials. The real OWNER has **not** logged in. The TEST-only error UI and callback diagnostics were deployed; a dormant exact-owner Google binding is coded but intentionally not configured pending separate approval. Do not retry arbitrary passwords or assume production accounts exist in TEST. No real client OAuth grant or authenticated MCP call has yet been observed.
 
-Read-only external follow-up: authorization-server and protected-resource metadata each returned HTTP 200, canonical issuer `https://mcp-test.holymedia.kz`, resource `https://mcp-test.holymedia.kz/mcp`, and S256 PKCE; unauthenticated `/mcp?profile=google_ads_write` returned 401 and `/api/v1/admin` 404. These are transport/discovery proofs only. Source HEAD after the documentation update is `9ab139d1480728cc7c4d2e065e92bdb4d1428dc2`; the running TEST API/Web remain at `367a634`.
+Read-only external follow-up: authorization-server and protected-resource metadata each returned HTTP 200, canonical issuer `https://mcp-test.holymedia.kz`, resource `https://mcp-test.holymedia.kz/mcp`, and S256 PKCE; unauthenticated `/mcp?profile=google_ads_write` returned 401 and `/api/v1/admin` 404. These are transport/discovery proofs only. The running TEST API/Web remain at `367a634`; the newer dormant binding source is not deployed.
 
 ## One recommended transport
 
