@@ -11,6 +11,7 @@ Status: **TEST LOGIN FAILURE DIAGNOSED / UI FIX DEPLOYED / REAL OWNER LOGIN BLOC
 - The screenshot-exposed passwords must be treated as compromised: rotate them through the respective legitimate account recovery/settings flows and revoke old sessions where supported. No production credential was changed. Do not reuse a production password for TEST.
 - Live TEST after deployment: API/Web healthy with zero restarts/OOM; TEST `/auth` 200; production `/health` and `/ready` 200. Latest read-only VPS sample: available RAM 770 MiB, free swap 1165 MiB, memory PSI some/full avg10 0.52/0.19. Retain the prior TEST image digests and rollback copies; do not deploy the dormant binding until approved.
 - Q/R/S remain **NOT RUN** in real ChatGPT/Claude. Google Ads provider READ/VALIDATE_ONLY/WRITE during this diagnosis: **0/0/0**. Historic 20/20 advertising acceptance is unchanged.
+- Current source `61a4c9e` full Windows suite and foundation Linux CI passed; 23 DB/Redis-backed local tests were skipped, not counted as pass. Its API image CI failed **before compilation** on public ECR Node base-image HTTP 429 (`Data limit exceeded`); GitHub Actions write permission was unavailable to rerun the failed job (403). No image from this newer source was deployed. PMax/media/Clone targeted regression after source changes: 169/169 PASS, not live acceptance.
 
 ## Deployment update — 2026-10-13
 
