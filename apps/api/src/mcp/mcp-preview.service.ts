@@ -2635,7 +2635,13 @@ export class McpPreviewService {
     )
       throw new PreviewError("preview_not_confirmed");
     await this.assertNativeOAuthApproval(principal, preview);
-    if (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    const qrsKeywordStatusWrite =
+      this.config.qrsTestGoogleConfirmedWriteEnabled &&
+      preview.operation === "GOOGLE_KEYWORD_STATUS";
+    if (
+      !qrsKeywordStatusWrite &&
+      (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    )
       throw new GoogleAdsWriteError(
         "confirmed_write_disabled",
         "Подтверждённая запись выключена на сервере.",

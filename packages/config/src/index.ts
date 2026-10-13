@@ -67,6 +67,7 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
   QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
+  QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: z.string().optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: z.string().optional(),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
@@ -207,6 +208,7 @@ export type AppConfig = {
   providerGoogleLoginRedirectUri: string | undefined;
   providerGoogleLoginScopes: string;
   qrsTestRestrictedAuth: boolean;
+  qrsTestGoogleConfirmedWriteEnabled: boolean;
   qrsTestGoogleOwnerBindingEmail: string | undefined;
   qrsTestGoogleOwnerBindingUserId: string | undefined;
   providerMetaClientId: string | undefined;
@@ -478,6 +480,28 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       "Restricted TEST MCP requires the exact TEST origin and account.",
     );
 
+  // This dedicated Google commit gate must never activate the V2 generic,
+  // Public MCP, or later-stage write surfaces. The base Google gate alone is
+  // insufficient for this deliberately separate Q/R/S acceptance runtime.
+  if (
+    value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error(
+      "Q/R/S Google confirmed write requires isolated TEST-only guards.",
+    );
+
   const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
   const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
   if (Boolean(bindingEmail) !== Boolean(bindingUserId))
@@ -543,6 +567,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,
     providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
     qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
+    qrsTestGoogleConfirmedWriteEnabled:
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED,
     qrsTestGoogleOwnerBindingEmail: bindingEmail,
     qrsTestGoogleOwnerBindingUserId: bindingUserId,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,

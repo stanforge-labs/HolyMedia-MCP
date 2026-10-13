@@ -687,6 +687,61 @@ describe("Google keyword status full generic lifecycle (mock provider only)", ()
     ).rejects.toMatchObject({ writeCode: "google_write_disabled" });
     expect(f.requests).toHaveLength(0);
   });
+  it("TEST-only Google commit stays closed with generic writes OFF until its dedicated gate is enabled", async () => {
+    const f = fixture();
+    Object.assign(f.previews, {
+      config: {
+        ...loadConfig(),
+        qrsTestGoogleConfirmedWriteEnabled: false,
+        previewOnly: true,
+        confirmedWriteEnabled: false,
+      },
+    });
+    const p = await f.preview();
+    await f.approve(p);
+    await expect(
+      f.previews.commit(principal, p.preview_token),
+    ).rejects.toMatchObject({ writeCode: "confirmed_write_disabled" });
+    expect(f.writes()).toBe(0);
+  });
+  it("dedicated TEST Google gate permits only a browser-approved keyword commit while generic writes remain OFF", async () => {
+    const f = fixture();
+    Object.assign(f.previews, {
+      config: {
+        ...loadConfig(),
+        qrsTestGoogleConfirmedWriteEnabled: true,
+        previewOnly: true,
+        confirmedWriteEnabled: false,
+        publicMcpWriteScopeEnabled: false,
+        publicMcpControlledWriteEnabled: false,
+      },
+    });
+    const p = await f.preview();
+    expect(f.writes()).toBe(0);
+    await f.approve(p);
+    const result = await f.previews.commit(principal, p.preview_token);
+    expect(result).toMatchObject({ status: "VERIFIED" });
+    expect(f.writes()).toBe(1);
+    expect(f.row().consumedAt).not.toBeNull();
+  });
+  it("dedicated TEST gate cannot authorize a different Google operation", async () => {
+    const f = fixture();
+    Object.assign(f.previews, {
+      config: {
+        ...loadConfig(),
+        qrsTestGoogleConfirmedWriteEnabled: true,
+        previewOnly: true,
+        confirmedWriteEnabled: false,
+      },
+    });
+    const p = await f.preview();
+    await f.approve(p);
+    f.row().operation = "GOOGLE_STAGE1_CAMPAIGN_CREATE";
+    await expect(
+      f.previews.commit(principal, p.preview_token),
+    ).rejects.toMatchObject({ writeCode: "confirmed_write_disabled" });
+    expect(f.writes()).toBe(0);
+  });
   it("removed or rebound keyword at prewrite reread reports stale, not a mutation", async () => {
     const f = fixture(),
       p = await f.preview();

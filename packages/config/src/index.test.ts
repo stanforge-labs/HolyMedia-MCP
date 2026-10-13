@@ -9,6 +9,7 @@ describe("v2 configuration", () => {
     expect(config.providerGoogleAdsStage2WriteEnabled).toBe(false);
     expect(config.providerGoogleAdsStage3WriteEnabled).toBe(false);
     expect(config.providerGoogleAdsStage4WriteEnabled).toBe(false);
+    expect(config.qrsTestGoogleConfirmedWriteEnabled).toBe(false);
     expect(config.googleAdsWriteAccountAllowlist).toEqual([]);
     expect(
       loadConfig({
@@ -74,6 +75,46 @@ describe("v2 configuration", () => {
           ...invalid,
         }),
       ).toThrow(/Restricted TEST MCP/);
+  });
+  it("enables a dedicated Q/R/S Google commit gate only with exact TEST isolation and generic writes OFF", () => {
+    const isolated = {
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false",
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false",
+    };
+    expect(loadConfig(isolated)).toMatchObject({
+      qrsTestRestrictedAuth: true,
+      qrsTestGoogleConfirmedWriteEnabled: true,
+      providerGoogleAdsWriteEnabled: true,
+      previewOnly: true,
+      confirmedWriteEnabled: false,
+      publicMcpWriteScopeEnabled: false,
+      publicMcpControlledWriteEnabled: false,
+      googleAdsWriteAccountAllowlist: ["8590146099"],
+    });
+    for (const unsafe of [
+      { QRS_TEST_RESTRICTED_AUTH: "false" },
+      { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
+      { PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false" },
+      { V2_PREVIEW_ONLY: "false" },
+      { V2_CONFIRMED_WRITE_ENABLED: "true" },
+      { PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true" },
+      { PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "true" },
+    ])
+      expect(() => loadConfig({ ...isolated, ...unsafe })).toThrow(
+        /Q\/R\/S Google confirmed write|Restricted TEST MCP/,
+      );
   });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
     expect(
