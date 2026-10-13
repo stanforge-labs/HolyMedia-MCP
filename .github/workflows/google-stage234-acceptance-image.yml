@@ -1,7 +1,7 @@
 name: Google Stage234 isolated API image
 on:
   push:
-    branches: [codex/google-ads-write-full-scope-final]
+    branches: [codex/google-ads-write-full-scope-final, codex/qrs-test-auth-recovery]
 permissions:
   contents: read
   packages: write

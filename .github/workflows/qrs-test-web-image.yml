@@ -2,7 +2,7 @@ name: QRS TEST Web image (no deploy)
 
 on:
   push:
-    branches: [codex/google-ads-write-full-scope-final]
+    branches: [codex/google-ads-write-full-scope-final, codex/qrs-test-auth-recovery]
     paths:
       - .github/workflows/qrs-test-web-image.yml
       - infra/Dockerfile.v2
