@@ -2,7 +2,7 @@
 
 Status: **LOCAL CODE/TEST PREPARATION PASS; real-client Q/R/S BLOCKED**. This is a design and read-only preparation record, not permission to publish an ingress, change DNS/firewall/production routing, issue a service key, or perform Google Ads mutations.
 
-The user selected `mcp-test.holymedia.kz`. Read-only DNS/VPS preflight found no existing record but also found shared 80/443 Nginx and current-host memory/swap pressure; [the TEST HTTPS plan](mcp-test-https-deployment-plan-20261013.md) recommends a separate TEST VPS/IP. The selected hostname is **not** a provisioned endpoint.
+The user selected `mcp-test.holymedia.kz` on the **existing VPS**. The dedicated-host proposal is superseded; [the single-VPS approval packet](mcp-test-single-vps-deployment-plan-20261013.md) records the measured memory/swap risk, TEST-only consolidation, exact DNS/TLS/Nginx/Compose diff and rollback. The selected hostname is **not** a provisioned endpoint.
 
 ## Verified local boundary
 

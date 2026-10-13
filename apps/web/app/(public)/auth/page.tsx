@@ -10,6 +10,8 @@ import {
 } from "../../components/language-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const googleLoginEnabled =
+  process.env.NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED !== "false";
 type AuthMode = "login" | "signup" | "forgot";
 const copy = {
   ru: {
@@ -311,7 +313,7 @@ export default function AuthPage() {
                 : t.forgotLead}
           </p>
 
-          {mode !== "forgot" && (
+          {mode !== "forgot" && googleLoginEnabled && (
             <a
               className="secondary-button google-login-button"
               href={`${API}/auth/google/start?${new URLSearchParams({

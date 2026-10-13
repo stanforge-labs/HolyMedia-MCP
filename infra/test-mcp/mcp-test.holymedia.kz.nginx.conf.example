@@ -1,4 +1,5 @@
-# Design-only template for a separately approved, dedicated TEST host.
+# SUPERSEDED design-only template for a dedicated TEST host.
+# User chose the existing VPS; use mcp-test.single-vps.nginx.conf.example.
 # Never install on the production VPS or enable before DNS, TEST isolation,
 # a separate certificate, and an operator-reviewed deployment approval.
 # The HTTPS block must not be enabled until the certificate exists.

@@ -1,6 +1,6 @@
 # Q/R/S TEST onboarding — ChatGPT + Claude
 
-Status: **PREPARATION ONLY**. The user selected `mcp-test.holymedia.kz`; DNS/HTTPS deployment is not authorized or performed. Q/R/S LIVE NOT RUN. Codex may perform development and smoke tests but is not Q. Historical 20/20 Google Ads advertising acceptance remains separate and is not repeated here. The exact read-only DNS/VPS findings and proposed infrastructure diff are in [the TEST HTTPS deployment plan](mcp-test-https-deployment-plan-20261013.md).
+Status: **PREPARATION ONLY**. The user selected `mcp-test.holymedia.kz` on the **existing VPS**; DNS/HTTPS deployment is not authorized or performed. Q/R/S LIVE NOT RUN. Codex may perform development and smoke tests but is not Q. Historical 20/20 Google Ads advertising acceptance remains separate and is not repeated here. The current infrastructure diff and gates are in [the single-VPS TEST deployment packet](mcp-test-single-vps-deployment-plan-20261013.md).
 
 ## One recommended transport
 
@@ -32,6 +32,6 @@ For **each** client, retain evidence of the client tool permission if shown, the
 
 Local source has private Streamable HTTP, OAuth metadata and PKCE/redirect/consent guards. Targeted contract/transport tests: 48 PASS, 1 DB-backed integration SKIPPED in the current Windows run; PMax/media/clone targeted tests: 165 PASS. Per-tool OAuth read vs read/write metadata was added and typechecked. No remote ChatGPT/Claude OAuth flow, protected TEST HTTPS origin, live tools/list or client consent was verified; Q/R/S remain BLOCKED.
 
-**Next user action:** review the recommended dedicated TEST VPS/IP proposal and give a separate, explicit TEST-only provisioning/ingress authorization. The actual IP, certificate method and credential-provisioning plan must be reviewed before execution. Until then, continue only local/mock/read-only work; do not register a tunnel or expose a route.
+**Next user action:** review the single-VPS TEST-only packet for `77.240.38.131` and explicitly authorize its bounded DNS/TLS/Nginx/TEST-container changes, conditional on the stated capacity/rollback gates. The DNS A record may require one portal action because no authorized DNS API is attached. Until approval, continue only local/mock/read-only work; do not register a tunnel or expose a route.
 
 Official references: [ChatGPT custom MCP connection](https://developers.openai.com/api/docs/guides/custom-mcp-server), [OpenAI OAuth tool metadata](https://developers.openai.com/plugins/build/auth), [Secure MCP Tunnel limits](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels), [Claude remote connector and network requirements](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).

@@ -1,0 +1,101 @@
+# Design-only TEST overlay. Do not run until the single-VPS change packet is approved.
+# Existing TEST PostgreSQL/Redis/vault stay on the acceptance network; production
+# containers, network and volumes are deliberately not referenced.
+name: holymedia-qrs-test
+
+services:
+  qrs_api:
+    image: ${QRS_TEST_API_IMAGE:?pin a verified immutable CI digest}
+    restart: on-failure:3
+    init: true
+    env_file:
+      - ${QRS_TEST_ENV_FILE:?existing protected TEST-only env file required}
+    environment:
+      NODE_ENV: production
+      API_PORT: "4000"
+      HOLYMEDIA_PUBLIC_BASE_URL: https://mcp-test.holymedia.kz
+      CORS_ORIGINS: https://mcp-test.holymedia.kz
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099"
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "false"
+      V2_PREVIEW_ONLY: "true"
+      V2_CONFIRMED_WRITE_ENABLED: "false"
+      V2_WRITE_ACCOUNT_ALLOWLIST: ""
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+    command: ["pnpm", "--filter", "@holymedia/api", "start"]
+    ports:
+      - "127.0.0.1:14404:4000"
+    networks:
+      - acceptance
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.75
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  qrs_web:
+    image: ${QRS_TEST_WEB_IMAGE:?pin a verified immutable CI digest}
+    restart: on-failure:3
+    init: true
+    working_dir: /workspace/apps/web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: https://mcp-test.holymedia.kz
+      NEXT_PUBLIC_PUBLIC_BASE_URL: https://mcp-test.holymedia.kz
+      NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED: "false"
+    command: ["./node_modules/.bin/next", "start"]
+    ports:
+      - "127.0.0.1:13300:3000"
+    networks:
+      - frontend
+    mem_limit: 384m
+    memswap_limit: 384m
+    cpus: 0.5
+    pids_limit: 96
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/auth').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  acceptance:
+    external: true
+    name: holymedia-google-acceptance_stage234
+  frontend:
+    driver: bridge

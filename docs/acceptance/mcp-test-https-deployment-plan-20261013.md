@@ -1,5 +1,7 @@
 # mcp-test.holymedia.kz — TEST-only HTTPS deployment proposal
 
+**SUPERSEDED by user decision:** no new VPS/IP. Use the [single-VPS approval-gated packet](mcp-test-single-vps-deployment-plan-20261013.md). This document remains as historical design evidence only; do not deploy its dedicated-host template.
+
 Status: **DESIGN / READ-ONLY PREFLIGHT ONLY**. No DNS, TLS, Nginx, firewall, tunnel, credential, container or Google Ads mutation was made. Q/R/S are not live. The 20/20 advertising acceptance remains historical LIVE PASS.
 
 ## Source evidence, 2026-10-13
