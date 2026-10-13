@@ -174,6 +174,18 @@ describe("Google private profile: required PPC P47–53", () => {
       profile.find((tool) => tool.name === "google_ads_targeting_preview")!
         .annotations!.readOnlyHint,
     ).toBe(false);
+    expect(
+      profile.find((tool) => tool.name === "get_campaign_structure")!
+        .securitySchemes,
+    ).toEqual([{ type: "oauth2", scopes: ["adforge:mcp:read"] }]);
+    expect(
+      profile.find((tool) => tool.name === "commit_preview")!.securitySchemes,
+    ).toEqual([
+      {
+        type: "oauth2",
+        scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+      },
+    ]);
     expect(profile[0]!.inputSchema).toEqual(
       googleWriteProfileInputSchema(profile[0]!),
     );

@@ -205,6 +205,7 @@ export type GoogleWriteClientTool = {
   description?: string;
   inputSchema: Record<string, unknown>;
   annotations?: Record<string, unknown>;
+  securitySchemes?: Array<{ type: "oauth2"; scopes: string[] }>;
 };
 
 type ClientSchema = Record<string, unknown>;
@@ -891,6 +892,15 @@ export function googleWriteToolProfile<T extends GoogleWriteClientTool>(
       return {
         ...tool,
         inputSchema: googleWriteProfileInputSchema(tool)!,
+        // Client metadata only; authorization remains enforced by the server.
+        securitySchemes: [
+          {
+            type: "oauth2" as const,
+            scopes: read
+              ? ["adforge:mcp:read"]
+              : ["adforge:mcp:read", "adforge:mcp:write"],
+          },
+        ],
         annotations: {
           ...tool.annotations,
           readOnlyHint: read,
