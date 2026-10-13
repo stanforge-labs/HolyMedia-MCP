@@ -4,6 +4,19 @@ Verdict: **NOT READY**. Named TEST advertising acceptance A–P/T–W is 20/20 L
 
 2026-10-13 delta: the prior six Moderate dependency advisories are patched in the TEST feature branch and local audit is clear; this is not a production release. Exact-owner Google binding is approved in principle but awaits explicit protected email selection, TEST-only activation and real browser verification. Q/R/S remain NOT RUN, and PMax/Clone LIVE gates remain open. Keep release verdict **NOT READY**.
 
+### Dependency advisory disposition (feature branch only)
+
+| Audit ID | Package/path                               | Former risk                      | New resolved version |
+| -------- | ------------------------------------------ | -------------------------------- | -------------------- |
+| 1239991  | `js-yaml` through Swagger                  | Excessive CPU on crafted YAML    | 5.4.1                |
+| 1240090  | `fast-uri` 4.x through Fastify serializers | URI host interpretation mismatch | 4.1.5                |
+| 1240091  | `fast-uri` 3.x through Ajv                 | URI host interpretation mismatch | 3.1.8                |
+| 1240093  | `fast-uri` 4.x through Fastify serializers | `mailto:` URI parsing/injection  | 4.1.5                |
+| 1240103  | `brace-expansion` through `minimatch`      | Quadratic expansion work         | 5.0.12               |
+| 1240639  | `fastify` in API runtime                   | HTTP/2 trailer denial of service | 5.12.5               |
+
+These are compatible patch-version updates with full local tests, build, Prisma validation, secret scan and `pnpm audit --audit-level moderate` PASS (`No known vulnerabilities found`). This proves only the feature-branch lockfile and tested image, not production remediation. Preserve the historical six-Moderate assessment as dated evidence rather than rewriting it.
+
 ## Candidate and ancestry
 
 Audited base branch: `codex/google-ads-write-full-scope-final`, base HEAD `9e3a3dc70c4e000a2db789f292d6d853cae6dcb9`. Resolve the **current** candidate SHA with `git rev-parse HEAD`; a tracked document cannot safely self-reference its own final commit hash. `origin/codex/google-ads-stage01-integration-final` and `origin/codex/google-ads-write-stage234-integration` were Git ancestors of that base. Individual Stage 2/3/4 topic tips were **not** all literal ancestors; the integrated candidate must be reviewed by content/tests, not by claiming a straight merge of every topic branch. The existing Stage 0+1 release candidate is untouched. The private-readiness docs/probe were selectively committed and tested as an engineering checkpoint, **not** approved as a production release candidate.
