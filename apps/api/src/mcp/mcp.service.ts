@@ -1,4 +1,5 @@
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { loadConfig, type AppConfig } from "@holymedia/config";
 import {
   GOOGLE_STAGE2_ADVANCED_TOOLS,
   stage2AdvancedToolIntent,
@@ -491,6 +492,7 @@ function googleKeywordStatuses(value: unknown): string[] | undefined {
 
 @Injectable()
 export class McpService {
+  private readonly config: AppConfig = loadConfig();
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(ProviderService) private readonly providers: ProviderService,
@@ -665,6 +667,23 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (this.config.qrsTestRestrictedAuth) {
+      // The OAuth principal's empty accountIds means ALL_CONNECTED, not a
+      // read allowlist. Keep the entire restricted TEST runtime single-account
+      // even if the caller omits the profile query or the DB is misconfigured.
+      if (!GOOGLE_WRITE_PROFILE_TOOLS.includes(name))
+        throw new ForbiddenException(
+          "Tool is unavailable in restricted TEST MCP.",
+        );
+      validateGoogleWriteProfileArguments(name, rawArguments);
+      if (
+        (args.provider !== undefined && args.provider !== "GOOGLE_ADS") ||
+        (args.account_id !== undefined && args.account_id !== "8590146099")
+      )
+        throw new ForbiddenException(
+          "Account is unavailable in restricted TEST MCP.",
+        );
+    }
     if (
       (GOOGLE_TRACKING_AUDIT_TOOLS as readonly string[]).includes(name) &&
       args.provider === "GOOGLE_ADS"
@@ -2533,6 +2552,9 @@ export class McpService {
         workspaceId: principal.workspaceId,
         enabled: true,
         ...(provider ? { provider } : {}),
+        ...(this.config.qrsTestRestrictedAuth
+          ? { provider: "GOOGLE_ADS", externalAccountId: "8590146099" }
+          : {}),
         ...(principal.accountIds.length
           ? { id: { in: principal.accountIds } }
           : {}),
@@ -2540,7 +2562,14 @@ export class McpService {
       },
       orderBy: { displayName: "asc" },
     });
-    return accounts.map((account) => this.accountResource(account));
+    return accounts
+      .filter(
+        (account) =>
+          !this.config.qrsTestRestrictedAuth ||
+          (account.provider === "GOOGLE_ADS" &&
+            account.externalAccountId === "8590146099"),
+      )
+      .map((account) => this.accountResource(account));
   }
 
   private async listAdvertisingAccounts(
@@ -2703,6 +2732,13 @@ export class McpService {
     const provider = providerId(args.provider);
     const requested = text(args.account_id || args.accountId);
     if (!requested) throw new ForbiddenException("account_id is required.");
+    if (
+      this.config.qrsTestRestrictedAuth &&
+      (provider !== "GOOGLE_ADS" || requested !== "8590146099")
+    )
+      throw new ForbiddenException(
+        "Account is unavailable in restricted TEST MCP.",
+      );
     const identifiers: Array<Record<string, string>> = [
       { externalAccountId: requested },
     ];
@@ -2720,6 +2756,9 @@ export class McpService {
     });
     if (
       !account ||
+      (this.config.qrsTestRestrictedAuth &&
+        (account.provider !== "GOOGLE_ADS" ||
+          account.externalAccountId !== "8590146099")) ||
       (principal.accountIds.length &&
         !principal.accountIds.includes(account.id))
     ) {

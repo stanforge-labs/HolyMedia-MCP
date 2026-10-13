@@ -51,6 +51,7 @@ export class McpController {
   private readonly endpoints = oauthEndpoints();
   private readonly publicWriteScopeEnabled =
     loadConfig().publicMcpWriteScopeEnabled;
+  private readonly restrictedTest = loadConfig().qrsTestRestrictedAuth;
 
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
@@ -205,7 +206,16 @@ export class McpController {
           "invalid_request",
           "Profile доступен только на private MCP.",
         );
-      profile = forcedProfile ?? googleWriteProfileName(selected);
+      if (this.restrictedTest && publicRoute)
+        throw new ProviderError(
+          "invalid_request",
+          "Public MCP is unavailable in restricted TEST.",
+        );
+      profile =
+        forcedProfile ??
+        googleWriteProfileName(
+          this.restrictedTest ? (selected ?? GOOGLE_WRITE_PROFILE) : selected,
+        );
     } catch {
       reply.code(200);
       return {
@@ -337,6 +347,29 @@ export class McpController {
           },
         };
       } catch (error) {
+        if (this.restrictedTest && !publicRoute) {
+          await Promise.allSettled([
+            this.audit.record({
+              eventType: "mcp_test_tool_denied",
+              actorType: principal.kind === "oauth" ? "HUMAN" : "SERVICE",
+              ...(principal.kind === "oauth"
+                ? { actorUserId: principal.userId }
+                : {}),
+              workspaceId: principal.workspaceId,
+              targetType: "mcp_tool",
+              targetId: name.slice(0, 160),
+              requestId: request.id,
+              success: false,
+              metadata: {
+                tool: name.slice(0, 120),
+                reason:
+                  error instanceof HttpException
+                    ? "policy_denied"
+                    : "provider_or_internal_error",
+              },
+            }),
+          ]);
+        }
         if (publicRoute && isPublicTool(name) && !isPublicReadTool(name)) {
           await Promise.allSettled([
             this.audit.record({

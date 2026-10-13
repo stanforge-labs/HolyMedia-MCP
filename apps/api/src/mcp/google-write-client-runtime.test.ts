@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ForbiddenException } from "@nestjs/common";
 import { McpController } from "./mcp.controller.js";
 import { extendedFixture } from "./google-extended-test.fixture.js";
 import { principal, prefix, object } from "./google-write-test.fixture.js";
+
+afterEach(() => vi.unstubAllEnvs());
 
 function response() {
   const reply = { code: vi.fn(), header: vi.fn(), send: vi.fn() };
@@ -20,6 +23,69 @@ function controller(mcp: unknown) {
   );
 }
 describe("Private Google subset and REST reuse the stock controlled lifecycle", () => {
+  it("lists only Google profile tools in restricted TEST even without a profile query", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
+    const mcp = {
+      tools: vi.fn().mockReturnValue([{ name: "legacy" }]),
+      googleWriteTools: vi.fn().mockReturnValue([{ name: "list_accounts" }]),
+    };
+    const c = controller(mcp);
+    const request = {
+      headers: { authorization: "Bearer fixture-private" },
+      query: {},
+      body: { id: 1, method: "tools/list" },
+    };
+    expect(await c.post(request as never, response() as never)).toMatchObject({
+      result: { tools: [{ name: "list_accounts" }] },
+    });
+    expect(mcp.tools).not.toHaveBeenCalled();
+  });
+  it("persists restricted TEST read denials without argument values", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
+    const record = vi.fn();
+    const c = new McpController(
+      {
+        callGoogleWriteProfile: vi
+          .fn()
+          .mockRejectedValue(new ForbiddenException()),
+      } as never,
+      { authenticate: vi.fn().mockResolvedValue(principal) } as never,
+      { authenticate: vi.fn() } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record } as never,
+      { call: vi.fn() } as never,
+    );
+    await c.post(
+      {
+        headers: { authorization: "Bearer fixture-private" },
+        query: { profile: "google_ads_write" },
+        body: {
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "list_campaigns",
+            arguments: { account_id: "4378327049" },
+          },
+        },
+      } as never,
+      response() as never,
+    );
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "mcp_test_tool_denied",
+        targetId: "list_campaigns",
+        success: false,
+        metadata: { tool: "list_campaigns", reason: "policy_denied" },
+      }),
+    );
+    expect(JSON.stringify(record.mock.calls)).not.toContain("4378327049");
+  });
   it("reused generic rename is validate-only, immutable and still requires human approval", async () => {
     const f = extendedFixture();
     const preview = object(

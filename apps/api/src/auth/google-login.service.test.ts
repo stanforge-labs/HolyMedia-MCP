@@ -229,6 +229,7 @@ describe("GoogleLoginService", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
     vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
     const database = databaseMock();

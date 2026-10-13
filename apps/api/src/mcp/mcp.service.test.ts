@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpService, V1_COMPATIBLE_MCP_TOOLS } from "./mcp.service.js";
+
+afterEach(() => vi.unstubAllEnvs());
 
 function serviceWithAccounts(
   accounts: Array<Record<string, unknown>>,
@@ -185,6 +187,67 @@ describe("MCP V1-compatible policy", () => {
     externalAccountId: "act_123456789",
     connectionId: "connection-meta",
   };
+
+  it("fails closed for restricted TEST inventory, cross-account and cross-provider reads", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
+    const testAccount = {
+      ...account,
+      id: "internal-test-account",
+      externalAccountId: "8590146099",
+    };
+    const service = serviceWithAccounts([
+      testAccount,
+      account,
+      ga4Account,
+      metaAccount,
+    ]);
+    const owner = principal();
+    await expect(
+      service.call(owner, "list_accounts", { provider: "GOOGLE_ADS" }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        account_id: "8590146099",
+        provider: "GOOGLE_ADS",
+      }),
+    ]);
+    await expect(
+      service.call(owner, "get_account_status", {
+        provider: "GOOGLE_ADS",
+        account_id: "8590146099",
+      }),
+    ).resolves.toMatchObject({ account_id: "8590146099" });
+    for (const name of [
+      "list_ad_accounts",
+      "list_connected_resources",
+      "list_connected_platforms",
+    ])
+      await expect(service.call(owner, name, {})).rejects.toThrow();
+    await expect(
+      service.call(owner, "list_campaigns", {
+        provider: "GOOGLE_ADS",
+        account_id: "4378327049",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      service.call(owner, "get_account_status", {
+        provider: "META_ADS",
+        account_id: "8590146099",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      service.call(
+        { ...owner, workspaceId: "other-workspace" },
+        "get_account_status",
+        {
+          provider: "GOOGLE_ADS",
+          account_id: "8590146099",
+        },
+      ),
+    ).rejects.toThrow();
+  });
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);

@@ -55,9 +55,25 @@ describe("v2 configuration", () => {
       { QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: "not-a-uuid" },
     ]) {
       expect(() => loadConfig({ ...binding, ...invalid })).toThrow(
-        /TEST Google OWNER binding/,
+        /TEST Google OWNER binding|Restricted TEST MCP/,
       );
     }
+  });
+  it("rejects restricted TEST startup without the exact read boundary even before OWNER binding", () => {
+    for (const invalid of [
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "" },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099,4378327049" },
+      { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
+    ])
+      expect(() =>
+        loadConfig({
+          NODE_ENV: "test",
+          QRS_TEST_RESTRICTED_AUTH: "true",
+          HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+          GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+          ...invalid,
+        }),
+      ).toThrow(/Restricted TEST MCP/);
   });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
     expect(

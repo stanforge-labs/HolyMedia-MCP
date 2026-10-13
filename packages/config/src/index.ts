@@ -466,6 +466,18 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       "GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST must contain Google customer IDs.",
     );
 
+  // Q/R/S is a single-account TEST environment. Its write allowlist alone is
+  // not a read boundary; reject unsafe startup configuration before MCP runs.
+  if (
+    value.QRS_TEST_RESTRICTED_AUTH &&
+    (publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error(
+      "Restricted TEST MCP requires the exact TEST origin and account.",
+    );
+
   const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
   const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
   if (Boolean(bindingEmail) !== Boolean(bindingUserId))
