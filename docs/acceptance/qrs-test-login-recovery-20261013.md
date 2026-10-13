@@ -1,6 +1,16 @@
 # Q/R/S TEST login recovery — 2026-10-13
 
-Status: **TEST DEPLOYED / AUTOMATED LOGIN PREFLIGHT PASS / HUMAN LOGIN PENDING**. This file contains no account emails or secrets. Production and main application/data were not changed.
+Status: **TEST LOGIN FAILURE DIAGNOSED / UI FIX DEPLOYED / REAL OWNER LOGIN BLOCKED**. This file contains no account emails or secrets. Production and main application/data were not changed.
+
+## Live failure diagnosis and repair — 2026-10-13
+
+- Read-only TEST DB inventory found exactly one active user, one active OWNER membership and the enabled TEST Google Ads account `8590146099`. The TEST database is separate from production. In a four-hour window, sanitized audit showed six password `invalid_credentials` failures and two Google `test_access_denied` failures. Google state was consumed twice; the callback reached the restricted OWNER check after provider profile validation. No Google email, password, token or hash was extracted. The evidence supports a verified Google identity that is **not authorized as the current TEST OWNER**, but does not establish its exact address. OAuth cancellation, transport failure and CSRF mismatch are not the cause of those two recorded denials.
+- Password failures are `invalid_credentials`; a plain `Admin` name is not a valid email and production-user credentials are not copied into TEST. Nginx recorded login 400/401 responses while CSRF returned 200. The prior UI collapsed these cases into a generic request error. The forgot-password mail service only logs locally and does not deliver a token, so that route is **not** a working recovery path.
+- Source commit `367a634c063492a6592e708b179ac240f9a68b61` added client-side email validation, distinct safe RU/EN error categories, safe callback-stage audit and negative browser tests. Immutable TEST API/Web images from that source were deployed without changing Nginx or production. External negative browser checks (invalid email, TEST Google denial) passed 2/2; synthetic callback errors were categorized and audited. **No real user successfully logged in.**
+- Source commit `61a4c9e467d55d97fb1f41ed40cae12199bb7369` prepared a dormant, fail-closed TEST-only mapping of one verified Google email to the existing active OWNER ID. It requires both exact config fields, the TEST origin, restricted mode and the one-account allowlist. It creates no user, workspace or role and does not modify the OWNER email. These fields are **unset in the running TEST vault**; runtime remains at `367a634c`. Enabling a mapping is an identity decision requiring separate user approval. Never infer or publish the account email from logs.
+- The screenshot-exposed passwords must be treated as compromised: rotate them through the respective legitimate account recovery/settings flows and revoke old sessions where supported. No production credential was changed. Do not reuse a production password for TEST.
+- Live TEST after deployment: API/Web healthy with zero restarts/OOM; TEST `/auth` 200; production `/health` and `/ready` 200. Latest read-only VPS sample: available RAM 770 MiB, free swap 1165 MiB, memory PSI some/full avg10 0.52/0.19. Retain the prior TEST image digests and rollback copies; do not deploy the dormant binding until approved.
+- Q/R/S remain **NOT RUN** in real ChatGPT/Claude. Google Ads provider READ/VALIDATE_ONLY/WRITE during this diagnosis: **0/0/0**. Historic 20/20 advertising acceptance is unchanged.
 
 ## Deployment update — 2026-10-13
 
