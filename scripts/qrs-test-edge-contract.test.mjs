@@ -41,6 +41,7 @@ test("TEST compose does not reference production data or enable writes", () => {
   );
   assert.match(compose, /GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099"/);
   assert.match(compose, /QRS_TEST_RESTRICTED_AUTH: "true"/);
+  assert.match(compose, /QRS_TEST_LOGIN_ENV_FILE:\?separate protected TEST Google Login env file required/);
   for (const gate of [
     "PROVIDER_GOOGLE_ADS_WRITE_ENABLED",
     "PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED",

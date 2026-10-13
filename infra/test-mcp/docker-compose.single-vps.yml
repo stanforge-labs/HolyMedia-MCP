@@ -10,6 +10,7 @@ services:
     init: true
     env_file:
       - ${QRS_TEST_ENV_FILE:?existing protected TEST-only env file required}
+      - ${QRS_TEST_LOGIN_ENV_FILE:?separate protected TEST Google Login env file required}
     environment:
       NODE_ENV: production
       API_PORT: "4000"
