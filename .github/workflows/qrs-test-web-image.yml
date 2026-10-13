@@ -7,6 +7,8 @@ on:
     paths:
       - .github/workflows/qrs-test-web-image.yml
       - infra/Dockerfile.v2
+      - infra/test-mcp/**
+      - scripts/qrs-test-edge-contract.test.mjs
       - apps/web/**
       - packages/contracts/**
       - package.json
