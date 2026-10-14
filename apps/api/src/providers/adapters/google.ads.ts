@@ -66,6 +66,7 @@ import {
   googleMutationResults,
   GoogleAdsWriteError,
   writeFailureFromError,
+  qrsKeywordStatusWriteAllowed,
   googleWriteFailure,
   type GoogleKeywordIdentity,
   type GoogleKeywordSnapshot,
@@ -987,7 +988,10 @@ export class GoogleAdsAdapter
     context: ProviderReadContext,
     items: GoogleKeywordMutation[],
   ) {
-    if (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    if (
+      !qrsKeywordStatusWriteAllowed(this.config) &&
+      (this.config.previewOnly || !this.config.confirmedWriteEnabled)
+    )
       throw new GoogleAdsWriteError(
         "confirmed_write_disabled",
         "Подтверждённая запись выключена на сервере.",

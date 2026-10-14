@@ -7,6 +7,9 @@ import {
 import {
   GOOGLE_MUTATION_BATCH_LIMIT,
   googleMutationResults,
+  GoogleAdsWriteError,
+  qrsKeywordStatusWriteAllowed,
+  writeFailureFromError,
 } from "../providers/google-ads-write.js";
 import { McpPreviewService } from "./mcp-preview.service.js";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
@@ -20,7 +23,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
-const customer = "1234567890";
+const customer = "8590146099";
 const principal: ServiceTokenPrincipal = {
   kind: "service",
   tokenId: "token-a",
@@ -710,6 +713,9 @@ describe("Google keyword status full generic lifecycle (mock provider only)", ()
       config: {
         ...loadConfig(),
         qrsTestGoogleConfirmedWriteEnabled: true,
+        qrsTestRestrictedAuth: true,
+        publicBaseUrl: "https://mcp-test.holymedia.kz",
+        googleAdsWriteAccountAllowlist: [customer],
         previewOnly: true,
         confirmedWriteEnabled: false,
         publicMcpWriteScopeEnabled: false,
@@ -723,6 +729,132 @@ describe("Google keyword status full generic lifecycle (mock provider only)", ()
     expect(result).toMatchObject({ status: "VERIFIED" });
     expect(f.writes()).toBe(1);
     expect(f.row().consumedAt).not.toBeNull();
+  });
+  it("QRS exact TEST gates reach the lower adapter only after browser approval", async () => {
+    const f = fixture();
+    const isolated = loadConfig({
+      ...process.env,
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: customer,
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false",
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false",
+    });
+    expect(qrsKeywordStatusWriteAllowed(isolated)).toBe(true);
+    Object.assign(f.adapter, { config: isolated });
+    Object.assign(f.previews, { config: isolated });
+    await expect(
+      f.adapter.mutateStage1(
+        f.context,
+        { account_id: customer, operations: [{ kind: "campaign" }] } as never,
+        false,
+      ),
+    ).rejects.toMatchObject({ writeCode: "confirmed_write_disabled" });
+    expect(f.requests).toHaveLength(0);
+    const p = await f.preview();
+    expect(f.writes()).toBe(0);
+    await expect(
+      f.previews.commit(principal, p.preview_token),
+    ).rejects.toMatchObject({ code: "preview_not_confirmed" });
+    expect(f.writes()).toBe(0);
+    await f.approve(p);
+    const result = await f.previews.commit(principal, p.preview_token);
+    expect(result).toMatchObject({
+      status: "VERIFIED",
+      provider_mutation_attempted: true,
+    });
+    expect(f.writes()).toBe(1);
+    expect(
+      f.requests.filter((x) => x.url.endsWith("/adGroupCriteria:mutate")),
+    ).toHaveLength(2); // one validate_only, one approved commit
+    expect(
+      f.requests.filter((x) => x.url.endsWith("/adGroupCriteria:mutate")).at(-1)
+        ?.body.validateOnly,
+    ).toBe(false);
+    expect(f.row().consumedAt).not.toBeNull();
+  });
+  it("QRS lower adapter remains closed under any isolation or other-write gate drift", () => {
+    const f = fixture();
+    const isolated = loadConfig({
+      ...process.env,
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: customer,
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+    });
+    for (const drift of [
+      { qrsTestRestrictedAuth: false },
+      { providerGoogleAdsWriteEnabled: false },
+      { googleAdsWriteAccountAllowlist: ["4378327049"] },
+      { publicBaseUrl: "https://mcp.holymedia.kz" },
+      { providerGoogleAdsStage2WriteEnabled: true },
+      { providerGoogleAdsStage3WriteEnabled: true },
+      { providerGoogleAdsStage4WriteEnabled: true },
+      { publicMcpWriteScopeEnabled: true },
+      { publicMcpControlledWriteEnabled: true },
+    ]) {
+      const unsafe = { ...isolated, ...drift };
+      expect(qrsKeywordStatusWriteAllowed(unsafe)).toBe(false);
+      Object.assign(f.adapter, { config: unsafe });
+      expect(() =>
+        f.adapter.commitKeywordStatuses(f.context, [
+          { ...identity("101"), status: "PAUSED" },
+        ]),
+      ).toThrow(GoogleAdsWriteError);
+    }
+    expect(f.writes()).toBe(0);
+    expect(f.requests).toHaveLength(0);
+  });
+  it("a deterministic lower adapter policy refusal is not an uncertain Google outcome", async () => {
+    const f = fixture();
+    const p = await f.preview();
+    await f.approve(p);
+    Object.assign(f.adapter, {
+      config: {
+        ...loadConfig(),
+        previewOnly: true,
+        confirmedWriteEnabled: false,
+      },
+    });
+    const result = await f.previews.commit(principal, p.preview_token);
+    expect(result).toMatchObject({
+      status: "NOT_VERIFIED",
+      provider_mutation_attempted: false,
+      items: [
+        {
+          success: false,
+          actual_status: "ENABLED",
+          google_error: {
+            source: "HOLYMEDIA",
+            google_error_code: "confirmed_write_disabled",
+          },
+        },
+      ],
+    });
+    expect(f.writes()).toBe(0);
+    expect(
+      f.requests.filter((x) => x.url.endsWith("/adGroupCriteria:mutate")),
+    ).toHaveLength(1); // preview validate_only only
+    expect(
+      writeFailureFromError(
+        new GoogleAdsWriteError(
+          "confirmed_write_disabled",
+          "Local policy blocked the request.",
+        ),
+      ),
+    ).toMatchObject({
+      source: "HOLYMEDIA",
+      google_error_code: "confirmed_write_disabled",
+    });
   });
   it("dedicated TEST gate cannot authorize a different Google operation", async () => {
     const f = fixture();

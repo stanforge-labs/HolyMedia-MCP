@@ -60,6 +60,8 @@ import {
   GoogleAdsWriteError,
   googleWriteFailure,
   writeFailureFromError,
+  qrsKeywordStatusWriteAllowed,
+  isLocalGoogleWriteRejection,
   type GoogleKeywordSnapshot,
   type GoogleMutationResult,
   type GoogleKeywordIdentity,
@@ -2636,7 +2638,7 @@ export class McpPreviewService {
       throw new PreviewError("preview_not_confirmed");
     await this.assertNativeOAuthApproval(principal, preview);
     const qrsKeywordStatusWrite =
-      this.config.qrsTestGoogleConfirmedWriteEnabled &&
+      qrsKeywordStatusWriteAllowed(this.config) &&
       preview.operation === "GOOGLE_KEYWORD_STATUS";
     if (
       !qrsKeywordStatusWrite &&
@@ -2846,6 +2848,7 @@ export class McpPreviewService {
       await this.assertNativeOAuthApproval(principal, preview);
     }
     let mutation: GoogleMutationResult[];
+    let providerMutationAttempted = true;
     try {
       mutation = await this.providers.commitGoogleKeywordStatuses(
         principal.workspaceId,
@@ -2854,6 +2857,7 @@ export class McpPreviewService {
         changed,
       );
     } catch (error) {
+      if (isLocalGoogleWriteRejection(error)) providerMutationAttempted = false;
       const failure = writeFailureFromError(error);
       mutation = changed.map(() => ({ success: false, error: failure }));
     }
@@ -2989,8 +2993,10 @@ export class McpPreviewService {
       operation_count: changed.length,
       items,
       partial_failure: true,
-      provider_mutation_attempted: true,
-      summary: `Google Ads: подтверждено ${items.filter((x) => x.success).length} из ${items.length} строк. Повторный commit запрещён.`,
+      provider_mutation_attempted: providerMutationAttempted,
+      summary: providerMutationAttempted
+        ? `Google Ads: подтверждено ${items.filter((x) => x.success).length} из ${items.length} строк. Повторный commit запрещён.`
+        : "HolyMedia остановил запись до Google Ads. Повторный commit этого preview запрещён.",
     };
   }
   private googleAuditRow(

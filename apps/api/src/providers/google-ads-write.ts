@@ -25,6 +25,7 @@ export type GoogleKeywordMutation = GoogleKeywordIdentity & {
   status: "ENABLED" | "PAUSED";
 };
 export type GoogleWriteFailure = {
+  source?: "HOLYMEDIA";
   google_details?: {
     google_code: string;
     message: string;
@@ -74,6 +75,24 @@ export function assertGoogleWriteAccount(config: AppConfig, account: string) {
       "google_account_not_allowlisted",
       "Этот Google Ads аккаунт разрешён только для чтения: его нет в write allowlist.",
     );
+}
+/** Only the isolated, single-account Q/R/S keyword-status path may bypass V2 generic writes. */
+export function qrsKeywordStatusWriteAllowed(config: AppConfig): boolean {
+  return (
+    config.qrsTestGoogleConfirmedWriteEnabled &&
+    config.qrsTestRestrictedAuth &&
+    config.providerGoogleAdsWriteEnabled &&
+    config.previewOnly &&
+    !config.confirmedWriteEnabled &&
+    !config.providerGoogleAdsStage2WriteEnabled &&
+    !config.providerGoogleAdsStage3WriteEnabled &&
+    !config.providerGoogleAdsStage4WriteEnabled &&
+    !config.publicMcpWriteScopeEnabled &&
+    !config.publicMcpControlledWriteEnabled &&
+    config.publicBaseUrl === "https://mcp-test.holymedia.kz" &&
+    config.googleAdsWriteAccountAllowlist.length === 1 &&
+    config.googleAdsWriteAccountAllowlist[0] === "8590146099"
+  );
 }
 export class GoogleAdsWriteError extends ProviderError {
   public constructor(
@@ -129,11 +148,31 @@ export function writeFailureFromError(error: unknown): GoogleWriteFailure {
       error.errors[0]?.error_code ?? "GOOGLE_ADS_ERROR",
       error.errors[0]?.field_path,
     );
-  if (error instanceof GoogleAdsWriteError && error.failures[0])
-    return error.failures[0];
+  if (error instanceof GoogleAdsWriteError) {
+    if (error.failures[0]) return error.failures[0];
+    const failure = googleWriteFailure(error.writeCode, error.fieldPath);
+    return isLocalGoogleWriteRejection(error)
+      ? { ...failure, message: error.message, source: "HOLYMEDIA" }
+      : failure;
+  }
   if (error instanceof ProviderError && error.providerCode)
     return googleWriteFailure(error.providerCode);
   return googleWriteFailure("OUTCOME_UNCERTAIN");
+}
+/** These errors are raised before any Google HTTP mutate request is constructed. */
+export function isLocalGoogleWriteRejection(error: unknown): boolean {
+  return (
+    error instanceof GoogleAdsWriteError &&
+    [
+      "confirmed_write_disabled",
+      "google_write_disabled",
+      "google_account_not_allowlisted",
+      "google_scope_required",
+      "google_keyword_status_invalid",
+      "google_batch_limit_exceeded",
+      "google_batch_empty",
+    ].includes(error.writeCode)
+  );
 }
 export function assertGoogleBatch(items: unknown[]): void {
   if (items.length > GOOGLE_MUTATION_BATCH_LIMIT)
