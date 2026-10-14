@@ -15,6 +15,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
+import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
 import type { FastifyReply } from "fastify";
 import { CurrentPrincipal } from "../auth/auth.decorators.js";
@@ -23,11 +24,13 @@ import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { CsrfGuard } from "../auth/csrf.guard.js";
 import { SessionService } from "../auth/session.service.js";
 import { McpOAuthClientService } from "../mcp/mcp-oauth-client.service.js";
+import { registrationMetadataRejection } from "../mcp/oauth-client-metadata.service.js";
 import { OAuthAuthorizationService } from "../mcp/oauth-authorization.service.js";
 
 @Controller()
 export class LegacyMcpOAuthController {
   private readonly logger = createLogger("holymedia-mcp-v2-oauth");
+  private readonly config = loadConfig();
   public constructor(
     @Inject(McpOAuthClientService)
     private readonly clients: McpOAuthClientService,
@@ -76,38 +79,22 @@ export class LegacyMcpOAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
     @Body() body: Record<string, unknown>,
     @Headers("content-type") contentType?: string,
-    @Headers("user-agent") userAgent?: string,
   ) {
+    const metadata =
+      body && typeof body === "object" && !Array.isArray(body) ? body : {};
     try {
-      const result = await this.oauth.registerPublicClient(body);
+      const result = await this.oauth.registerPublicClient(metadata);
       this.logger.info(
         {
           requestId: request.requestId,
           contentType: contentType?.split(";", 1)[0] ?? null,
-          userAgent: userAgent?.slice(0, 160) ?? null,
-          redirectUris: Array.isArray(body.redirect_uris)
-            ? body.redirect_uris.filter(
-                (value): value is string => typeof value === "string",
-              )
-            : [],
-          grantTypes: Array.isArray(body.grant_types)
-            ? body.grant_types.filter(
-                (value): value is string => typeof value === "string",
-              )
-            : [],
-          responseTypes: Array.isArray(body.response_types)
-            ? body.response_types.filter(
-                (value): value is string => typeof value === "string",
-              )
-            : [],
-          tokenEndpointAuthMethod:
-            typeof body.token_endpoint_auth_method === "string"
-              ? body.token_endpoint_auth_method
-              : "none",
-          applicationType:
-            typeof body.application_type === "string"
-              ? body.application_type
-              : null,
+          redirectUriCount: Array.isArray(metadata.redirect_uris)
+            ? metadata.redirect_uris.length
+            : 0,
+          grantTypes: result.grant_types,
+          responseTypes: result.response_types,
+          tokenEndpointAuthMethod: result.token_endpoint_auth_method,
+          applicationType: result.application_type,
           clientId: result.client_id.slice(0, 18),
         },
         "OAuth public client registered",
@@ -120,10 +107,12 @@ export class LegacyMcpOAuthController {
         {
           requestId: request.requestId,
           contentType: contentType?.split(";", 1)[0] ?? null,
-          userAgent: userAgent?.slice(0, 160) ?? null,
-          redirectUriCount: Array.isArray(body.redirect_uris)
-            ? body.redirect_uris.length
+          redirectUriCount: Array.isArray(metadata.redirect_uris)
+            ? metadata.redirect_uris.length
             : 0,
+          ...(this.config.qrsTestRestrictedAuth
+            ? { validationReason: registrationMetadataRejection(metadata) }
+            : {}),
           errorType:
             error instanceof Error ? error.constructor.name : "unknown",
         },

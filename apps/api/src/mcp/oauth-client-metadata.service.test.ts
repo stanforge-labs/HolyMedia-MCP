@@ -4,6 +4,7 @@ import {
   isClientMetadataUrl,
   parseClientMetadata,
   registrationMetadata,
+  registrationMetadataRejection,
 } from "./oauth-client-metadata.service.js";
 
 const safeGetMock = vi.hoisted(() => vi.fn());
@@ -159,6 +160,41 @@ describe("OAuth client metadata documents", () => {
     expect(() =>
       registrationMetadata({ ...base, scope: "adforge:mcp:write" }),
     ).toThrow();
+  });
+
+  it("classifies DCR failures without logging metadata values", () => {
+    const base = {
+      redirect_uris: ["https://client.example.test/callback?private=value"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      scope: "adforge:mcp:read adforge:mcp:write",
+    };
+    expect(registrationMetadataRejection(base)).toBeNull();
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ ...base, redirect_uris: [] }, "redirect_uris_count_or_type"],
+      [{ ...base, grant_types: ["refresh_token"] }, "grant_types_unsupported"],
+      [{ ...base, response_types: ["token"] }, "response_types_unsupported"],
+      [
+        { ...base, token_endpoint_auth_method: "client_secret_post" },
+        "token_auth_method_unsupported",
+      ],
+      [
+        { ...base, application_type: "desktop" },
+        "application_type_unsupported",
+      ],
+      [
+        { ...base, redirect_uris: ["http://unsafe.example.test/callback"] },
+        "redirect_uri_unsafe",
+      ],
+      [{ ...base, scope: "adforge:mcp:write" }, "scope_unsupported"],
+    ];
+    for (const [metadata, reason] of cases) {
+      const actual = registrationMetadataRejection(metadata);
+      expect(actual).toBe(reason);
+      expect(actual).not.toContain("private=value");
+      expect(() => registrationMetadata(metadata)).toThrow();
+    }
   });
 });
 

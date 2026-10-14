@@ -264,22 +264,13 @@ export function registrationMetadata(
   input: Record<string, unknown>,
 ): Omit<ClientMetadata, "client_id"> {
   const redirectUris = strings(input.redirect_uris);
-  const applicationType =
-    string(input.application_type) || inferApplicationType(redirectUris);
   const grants = strings(input.grant_types);
-  const responses = strings(input.response_types);
-  const authentication = string(input.token_endpoint_auth_method) || "none";
-  if (
-    redirectUris.length === 0 ||
-    redirectUris.length > 10 ||
-    (grants.length > 0 && !grants.includes("authorization_code")) ||
-    (responses.length > 0 && !responses.every((type) => type === "code")) ||
-    authentication !== "none" ||
-    (applicationType !== "web" && applicationType !== "native") ||
-    redirectUris.some((uri) => !validRedirectUri(uri, applicationType))
-  ) {
+  const rejection = registrationMetadataRejection(input);
+  if (rejection && rejection !== "scope_unsupported") {
     throw new BadRequestException("OAuth client metadata is invalid.");
   }
+  const applicationType = (string(input.application_type) ||
+    inferApplicationType(redirectUris)) as "web" | "native";
   return {
     client_name: string(input.client_name).slice(0, 160) || "Public MCP client",
     redirect_uris: redirectUris,
@@ -289,6 +280,35 @@ export function registrationMetadata(
     application_type: applicationType,
     scope: normalizeScope(string(input.scope)),
   };
+}
+
+/** Safe diagnostic class only: never include a redirect URI or request value. */
+export function registrationMetadataRejection(
+  input: Record<string, unknown>,
+): string | null {
+  const redirectUris = strings(input.redirect_uris);
+  const grants = strings(input.grant_types);
+  const responses = strings(input.response_types);
+  const authentication = string(input.token_endpoint_auth_method) || "none";
+  const applicationType =
+    string(input.application_type) || inferApplicationType(redirectUris);
+  if (redirectUris.length === 0 || redirectUris.length > 10)
+    return "redirect_uris_count_or_type";
+  if (grants.length > 0 && !grants.includes("authorization_code"))
+    return "grant_types_unsupported";
+  if (responses.length > 0 && !responses.every((type) => type === "code"))
+    return "response_types_unsupported";
+  if (authentication !== "none") return "token_auth_method_unsupported";
+  if (applicationType !== "web" && applicationType !== "native")
+    return "application_type_unsupported";
+  if (redirectUris.some((uri) => !validRedirectUri(uri, applicationType)))
+    return "redirect_uri_unsafe";
+  try {
+    normalizeScope(string(input.scope));
+  } catch {
+    return "scope_unsupported";
+  }
+  return null;
 }
 
 function compatiblePublicAuthMethod(input: Record<string, unknown>): "none" {
