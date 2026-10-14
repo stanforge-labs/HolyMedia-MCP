@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AuditService } from "../audit/audit.service.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
@@ -50,7 +50,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
   const verifier = "integration-verifier-".padEnd(64, "v");
   let userId = "";
   let workspaceId = "";
-  let publicClientId = "";
+  const publicClientIds: string[] = [];
   let principal: HumanPrincipal;
 
   beforeAll(async () => {
@@ -75,9 +75,9 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
   });
 
   afterAll(async () => {
-    if (publicClientId) {
+    if (publicClientIds.length > 0) {
       await database.client.oAuthPublicClient.deleteMany({
-        where: { clientId: publicClientId },
+        where: { clientId: { in: publicClientIds } },
       });
     }
     if (workspaceId) {
@@ -98,7 +98,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
       response_types: ["code"],
       token_endpoint_auth_method: "none",
     });
-    publicClientId = registered.client_id;
+    publicClientIds.push(registered.client_id);
 
     const started = await oauth.beginAuthorization({
       client_id: registered.client_id,
@@ -220,5 +220,102 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
       reply() as never,
     );
     expect(codex).toMatchObject({ result: { protocolVersion: "2025-03-26" } });
+  });
+
+  it("negotiates an unscoped DCR client for TEST write without upgrading an older READ client", async () => {
+    const resource = "https://mcp-test.holymedia.kz/mcp";
+    const redirect = "https://chatgpt.com/connector/oauth/integration";
+    const writeScope = "adforge:mcp:read adforge:mcp:write";
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+    vi.stubEnv("QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED", "false");
+    vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
+    vi.stubEnv("PROVIDER_GOOGLE_ADS_WRITE_ENABLED", "true");
+    vi.stubEnv("PUBLIC_MCP_WRITE_SCOPE_ENABLED", "false");
+    vi.stubEnv("PUBLIC_MCP_CONTROLLED_WRITE_ENABLED", "false");
+    try {
+      const metadata = {
+        client_name: "ChatGPT integration",
+        redirect_uris: [redirect],
+      };
+      const oldOauth = new OAuthAuthorizationService(database, {
+        resolve: async () => null,
+      } as never);
+      const oldClient = await oldOauth.registerPublicClient(metadata);
+      publicClientIds.push(oldClient.client_id);
+      expect(oldClient.scope).toBe("adforge:mcp:read");
+
+      vi.stubEnv("QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED", "true");
+      const qrsOauth = new OAuthAuthorizationService(database, {
+        resolve: async () => null,
+      } as never);
+      const newClient = await qrsOauth.registerPublicClient(metadata);
+      publicClientIds.push(newClient.client_id);
+      expect(newClient.scope).toBe(writeScope);
+      const input = {
+        client_id: newClient.client_id,
+        redirect_uri: redirect,
+        response_type: "code",
+        resource,
+        scope: writeScope,
+        code_challenge: challenge(verifier),
+        code_challenge_method: "S256",
+      };
+      await expect(
+        qrsOauth.beginAuthorization({
+          ...input,
+          client_id: oldClient.client_id,
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        qrsOauth.beginAuthorization({
+          ...input,
+          redirect_uri: "https://wrong.example.test/callback",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        qrsOauth.beginAuthorization({
+          ...input,
+          resource: "https://mcp.holymedia.kz/mcp",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        qrsOauth.beginAuthorization({
+          ...input,
+          code_challenge_method: "plain",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+
+      const started = await qrsOauth.beginAuthorization(input, principal);
+      expect(started.statusCode).toBe(302);
+      await qrsOauth.continueAuthorization(started.transaction_id, principal);
+      await expect(
+        qrsOauth.decideAuthorization(started.transaction_id, true, principal),
+      ).rejects.toMatchObject({ status: 400 });
+      const consent = await qrsOauth.decideAuthorization(
+        started.transaction_id,
+        true,
+        principal,
+        undefined,
+        writeScope,
+      );
+      const tokens = await qrsOauth.exchangeToken({
+        grant_type: "authorization_code",
+        client_id: newClient.client_id,
+        code: new URL(consent.url).searchParams.get("code"),
+        redirect_uri: redirect,
+        resource,
+        code_verifier: verifier,
+      });
+      expect(tokens.scope).toBe(writeScope);
+      expect(
+        await qrsOauth.authenticate(
+          tokens.access_token,
+          "https://mcp.holymedia.kz/mcp",
+        ),
+      ).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

@@ -541,6 +541,131 @@ describe("native private Google scope consent uses existing issuer and PKCE", ()
   });
 });
 
+describe("Q/R/S TEST DCR scope negotiation", () => {
+  const resource = "https://mcp-test.holymedia.kz/mcp";
+  const redirect = "https://chatgpt.com/connector/oauth/test-callback";
+  const writeScope = "adforge:mcp:read adforge:mcp:write";
+  const registration = {
+    client_name: "ChatGPT TEST",
+    redirect_uris: [redirect],
+    grant_types: ["authorization_code"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+  };
+
+  beforeEach(() => {
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
+    vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
+    vi.stubEnv("QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED", "true");
+    vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
+    vi.stubEnv("PROVIDER_GOOGLE_ADS_WRITE_ENABLED", "true");
+    vi.stubEnv("PUBLIC_MCP_WRITE_SCOPE_ENABLED", "false");
+    vi.stubEnv("PUBLIC_MCP_CONTROLLED_WRITE_ENABLED", "false");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("advertises read/write only for a newly unscoped TEST DCR client and still requires explicit consent", async () => {
+    const { database, state } = fakeDatabase();
+    const oauth = new OAuthAuthorizationService(database, {
+      resolve: async () => null,
+    } as never);
+    const registered = await oauth.registerPublicClient(registration);
+    expect(registered.scope).toBe(writeScope);
+    expect(state.publicClients).toHaveLength(1);
+    expect(state.accessTokens).toHaveLength(0);
+    const principal = {
+      kind: "human",
+      userId: randomUUID(),
+      sessionId: randomUUID(),
+    } as HumanPrincipal;
+    state.users.set(principal.userId, {
+      id: principal.userId,
+      status: "active",
+    });
+    const workspaceId = randomUUID();
+    state.workspaces.set(workspaceId, {
+      id: workspaceId,
+      name: "TEST",
+      accessStatus: "ACTIVE",
+    });
+    state.memberships.push({
+      id: randomUUID(),
+      userId: principal.userId,
+      workspaceId,
+      role: "OWNER",
+      createdAt: new Date(),
+    });
+    const input = {
+      client_id: registered.client_id,
+      redirect_uri: redirect,
+      response_type: "code",
+      resource,
+      scope: writeScope,
+      code_challenge: pkce("v".repeat(64)),
+      code_challenge_method: "S256",
+    };
+    const started = await oauth.beginAuthorization(input, principal);
+    expect(started.statusCode).toBe(302);
+    expect(state.transactions).toHaveLength(1);
+    await oauth.continueAuthorization(started.transaction_id, principal);
+    await expect(
+      oauth.decideAuthorization(started.transaction_id, true, principal),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(state.codes).toHaveLength(0);
+    await expect(
+      oauth.beginAuthorization({
+        ...input,
+        redirect_uri: "https://wrong.example.test/callback",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      oauth.beginAuthorization({
+        ...input,
+        resource: "https://mcp.holymedia.kz/mcp",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      oauth.beginAuthorization({ ...input, code_challenge_method: "plain" }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("keeps explicit READ registrations and preexisting READ clients READ-only", async () => {
+    const { database, state } = fakeDatabase();
+    const oauth = new OAuthAuthorizationService(database, {
+      resolve: async () => null,
+    } as never);
+    const readClient = await oauth.registerPublicClient({
+      ...registration,
+      scope: "adforge:mcp:read",
+    });
+    expect(readClient.scope).toBe("adforge:mcp:read");
+    const input = {
+      client_id: readClient.client_id,
+      redirect_uri: redirect,
+      response_type: "code",
+      resource,
+      scope: writeScope,
+      code_challenge: pkce("v".repeat(64)),
+      code_challenge_method: "S256",
+    };
+    await expect(oauth.beginAuthorization(input)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(state.transactions).toHaveLength(0);
+    expect(state.accessTokens).toHaveLength(0);
+  });
+
+  it("defaults an unscoped DCR client to READ when the dedicated TEST write gate is off", async () => {
+    vi.stubEnv("QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED", "false");
+    const { database } = fakeDatabase();
+    const oauth = new OAuthAuthorizationService(database, {
+      resolve: async () => null,
+    } as never);
+    const registered = await oauth.registerPublicClient(registration);
+    expect(registered.scope).toBe("adforge:mcp:read");
+  });
+});
+
 describe("OAuth authorization foundation", () => {
   const previousWriteScopeFlag = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
   const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;

@@ -49,13 +49,24 @@ export class OAuthAuthorizationService {
 
   public async registerPublicClient(input: Record<string, unknown>) {
     const metadata = registrationMetadata(input);
+    // Some native clients omit scope at DCR and request it at authorization.
+    // Only this fail-closed, single-account Q/R/S TEST runtime may advertise
+    // write as a client capability. No write token is issued without a new
+    // explicit owner consent, and existing READ-only clients stay unchanged.
+    const scope =
+      !stringValue(input.scope) &&
+      this.config.qrsTestRestrictedAuth &&
+      this.config.qrsTestGoogleConfirmedWriteEnabled &&
+      this.config.providerGoogleAdsWriteEnabled
+        ? `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`
+        : metadata.scope;
     const clientId = `hm_public_${randomBytes(24).toString("base64url")}`;
     const client = await this.database.client.oAuthPublicClient.create({
       data: {
         clientId,
         clientName: metadata.client_name,
         redirectUris: metadata.redirect_uris,
-        scope: metadata.scope,
+        scope,
         tokenEndpointAuthMethod: "none",
         applicationType: metadata.application_type,
         registrationSource: "dcr",
