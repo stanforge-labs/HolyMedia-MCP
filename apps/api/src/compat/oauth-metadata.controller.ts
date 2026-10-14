@@ -4,6 +4,7 @@ import { oauthEndpoints } from "../mcp/oauth-endpoints.js";
 
 @Controller()
 export class OAuthMetadataController {
+  private readonly restrictedTest = loadConfig().qrsTestRestrictedAuth;
   private readonly googlePrivateWriteEnabled =
     loadConfig().providerGoogleAdsWriteEnabled;
   private readonly writeScopeEnabled = loadConfig().publicMcpWriteScopeEnabled;
@@ -61,7 +62,13 @@ export class OAuthMetadataController {
         "client_secret_basic",
         "client_secret_post",
       ],
-      client_id_metadata_document_supported: true,
+      // In the isolated Q/R/S TEST runtime, prefer DCR for new clients. The
+      // MCP client-registration priority otherwise selects CIMD before DCR.
+      // Existing CIMD registrations and READ grants remain valid; this changes
+      // discovery only and never grants a new scope by itself.
+      ...(this.restrictedTest
+        ? {}
+        : { client_id_metadata_document_supported: true }),
     };
   }
 }

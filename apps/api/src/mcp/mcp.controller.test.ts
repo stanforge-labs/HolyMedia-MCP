@@ -32,13 +32,28 @@ function reply() {
 
 describe("MCP bearer authentication", () => {
   const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
+  const previousRestricted = process.env.QRS_TEST_RESTRICTED_AUTH;
+  const previousConfirmed = process.env.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED;
+  const previousGoogle = process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED;
+  const previousAllowlist = process.env.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST;
   beforeEach(() => {
     process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
+    process.env.QRS_TEST_RESTRICTED_AUTH = "false";
+    process.env.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED = "false";
   });
   afterEach(() => {
     if (previousBaseUrl === undefined)
       delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+    for (const [name, value] of [
+      ["QRS_TEST_RESTRICTED_AUTH", previousRestricted],
+      ["QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED", previousConfirmed],
+      ["PROVIDER_GOOGLE_ADS_WRITE_ENABLED", previousGoogle],
+      ["GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", previousAllowlist],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
   it("Google batch has structured content and a concise summary; write failures preserve safe codes in Russian", async () => {
     const payload = {
@@ -245,6 +260,65 @@ describe("MCP bearer authentication", () => {
       invalid as never,
     );
     expect(invalid.code).toHaveBeenCalledWith(401);
+  });
+
+  it("requests explicit read/write consent only for the restricted TEST write profile", async () => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp-test.holymedia.kz";
+    process.env.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST = "8590146099";
+    process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = "true";
+    process.env.QRS_TEST_RESTRICTED_AUTH = "true";
+    process.env.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED = "true";
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    const instance = controller();
+    const write = reply();
+    await instance.post(
+      {
+        headers: {},
+        query: { profile: "google_ads_write" },
+        body: { method: "initialize" },
+      } as never,
+      write as never,
+    );
+    expect(write.header).toHaveBeenCalledWith(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://mcp-test.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read adforge:mcp:write"',
+    );
+    const plain = reply();
+    await instance.post(
+      { headers: {}, body: { method: "initialize" } } as never,
+      plain as never,
+    );
+    expect(plain.header).toHaveBeenCalledWith(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://mcp-test.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
+    );
+    const publicReply = reply();
+    await instance.postPublic(
+      {
+        headers: {},
+        query: { profile: "google_ads_write" },
+        body: { method: "initialize" },
+      } as never,
+      publicReply as never,
+    );
+    expect(publicReply.header).toHaveBeenCalledWith(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://mcp-test.holymedia.kz/.well-known/oauth-protected-resource/mcp/public", scope="adforge:mcp:read"',
+    );
+    process.env.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED = "false";
+    const gated = reply();
+    await controller().post(
+      {
+        headers: {},
+        query: { profile: "google_ads_write" },
+        body: { method: "initialize" },
+      } as never,
+      gated as never,
+    );
+    expect(gated.header).toHaveBeenCalledWith(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://mcp-test.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
+    );
   });
 
   it("uses local protected-resource challenges for legacy and public MCP", async () => {

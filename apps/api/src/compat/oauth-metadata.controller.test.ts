@@ -5,9 +5,12 @@ describe("OAuth discovery metadata", () => {
   const previous = process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
   const previousBaseUrl = process.env.HOLYMEDIA_PUBLIC_BASE_URL;
   const previousGoogle = process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED;
+  const previousRestricted = process.env.QRS_TEST_RESTRICTED_AUTH;
+  const previousAllowlist = process.env.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST;
   beforeEach(() => {
     process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp.holymedia.kz";
     process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = "false";
+    process.env.QRS_TEST_RESTRICTED_AUTH = "false";
   });
   afterEach(() => {
     if (previous === undefined)
@@ -19,6 +22,12 @@ describe("OAuth discovery metadata", () => {
     if (previousGoogle === undefined)
       delete process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED;
     else process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = previousGoogle;
+    if (previousRestricted === undefined)
+      delete process.env.QRS_TEST_RESTRICTED_AUTH;
+    else process.env.QRS_TEST_RESTRICTED_AUTH = previousRestricted;
+    if (previousAllowlist === undefined)
+      delete process.env.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST;
+    else process.env.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST = previousAllowlist;
   });
 
   it("publishes absolute protected resource documents, without write while gated off", () => {
@@ -73,6 +82,32 @@ describe("OAuth discovery metadata", () => {
       client_id_metadata_document_supported: true,
       scopes_supported: ["adforge:mcp:read"],
     });
+  });
+
+  it("advertises DCR but not CIMD only for the exact restricted TEST runtime", () => {
+    process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://mcp-test.holymedia.kz";
+    process.env.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST = "8590146099";
+    process.env.QRS_TEST_RESTRICTED_AUTH = "true";
+    process.env.PROVIDER_GOOGLE_ADS_WRITE_ENABLED = "true";
+    process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "false";
+    const controller = new OAuthMetadataController();
+    const metadata = controller.authorizationServer();
+    expect(metadata).toMatchObject({
+      issuer: "https://mcp-test.holymedia.kz",
+      registration_endpoint: "https://mcp-test.holymedia.kz/oauth/register",
+      code_challenge_methods_supported: ["S256"],
+      scopes_supported: ["adforge:mcp:read", "adforge:mcp:write"],
+    });
+    expect(metadata).not.toHaveProperty(
+      "client_id_metadata_document_supported",
+    );
+    expect(controller.protectedMcpResource()).toMatchObject({
+      resource: "https://mcp-test.holymedia.kz/mcp",
+      scopes_supported: ["adforge:mcp:read", "adforge:mcp:write"],
+    });
+    expect(controller.protectedPublicMcpResource().scopes_supported).toEqual([
+      "adforge:mcp:read",
+    ]);
   });
 
   it("advertises write only after the separate OAuth write-scope gate is enabled", () => {

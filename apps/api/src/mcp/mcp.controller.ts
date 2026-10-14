@@ -52,6 +52,26 @@ export class McpController {
   private readonly publicWriteScopeEnabled =
     loadConfig().publicMcpWriteScopeEnabled;
   private readonly restrictedTest = loadConfig().qrsTestRestrictedAuth;
+  private readonly qrsWriteEnabled =
+    loadConfig().qrsTestGoogleConfirmedWriteEnabled;
+
+  private authorizationChallenge(
+    request: McpRequest,
+    reply: FastifyReply,
+    publicRoute: boolean,
+  ) {
+    const profile = (request.query as Record<string, unknown> | undefined)
+      ?.profile;
+    return mcpUnauthorized(
+      reply,
+      publicRoute,
+      this.endpoints,
+      !publicRoute &&
+        this.restrictedTest &&
+        this.qrsWriteEnabled &&
+        profile === GOOGLE_WRITE_PROFILE,
+    );
+  }
 
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
@@ -98,7 +118,7 @@ export class McpController {
         { authReason: "missing_invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute, this.endpoints);
+      return this.authorizationChallenge(request, reply, publicRoute);
     }
 
     // Server-to-client SSE is optional in Streamable HTTP. A valid MCP client
@@ -131,7 +151,7 @@ export class McpController {
   ) {
     const token = bearerToken(request.headers.authorization);
     const principal = token ? await this.authenticate(token, false) : null;
-    if (!principal) return mcpUnauthorized(reply, false, this.endpoints);
+    if (!principal) return this.authorizationChallenge(request, reply, false);
     if (
       !principal.scopes.some((scope) =>
         ["adforge:mcp", "adforge:mcp:read"].includes(scope),
@@ -182,7 +202,7 @@ export class McpController {
         { authReason: "missing_or_malformed_bearer" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute, this.endpoints);
+      return this.authorizationChallenge(request, reply, publicRoute);
     }
     const principal = token
       ? await this.authenticate(token, publicRoute)
@@ -192,7 +212,7 @@ export class McpController {
         { authReason: "invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute, this.endpoints);
+      return this.authorizationChallenge(request, reply, publicRoute);
     }
 
     const input = override ?? ((request.body ?? {}) as JsonRpcRequest);
@@ -590,6 +610,7 @@ function mcpUnauthorized(
   reply: FastifyReply,
   publicRoute: boolean,
   endpoints: ReturnType<typeof oauthEndpoints>,
+  writeScopedTest = false,
 ) {
   return reply
     .code(401)
@@ -597,7 +618,7 @@ function mcpUnauthorized(
       "WWW-Authenticate",
       publicRoute
         ? `Bearer resource_metadata="${endpoints.publicResourceMetadata}", scope="adforge:mcp:read"`
-        : `Bearer resource_metadata="${endpoints.legacyResourceMetadata}", scope="adforge:mcp:read"`,
+        : `Bearer resource_metadata="${endpoints.legacyResourceMetadata}", scope="${writeScopedTest ? "adforge:mcp:read adforge:mcp:write" : "adforge:mcp:read"}"`,
     )
     .send({ statusCode: 401, message: "MCP authorization required." });
 }
