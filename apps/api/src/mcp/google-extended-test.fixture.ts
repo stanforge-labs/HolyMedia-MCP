@@ -350,6 +350,7 @@ export function extendedFixture(options: { customerId?: string } = {}) {
             resourceName: resource,
             id: resource.split("/").at(-1),
           };
+          if (kind === "conversionActions") v.ownerCustomer = prefix;
           if (kind === "campaignBudgets") {
             v.status = "ENABLED";
             v.period ??= "DAILY";

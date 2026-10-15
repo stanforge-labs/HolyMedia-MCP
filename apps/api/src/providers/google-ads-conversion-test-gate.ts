@@ -18,7 +18,7 @@ const BASE_CUSTOMER_QUERY =
 const CONVERSION_CUSTOMER_QUERY =
   "SELECT customer.id, customer.resource_name, customer.test_account, customer.conversion_tracking_setting.google_ads_conversion_customer FROM customer";
 const actionQuery = (name: string) =>
-  `SELECT conversion_action.resource_name, conversion_action.name, conversion_action.type, conversion_action.category, conversion_action.status, conversion_action.primary_for_goal, conversion_action.counting_type FROM conversion_action WHERE conversion_action.name = ${extQuote(name)}`;
+  `SELECT conversion_action.resource_name, conversion_action.name, conversion_action.type, conversion_action.category, conversion_action.status, conversion_action.primary_for_goal, conversion_action.counting_type, conversion_action.owner_customer FROM conversion_action WHERE conversion_action.name = ${extQuote(name)}`;
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -131,6 +131,7 @@ export function qrsConversionActionWriteAllowed(
     fields.status === "ENABLED" &&
     fields.primaryForGoal === true &&
     fields.countingType === "ONE_PER_CLICK" &&
+    expected.ownerCustomer === SELF &&
     Object.entries(fields).every(([key, value]) => expected[key] === value)
   );
 }
@@ -201,7 +202,7 @@ export async function buildConversionActionPlan(
         fields: { ...fields },
         update_mask: null,
         before: null,
-        expected: { ...fields },
+        expected: { ...fields, ownerCustomer: SELF },
         row: 0,
         read_query: actionQuery(name),
         response_key: "conversionAction",
