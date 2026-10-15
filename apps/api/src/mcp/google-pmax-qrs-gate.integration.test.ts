@@ -243,6 +243,7 @@ describe("isolated TEST PMax gate", () => {
       qrsTestPmaxAllowedActions: ["asset_group_update"],
       qrsTestPmaxCampaignName: undefined,
       qrsTestPmaxParentCampaignId: "1",
+      qrsTestPmaxParentAssetGroupId: "5",
     };
     Object.assign(f.adapter, { config });
     Object.assign(f.previews, { config });
@@ -312,6 +313,89 @@ describe("isolated TEST PMax gate", () => {
       ).rejects.toThrow();
     }
     expect(f.mutations()).toHaveLength(2);
+  });
+
+  it("validates bounded negative, audience, brand and image-link previews without writing", async () => {
+    for (const profile of [
+      {
+        action: "pmax_negative_add",
+        item: { campaign_id: "1", text: "mock unrelated", match_type: "EXACT" },
+        binding: { qrsTestPmaxNegativeText: "mock unrelated" },
+      },
+      {
+        action: "pmax_audience_signal_add",
+        item: { campaign_id: "1", asset_group_id: "5", audience_id: "9" },
+        binding: { qrsTestPmaxAudienceId: "9" },
+      },
+      {
+        action: "pmax_brand_exclude",
+        item: { campaign_id: "1", shared_set_id: "8" },
+        binding: { qrsTestPmaxBrandSharedSetId: "8" },
+      },
+      {
+        action: "pmax_asset_attach",
+        item: {
+          campaign_id: "1",
+          asset_group_id: "5",
+          asset_id: "50",
+          field_type: "MARKETING_IMAGE",
+        },
+        binding: { qrsTestPmaxAssetId: "50" },
+      },
+    ] as const) {
+      const f = await prepared();
+      Object.assign(
+        object(f.resources.get(`${prefix}/campaigns/1`)?.campaign),
+        {
+          advertisingChannelType: "PERFORMANCE_MAX",
+          status: "PAUSED",
+        },
+      );
+      f.resources.set(`${prefix}/assetGroups/5`, {
+        assetGroup: {
+          id: "5",
+          resourceName: `${prefix}/assetGroups/5`,
+          campaign: `${prefix}/campaigns/1`,
+          status: "PAUSED",
+          name: "MOCK group",
+        },
+      });
+      f.resources.set(`${prefix}/audiences/9`, {
+        audience: {
+          id: "9",
+          resourceName: `${prefix}/audiences/9`,
+          status: "ENABLED",
+        },
+      });
+      f.resources.set(`${prefix}/sharedSets/8`, {
+        sharedSet: {
+          id: "8",
+          resourceName: `${prefix}/sharedSets/8`,
+          type: "BRANDS",
+          status: "ENABLED",
+        },
+      });
+      const config: AppConfig = {
+        ...f.isolated,
+        qrsTestPmaxAllowedActions: [profile.action],
+        qrsTestPmaxCampaignName: undefined,
+        qrsTestPmaxParentCampaignId: "1",
+        qrsTestPmaxParentAssetGroupId: "5",
+        ...profile.binding,
+      };
+      Object.assign(f.adapter, { config });
+      Object.assign(f.previews, { config });
+      const input = { action: profile.action, items: [profile.item] };
+      expect(qrsPmaxIntentAllowed(config, account, input)).toBe(true);
+      const preview = await f.call("google_ads_pmax_preview", input);
+      expect(preview.provider_validation).toBe("passed");
+      expect(qrsPmaxWriteAllowed(config, f.plan())).toBe(true);
+      expect(f.mutations()).toHaveLength(0);
+      await expect(f.commit(preview)).rejects.toMatchObject({
+        code: "preview_not_confirmed",
+      });
+      expect(f.mutations()).toHaveLength(0);
+    }
   });
 
   it("allows one PAUSED fixture only after validation and human approval, then denies replay", async () => {

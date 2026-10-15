@@ -170,6 +170,7 @@ describe("v2 configuration", () => {
       QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_create,asset_group_update",
       QRS_TEST_PMAX_CAMPAIGN_NAME: "HM HolyPilot PAUSED fixture",
       QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: "24364218182",
+      QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: "204741020281",
       PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
       GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
       V2_PREVIEW_ONLY: "true",
@@ -198,6 +199,23 @@ describe("v2 configuration", () => {
     expect(() =>
       loadConfig({ ...theme, QRS_TEST_PMAX_SEARCH_THEME: undefined }),
     ).toThrow();
+    const extended = {
+      ...theme,
+      QRS_TEST_PMAX_ALLOWED_ACTIONS:
+        "pmax_negative_add,pmax_audience_signal_add,pmax_brand_exclude,pmax_asset_attach",
+      QRS_TEST_PMAX_NEGATIVE_TEXT: "exact mock negative",
+      QRS_TEST_PMAX_AUDIENCE_ID: "91",
+      QRS_TEST_PMAX_BRAND_SHARED_SET_ID: "92",
+      QRS_TEST_PMAX_ASSET_ID: "93",
+    };
+    expect(loadConfig(extended).qrsTestPmaxAllowedActions).toHaveLength(4);
+    for (const key of [
+      "QRS_TEST_PMAX_NEGATIVE_TEXT",
+      "QRS_TEST_PMAX_AUDIENCE_ID",
+      "QRS_TEST_PMAX_BRAND_SHARED_SET_ID",
+      "QRS_TEST_PMAX_ASSET_ID",
+    ] as const)
+      expect(() => loadConfig({ ...extended, [key]: undefined })).toThrow();
     for (const unsafe of [
       { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
       { QRS_TEST_RESTRICTED_AUTH: "false" },

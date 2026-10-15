@@ -1,5 +1,7 @@
 # PPC-приёмка HolyMedia MCP — checklist
 
+**16 октября:** PMax-графы в коде и mock-проверках не являются LIVE-приёмкой. До подписи по PMax приложите отдельные Google `validate_only`, owner approval, единственный commit и provider reread для каждого профиля; для аудитории и брендов нужен настоящий owned TEST ресурс. Search Clone имеет ограниченный LIVE PASS, R/M и S остаются PARTIAL. Production writes остаются OFF.
+
 Дата и специалист: ____________________ · Workspace/среда: ____________________
 
 Не записывайте сюда пароли, OAuth-токены, email, закрытые approval URL или клиентские данные. Для каждого пункта отметьте **проверено / замечание / не применимо**, приложите безопасный evidence ID.

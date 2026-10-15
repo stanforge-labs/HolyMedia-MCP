@@ -8,6 +8,10 @@ const PROFILES = [
   "asset_group_update",
   "pmax_search_theme_add",
   "pmax_signal_remove",
+  "pmax_negative_add",
+  "pmax_brand_exclude",
+  "pmax_audience_signal_add",
+  "pmax_asset_attach",
 ] as const;
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -21,6 +25,7 @@ function isolated(config: AppConfig, account: string): boolean {
     config.qrsTestRestrictedAuth &&
     !config.qrsTestGoogleConfirmedWriteEnabled &&
     !config.qrsTestCloneConfirmedWriteEnabled &&
+    !config.qrsTestConversionActionConfirmedWriteEnabled &&
     config.providerGoogleAdsWriteEnabled &&
     config.previewOnly &&
     !config.confirmedWriteEnabled &&
@@ -67,15 +72,53 @@ export function qrsPmaxIntentAllowed(
   if (
     typeof config.qrsTestPmaxParentCampaignId !== "string" ||
     item.campaign_id !== config.qrsTestPmaxParentCampaignId ||
-    typeof item.asset_group_id !== "string" ||
-    !/^[1-9][0-9]{0,19}$/.test(item.asset_group_id)
+    (typeof config.qrsTestPmaxParentAssetGroupId !== "string" &&
+      !["pmax_negative_add", "pmax_brand_exclude"].includes(
+        String(intent.action),
+      ))
   )
+    return false;
+  if (intent.action === "pmax_negative_add")
+    return (
+      typeof config.qrsTestPmaxNegativeText === "string" &&
+      item.text === config.qrsTestPmaxNegativeText &&
+      item.match_type === "EXACT" &&
+      Object.keys(item).sort().join(",") === "campaign_id,match_type,text"
+    );
+  if (intent.action === "pmax_brand_exclude")
+    return (
+      typeof config.qrsTestPmaxBrandSharedSetId === "string" &&
+      item.shared_set_id === config.qrsTestPmaxBrandSharedSetId &&
+      Object.keys(item).sort().join(",") === "campaign_id,shared_set_id"
+    );
+  if (item.asset_group_id !== config.qrsTestPmaxParentAssetGroupId)
     return false;
   if (intent.action === "asset_group_update")
     return (
       typeof item.name === "string" &&
       item.name.trim().length > 0 &&
       Object.keys(item).sort().join(",") === "asset_group_id,campaign_id,name"
+    );
+  if (intent.action === "pmax_audience_signal_add")
+    return (
+      typeof config.qrsTestPmaxAudienceId === "string" &&
+      item.audience_id === config.qrsTestPmaxAudienceId &&
+      Object.keys(item).sort().join(",") ===
+        "asset_group_id,audience_id,campaign_id"
+    );
+  if (intent.action === "pmax_asset_attach")
+    return (
+      typeof config.qrsTestPmaxAssetId === "string" &&
+      item.asset_id === config.qrsTestPmaxAssetId &&
+      [
+        "HEADLINE",
+        "LONG_HEADLINE",
+        "DESCRIPTION",
+        "MARKETING_IMAGE",
+        "SQUARE_MARKETING_IMAGE",
+      ].includes(String(item.field_type)) &&
+      Object.keys(item).sort().join(",") ===
+        "asset_group_id,asset_id,campaign_id,field_type"
     );
   if (
     item.asset_group_id !== config.qrsTestPmaxParentAssetGroupId ||
@@ -204,6 +247,10 @@ export function qrsPmaxWriteAllowed(
       "asset_group_update",
       "pmax_search_theme_add",
       "pmax_signal_remove",
+      "pmax_negative_add",
+      "pmax_brand_exclude",
+      "pmax_audience_signal_add",
+      "pmax_asset_attach",
     ].includes(String(intent.action))
   )
     return false;
@@ -225,24 +272,102 @@ export function qrsPmaxWriteAllowed(
   const checks = plan.checks.flatMap((check) =>
     Array.isArray(object(check).rows) ? (object(check).rows as unknown[]) : [],
   );
-  const pausedParent =
-    checks.some((check) => {
-      const campaign = object(object(check).campaign);
-      return (
-        campaign.resourceName === parent &&
-        campaign.status === "PAUSED" &&
-        campaign.advertisingChannelType === "PERFORMANCE_MAX"
-      );
-    }) &&
-    checks.some((check) => {
-      const assetGroup = object(object(check).assetGroup);
-      return (
-        assetGroup.resourceName === group &&
-        assetGroup.campaign === parent &&
-        assetGroup.status === "PAUSED"
-      );
-    });
-  if (!pausedParent) return false;
+  const pausedCampaign = checks.some((check) => {
+    const campaign = object(object(check).campaign);
+    return (
+      campaign.resourceName === parent &&
+      campaign.status === "PAUSED" &&
+      campaign.advertisingChannelType === "PERFORMANCE_MAX"
+    );
+  });
+  const pausedGroup = checks.some((check) => {
+    const assetGroup = object(object(check).assetGroup);
+    return (
+      assetGroup.resourceName === group &&
+      assetGroup.campaign === parent &&
+      assetGroup.status === "PAUSED"
+    );
+  });
+  if (!pausedCampaign) return false;
+  if (intent.action === "pmax_negative_add")
+    return (
+      typeof config.qrsTestPmaxNegativeText === "string" &&
+      item.text === config.qrsTestPmaxNegativeText &&
+      item.match_type === "EXACT" &&
+      Object.keys(item).sort().join(",") === "campaign_id,match_type,text" &&
+      op.kind === "campaignCriteria" &&
+      op.method === "create" &&
+      op.resource_name === null &&
+      op.before === null &&
+      op.update_mask === null &&
+      fields.campaign === parent &&
+      fields.negative === true &&
+      object(fields.keyword).text === config.qrsTestPmaxNegativeText &&
+      object(fields.keyword).matchType === "EXACT" &&
+      Object.keys(fields).sort().join(",") === "campaign,keyword,negative"
+    );
+  if (intent.action === "pmax_brand_exclude")
+    return (
+      typeof config.qrsTestPmaxBrandSharedSetId === "string" &&
+      item.shared_set_id === config.qrsTestPmaxBrandSharedSetId &&
+      Object.keys(item).sort().join(",") === "campaign_id,shared_set_id" &&
+      op.kind === "campaignCriteria" &&
+      op.method === "create" &&
+      op.resource_name === null &&
+      op.before === null &&
+      op.update_mask === null &&
+      fields.campaign === parent &&
+      fields.negative === true &&
+      object(fields.brandList).sharedSet ===
+        `${prefix}/sharedSets/${config.qrsTestPmaxBrandSharedSetId}` &&
+      Object.keys(fields).sort().join(",") === "brandList,campaign,negative"
+    );
+  if (
+    !pausedGroup ||
+    item.asset_group_id !== config.qrsTestPmaxParentAssetGroupId
+  )
+    return false;
+  if (intent.action === "pmax_audience_signal_add")
+    return (
+      typeof config.qrsTestPmaxAudienceId === "string" &&
+      item.audience_id === config.qrsTestPmaxAudienceId &&
+      Object.keys(item).sort().join(",") ===
+        "asset_group_id,audience_id,campaign_id" &&
+      op.kind === "assetGroupSignals" &&
+      op.method === "create" &&
+      op.resource_name === null &&
+      op.before === null &&
+      op.update_mask === null &&
+      fields.assetGroup === group &&
+      object(fields.audience).audience ===
+        `${prefix}/audiences/${config.qrsTestPmaxAudienceId}` &&
+      Object.keys(fields).sort().join(",") === "assetGroup,audience"
+    );
+  if (intent.action === "pmax_asset_attach")
+    return (
+      typeof config.qrsTestPmaxAssetId === "string" &&
+      item.asset_id === config.qrsTestPmaxAssetId &&
+      [
+        "HEADLINE",
+        "LONG_HEADLINE",
+        "DESCRIPTION",
+        "MARKETING_IMAGE",
+        "SQUARE_MARKETING_IMAGE",
+      ].includes(String(item.field_type)) &&
+      Object.keys(item).sort().join(",") ===
+        "asset_group_id,asset_id,campaign_id,field_type" &&
+      op.kind === "assetGroupAssets" &&
+      op.method === "create" &&
+      op.resource_name === null &&
+      op.before === null &&
+      op.update_mask === null &&
+      fields.assetGroup === group &&
+      fields.asset === `${prefix}/assets/${config.qrsTestPmaxAssetId}` &&
+      fields.fieldType === item.field_type &&
+      fields.status === "PAUSED" &&
+      Object.keys(fields).sort().join(",") ===
+        "asset,assetGroup,fieldType,status"
+    );
   if (intent.action === "pmax_search_theme_add")
     return (
       item.asset_group_id === config.qrsTestPmaxParentAssetGroupId &&

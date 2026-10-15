@@ -85,6 +85,19 @@ const rawConfigSchema = z.object({
     .regex(/^[1-9][0-9]{0,19}$/)
     .optional(),
   QRS_TEST_PMAX_SEARCH_THEME: z.string().min(1).max(80).optional(),
+  QRS_TEST_PMAX_NEGATIVE_TEXT: z.string().min(1).max(80).optional(),
+  QRS_TEST_PMAX_AUDIENCE_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_BRAND_SHARED_SET_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_ASSET_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
   QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED:
     booleanFromEnv.default(false),
   QRS_TEST_CONVERSION_ACTION_NAME: z.string().min(1).max(100).optional(),
@@ -237,6 +250,10 @@ export type AppConfig = {
   qrsTestPmaxParentCampaignId: string | undefined;
   qrsTestPmaxParentAssetGroupId: string | undefined;
   qrsTestPmaxSearchTheme: string | undefined;
+  qrsTestPmaxNegativeText: string | undefined;
+  qrsTestPmaxAudienceId: string | undefined;
+  qrsTestPmaxBrandSharedSetId: string | undefined;
+  qrsTestPmaxAssetId: string | undefined;
   qrsTestConversionActionConfirmedWriteEnabled: boolean;
   qrsTestConversionActionName: string | undefined;
   qrsTestGoogleOwnerBindingEmail: string | undefined;
@@ -584,6 +601,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
             "asset_group_update",
             "pmax_search_theme_add",
             "pmax_signal_remove",
+            "pmax_negative_add",
+            "pmax_brand_exclude",
+            "pmax_audience_signal_add",
+            "pmax_asset_attach",
           ].includes(action),
       ) ||
       (qrsPmaxActions.includes("pmax_create") &&
@@ -591,10 +612,27 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       (qrsPmaxActions.some((action) => action !== "pmax_create") &&
         !value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID) ||
       (qrsPmaxActions.some((action) =>
+        [
+          "asset_group_update",
+          "pmax_search_theme_add",
+          "pmax_signal_remove",
+          "pmax_audience_signal_add",
+          "pmax_asset_attach",
+        ].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID) ||
+      (qrsPmaxActions.some((action) =>
         ["pmax_search_theme_add", "pmax_signal_remove"].includes(action),
       ) &&
-        (!value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID ||
-          !value.QRS_TEST_PMAX_SEARCH_THEME?.trim())))
+        !value.QRS_TEST_PMAX_SEARCH_THEME?.trim()) ||
+      (qrsPmaxActions.includes("pmax_negative_add") &&
+        !value.QRS_TEST_PMAX_NEGATIVE_TEXT?.trim()) ||
+      (qrsPmaxActions.includes("pmax_audience_signal_add") &&
+        !value.QRS_TEST_PMAX_AUDIENCE_ID) ||
+      (qrsPmaxActions.includes("pmax_brand_exclude") &&
+        !value.QRS_TEST_PMAX_BRAND_SHARED_SET_ID) ||
+      (qrsPmaxActions.includes("pmax_asset_attach") &&
+        !value.QRS_TEST_PMAX_ASSET_ID))
   )
     throw new Error(
       "TEST PMax confirmed write requires exact isolated profiles and parent binding.",
@@ -703,6 +741,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     qrsTestPmaxParentCampaignId: value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID,
     qrsTestPmaxParentAssetGroupId: value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID,
     qrsTestPmaxSearchTheme: value.QRS_TEST_PMAX_SEARCH_THEME,
+    qrsTestPmaxNegativeText: value.QRS_TEST_PMAX_NEGATIVE_TEXT,
+    qrsTestPmaxAudienceId: value.QRS_TEST_PMAX_AUDIENCE_ID,
+    qrsTestPmaxBrandSharedSetId: value.QRS_TEST_PMAX_BRAND_SHARED_SET_ID,
+    qrsTestPmaxAssetId: value.QRS_TEST_PMAX_ASSET_ID,
     qrsTestConversionActionConfirmedWriteEnabled:
       value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED,
     qrsTestConversionActionName: value.QRS_TEST_CONVERSION_ACTION_NAME,

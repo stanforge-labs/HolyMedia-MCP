@@ -1,5 +1,9 @@
 # HolyMedia MCP — передача PPC-специалисту
 
+**Обновление 16 октября:** ранее принятые 20 Google Ads сценариев, Search Clone и ChatGPT Q сохраняют свой LIVE-статус; Claude R/M и двухклиентский S остаются PARTIAL. Для PMax локально проверены новые узкие TEST-only preview-профили: точное минус-слово, существующий asset (текст/изображение), принадлежащая TEST аудитория и существующий BRANDS-list. Они ещё **не развёрнуты и не имеют Google `validate_only` или LIVE evidence**; PMax parent отсутствует. Специалист может принимать уже подтверждённые Search-сценарии только в ранее проверенных границах и после отдельного owner approval для каждого изменения. PMax пока проверяется только чтением и локальным планом; его fixture/edit не принимать как готовые. Google поддерживает PMax negative/brand criteria, но в TEST пока нет нужного родителя и проверенного списка брендов. Отсутствие доказанных клиентских permission prompts обоих клиентов не закрывает S.
+
+Новый 10-минутный TEST VPS guard снова не прошёл (`+940` страниц swap-out, 32 из 61 измерений не прошли пороги); cutover не выполнялся. TEST provider READ остановился до Google из-за истёкшего access token, без OAuth refresh. Специалисту не следует готовить PMax LIVE-приёмку, пока не будет подтверждён ресурсный запас, обновлён безопасный TEST доступ, развёрнут exact-SHA образ и проверен реальный parent/goal.
+
 **Состояние:** 15 октября 2026 г. · закрытая техническая приёмка, **не разрешение на production-запись**. Источники: [оригинальное ТЗ](../../artifacts/google-full-scope/original-tz-source-20261009.json), [матрица приёмки](../acceptance/requirements-matrix-closeout-20261013.md), [проверка двух AI-клиентов](../acceptance/qrs-two-client-closeout-20261015.md), [Search Clone LIVE](../acceptance/clone-live-verified-20261015.md).
 
 ## Что это за сервис

@@ -113,6 +113,8 @@ export function extendedFixture(options: { customerId?: string } = {}) {
     ad_group_asset: "adGroupAsset",
     customer_asset: "customerAsset",
     custom_audience: "customAudience",
+    audience: "audience",
+    shared_set: "sharedSet",
     bidding_strategy: "biddingStrategy",
     asset_group: "assetGroup",
     asset_group_asset: "assetGroupAsset",
