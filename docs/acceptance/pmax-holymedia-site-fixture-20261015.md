@@ -1,5 +1,7 @@
 # HolyMedia PMax fixture — site-backed approval package (15 October 2026)
 
+**Owner follow-up:** The owner has approved the exact HolyMedia brand, landing, copy, geo/language/budget and three named website media sources **for closed Google Ads TEST acceptance only**. The actual three-file local media pack now passes the HolyMedia PNG/JPEG byte/decode limits; see [technical readiness and the still-unverified conversion](pmax-holymedia-mediapack-readiness-20261015.md). This does not approve deployment, a Google Ads preview/commit or any Tilda/GTM/GA4 change.
+
 Status: **READ-only research and code/mock preparation. No Google Ads preview, validate_only, mutation, website tracking change or TEST deployment.** This supersedes the proposed _HolyPilot_ advertising copy/landing in the earlier fixture decision; it does not rename the product or change the original TZ.
 
 ## Site and truthful offer
