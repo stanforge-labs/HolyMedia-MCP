@@ -186,6 +186,20 @@ describe("Google private profile: required PPC P47–53", () => {
         scopes: ["adforge:mcp:read", "adforge:mcp:write"],
       },
     ]);
+    const conversion = profile.find(
+      (tool) => tool.name === "google_ads_conversion_action_preview",
+    )!;
+    expect(conversion.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+    });
+    expect(conversion.securitySchemes).toEqual([
+      { type: "oauth2", scopes: ["adforge:mcp:read", "adforge:mcp:write"] },
+    ]);
+    expect(JSON.stringify(conversion.inputSchema)).toContain(
+      "conversion_action_create",
+    );
+    expect(JSON.stringify(conversion.inputSchema)).not.toContain("pmax_create");
     expect(profile[0]!.inputSchema).toEqual(
       googleWriteProfileInputSchema(profile[0]!),
     );
