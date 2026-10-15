@@ -2661,7 +2661,34 @@ export async function buildClonePlan(
           "Source ad-group bid modifier owner/parent не подтверждён.",
         );
     }
-    if (groupModifiers.length)
+    // Google reports the three implicit neutral device rows even when an ad group
+    // has no bid adjustment. They are not create operations. Any explicit or
+    // non-neutral adjustment remains unsupported, so it cannot be silently lost.
+    const implicitDevices = new Map([
+      ["30000", "DESKTOP"],
+      ["30001", "MOBILE"],
+      ["30002", "TABLET"],
+    ]);
+    const implicitModifiersOnly =
+      groupModifiers.length === implicitDevices.size &&
+      groupModifiers.every((record) => {
+        const modifier = row(record.adGroupBidModifier);
+        const suffix = String(modifier.resourceName).split("~").at(-1);
+        const expectedType = implicitDevices.get(String(suffix));
+        if (expectedType === undefined) return false;
+        implicitDevices.delete(String(suffix));
+        return (
+          row(modifier.device).type === expectedType &&
+          (modifier.bidModifier === undefined ||
+            modifier.bidModifier === null ||
+            modifier.bidModifier === 1) &&
+          (modifier.bidModifierSource === undefined ||
+            modifier.bidModifierSource === null ||
+            modifier.bidModifierSource === "CAMPAIGN")
+        );
+      }) &&
+      implicitDevices.size === 0;
+    if (groupModifiers.length && !implicitModifiersOnly)
       error(
         "google_clone_unsupported_components",
         "Source ad-group bid modifiers не поддерживаются clone profile; inherited/custom adjustments не опущены.",

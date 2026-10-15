@@ -1737,6 +1737,60 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
     });
     expect(f.build).not.toHaveBeenCalled();
   });
+  it("accepts only the three implicit neutral ad-group device rows", async () => {
+    const f = fixture();
+    const neutralRead = async (q: string) =>
+      q.includes("FROM ad_group_bid_modifier")
+        ? Object.entries({
+            "30000": "DESKTOP",
+            "30001": "MOBILE",
+            "30002": "TABLET",
+          }).map(([id, type]) => ({
+            adGroupBidModifier: {
+              resourceName: `${prefix}/adGroupBidModifiers/2~${id}`,
+              adGroup: f.group.resourceName,
+              device: { type },
+            },
+          }))
+        : f.read(q);
+    const plan = await buildClonePlan(account, f.input, neutralRead, f.build);
+    expect(plan.operations.length).toBeGreaterThan(0);
+  });
+  it.each(["duplicate", "missing", "explicit", "nonneutral", "unknown_device"])(
+    "rejects %s ad-group modifier rows instead of silently losing settings",
+    async (failure) => {
+      const f = fixture();
+      const modifiers = Object.entries({
+        "30000": "DESKTOP",
+        "30001": "MOBILE",
+        "30002": "TABLET",
+      }).map(([id, type]) => ({
+        adGroupBidModifier: {
+          resourceName: `${prefix}/adGroupBidModifiers/2~${id}`,
+          adGroup: f.group.resourceName,
+          device: { type },
+          bidModifier: 1,
+        },
+      }));
+      if (failure === "duplicate") modifiers[2] = modifiers[1]!;
+      if (failure === "missing") modifiers.pop();
+      if (failure === "explicit")
+        (modifiers[1]!.adGroupBidModifier as JsonRow).bidModifierSource =
+          "AD_GROUP";
+      if (failure === "nonneutral")
+        modifiers[1]!.adGroupBidModifier.bidModifier = 1.2;
+      if (failure === "unknown_device")
+        modifiers[1]!.adGroupBidModifier.device.type = "UNKNOWN";
+      const read = async (q: string) =>
+        q.includes("FROM ad_group_bid_modifier") ? modifiers : f.read(q);
+      await expect(
+        buildClonePlan(account, f.input, read, f.build),
+      ).rejects.toMatchObject({
+        writeCode: "google_clone_unsupported_components",
+      });
+      expect(f.build).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     "foreign",
     "wrong_id",
