@@ -1,5 +1,7 @@
 # HolyMedia PMax TEST media and conversion readiness — 15 October 2026
 
+**Superseded for advertiser identity:** The owner subsequently clarified that the HolyMedia agency website, lead form and analytics are outside the independent HolyMedia MCP TEST. This three-file pack remains a protected **technical artifact only** and must not be used in any new Google Ads operation without a new scope-specific decision. Its local format/byte checks do not establish a valid service landing, event or conversion. See the [current PMax TEST conversion decision](pmax-test-conversion-readiness-20261015.md). The original approved-agency-fixture description below is preserved as history, not current execution authority.
+
 **Verdict:** media pack **READY for local HolyMedia API input**; conversion tracking **NOT VERIFIED**; atomic PAUSED fixture **NOT YET provider-validate_only-ready**. This is TEST-only owner approval of the named brand, copy and site media, **not** approval of a Google Ads preview/commit, conversion action, tracking edit, TEST deployment or production change. The actual media files and full manifest are held in a protected local folder outside Git; this document contains only public source URLs and technical hashes.
 
 ## Approved fixture and real bytes

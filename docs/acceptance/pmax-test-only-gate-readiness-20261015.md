@@ -1,5 +1,7 @@
 # PMax TEST-only gate — code readiness, 15 October 2026
 
+**Current owner scope correction:** HolyMedia MCP is the independent TEST service. The agency `holymedia.kz` landing, Tilda/GTM/GA4 lead event and agency media are not the fixture source. The prepared pack is retained locally but must not be uploaded automatically. The gate's four code profiles and OFF/non-deployed status are unchanged; current conversion/PMax blockers and safe next steps are in the [TEST conversion decision](pmax-test-conversion-readiness-20261015.md). The site-backed notes below are historical and superseded on advertiser identity, not live authorization.
+
 **Later owner clarification:** HolyPilot is a future name, not the required current advertiser. The [site-backed HolyMedia fixture package](pmax-holymedia-site-fixture-20261015.md) uses the existing `/leads` service and supersedes the speculative HolyPilot copy/landing below. The old text remains historical; it is not approval to use the site media or proof of conversion tracking. Gate scope, default-OFF status, non-deployment and missing provider LIVE evidence are unchanged.
 
 **Media follow-up:** The owner then approved the three exact HolyMedia website sources for closed TEST acceptance. A protected local JPEG/PNG/PNG pack passes the real-byte HolyMedia media validator; see [readiness evidence](pmax-holymedia-mediapack-readiness-20261015.md). This approval does not enable the gate, create an Ads conversion action or establish a working form-success event.

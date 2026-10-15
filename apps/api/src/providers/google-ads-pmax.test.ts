@@ -115,7 +115,7 @@ function reader(opts: ExtendedRow = {}) {
     if (q.includes(" FROM conversion_action"))
       return [{ conversionAction: opts.action ?? action }];
     if (q.includes("segments.conversion_action"))
-      return [{ metrics: { allConversions: 2 } }];
+      return [{ metrics: { allConversions: opts.recentConversions ?? 2 } }];
     if (q.includes(" FROM customer"))
       return [{ customer: opts.customer ?? customer }];
     if (q.includes(" FROM geo_target_constant"))
@@ -283,6 +283,22 @@ describe("v24 non-retail PMax exact atomic provider plans (mock only)", () => {
     for (const op of p.operations)
       expect(extendedProviderOperation(op)).toBeTruthy();
     expect(p.inverse_intent).toBeUndefined();
+  });
+  it("does not fabricate conversion history or reject an otherwise valid paused plan solely for zero recent conversions", async () => {
+    const p = await buildPmaxCreatePlan(
+      account,
+      brief(),
+      reader({ recentConversions: 0 }),
+    );
+    expect(
+      p.operations.find((o) => o.kind === "campaigns")?.fields.status,
+    ).toBe("PAUSED");
+    expect(p.items[0]?.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/no confirmed conversions in LAST_30_DAYS/),
+      ]),
+    );
+    expect(JSON.stringify(p.checks)).toContain('"allConversions":0');
   });
   it("disabled brand guidelines explicitly uses per-group LOGO/business, never Search BUSINESS_LOGO", async () => {
     const p = await buildPmaxCreatePlan(
