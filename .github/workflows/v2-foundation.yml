@@ -121,6 +121,10 @@ jobs:
           docker exec ${{ job.services.postgres.id }} createdb -U holymedia public_mcp_upgrade
           pnpm --filter @holymedia/database prisma:deploy
       - run: pnpm test
+      - name: TEST health probe and low-overhead observer syntax
+        run: |
+          bash -n infra/test-mcp/http-healthcheck.sh
+          python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("scripts/ops/lightweight-health-observer.py").read_text())'
       - name: Isolated preview supervisor pure regression and Python compile check
         run: |
           python3 -m unittest discover -s scripts/google-live-acceptance/stage234 -p 'test_*.py'

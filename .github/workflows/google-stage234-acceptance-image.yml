@@ -53,6 +53,6 @@ jobs:
           reference="$IMAGE@${{ steps.existing.outputs.digest || steps.image.outputs.digest }}"
           docker pull "$reference"
           test "$(docker image inspect --format '{{.Config.User}}' "$reference")" = node
-          docker run --rm --entrypoint sh "$reference" -ec 'test -f apps/api/dist/main.js; test ! -d apps/web; test ! -d apps/worker; test ! -d .git; test ! -e .env; cd apps/api; node --input-type=module -e '"'"'import sharp from "sharp"; await sharp({ create: { width: 16, height: 16, channels: 3, background: "#ffffff" } }).png().toBuffer();'"'"''
+          docker run --rm --entrypoint sh "$reference" -ec 'command -v bash >/dev/null; bash -n /usr/local/bin/holymedia-test-http-health; test -f apps/api/dist/main.js; test ! -d apps/web; test ! -d apps/worker; test ! -d .git; test ! -e .env; cd apps/api; node --input-type=module -e '"'"'import sharp from "sharp"; await sharp({ create: { width: 16, height: 16, channels: 3, background: "#ffffff" } }).png().toBuffer();'"'"''
           echo "Acceptance-only image: $reference" >> "$GITHUB_STEP_SUMMARY"
           echo "Never deploy to production; use only after exact source quality CI passes." >> "$GITHUB_STEP_SUMMARY"

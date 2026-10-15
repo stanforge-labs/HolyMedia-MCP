@@ -68,6 +68,7 @@ RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
 FROM base AS test-web-runtime
 ENV NODE_ENV=production
 WORKDIR /workspace
+COPY --chown=node:node infra/test-mcp/http-healthcheck.sh /usr/local/bin/holymedia-test-http-health
 COPY --from=test-web-prod-deps --chown=node:node /workspace /workspace
 COPY --from=test-web-build --chown=node:node /workspace/apps/web/.next ./apps/web/.next
 COPY --from=test-web-build --chown=node:node /workspace/apps/web/public ./apps/web/public
@@ -91,6 +92,7 @@ RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
 
 FROM base AS api-runtime
 ENV NODE_ENV=production
+COPY --chown=node:node infra/test-mcp/http-healthcheck.sh /usr/local/bin/holymedia-test-http-health
 
 COPY --from=api-prod-deps --chown=node:node /workspace/package.json /workspace/.npmrc ./
 COPY --chown=node:node infra/api-runtime.pnpm-workspace.yaml ./pnpm-workspace.yaml

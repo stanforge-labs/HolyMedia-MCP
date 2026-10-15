@@ -61,11 +61,30 @@ test("TEST compose does not reference production data or enable writes", () => {
   assert.match(compose, /127\.0\.0\.1:14404:4000/);
   assert.match(compose, /command: \["node", "apps\/api\/dist\/main\.js"\]/);
   assert.match(compose, /127\.0\.0\.1:13300:3000/);
+  assert.equal(
+    (compose.match(/- \/usr\/local\/bin\/holymedia-test-http-health/g) ?? [])
+      .length,
+    2,
+  );
+  assert.equal((compose.match(/interval: 15s/g) ?? []).length, 2);
+  assert.equal((compose.match(/timeout: 5s/g) ?? []).length, 2);
+  assert.doesNotMatch(
+    compose,
+    /fetch\('http:\/\/127\.0\.0\.1:(?:4000|3000)\/(?:ready|auth)'\)/,
+  );
   assert.doesNotMatch(compose, /^\s+worker:/m);
 });
 
 test("TEST Web build is pinned to TEST origin and exposes only restricted login", () => {
   assert.match(dockerfile, /FROM base AS test-web-runtime/);
+  assert.equal(
+    (
+      dockerfile.match(
+        /COPY --chown=node:node infra\/test-mcp\/http-healthcheck\.sh \/usr\/local\/bin\/holymedia-test-http-health/g,
+      ) ?? []
+    ).length,
+    2,
+  );
   assert.match(
     dockerfile,
     /NEXT_PUBLIC_API_BASE_URL=https:\/\/mcp-test\.holymedia\.kz/,
