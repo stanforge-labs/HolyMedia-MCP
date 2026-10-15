@@ -13,6 +13,7 @@ import {
   buildPmaxEditPlan,
   buildPmaxAssetGroupPlan,
 } from "./google-ads-pmax.js";
+import { buildConversionActionPlan } from "./google-ads-conversion-test-gate.js";
 import { finalUrl, canonical, type Stage1Reader } from "./google-ads-stage1.js";
 import {
   extClosed,
@@ -175,6 +176,7 @@ export function parseStage4Intent(raw: unknown): Stage4Intent {
       "media",
       "field_type",
     ],
+    conversion_action_create: ["name"],
   };
   const items = intent.items.map((v) => {
     const r = extClosed(v, allowed[String(intent.action)]!);
@@ -383,6 +385,8 @@ export async function buildStage4Plan(
   read: Stage1Reader,
 ): Promise<ExtendedPlan> {
   const intent = parseStage4Intent(raw);
+  if (intent.action === "conversion_action_create")
+    return buildConversionActionPlan(account, intent, read);
   if (intent.action === "pmax_asset_group_create")
     return buildPmaxAssetGroupPlan(account, intent, read);
   if (intent.action === "pmax_create") {

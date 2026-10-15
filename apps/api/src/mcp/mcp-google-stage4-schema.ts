@@ -7,6 +7,7 @@ import {
 export const GOOGLE_STAGE4_TOOLS = [
   "google_ads_ads_assets_preview",
   "google_ads_pmax_preview",
+  "google_ads_conversion_action_preview",
 ] as const;
 export const stage4Actions = [
   "rsa_create",
@@ -36,6 +37,7 @@ export const stage4Actions = [
   "image_asset_create",
   "pmax_create",
   "pmax_asset_group_create",
+  "conversion_action_create",
 ] as const;
 const string = (maxLength = 255): BriefSchema => ({
   type: "string",
@@ -232,9 +234,13 @@ export function stage4ToolSchema(name: string) {
       account_id: { ...string(14), pattern: "^[0-9-]{10,14}$" },
       action: en(
         stage4Actions.filter((a) =>
-          name === "google_ads_pmax_preview"
-            ? a.startsWith("pmax_") || a === "asset_group_update"
-            : !a.startsWith("pmax_") && a !== "asset_group_update",
+          name === "google_ads_conversion_action_preview"
+            ? a === "conversion_action_create"
+            : name === "google_ads_pmax_preview"
+              ? a.startsWith("pmax_") || a === "asset_group_update"
+              : !a.startsWith("pmax_") &&
+                a !== "asset_group_update" &&
+                a !== "conversion_action_create",
         ),
       ),
       items: {

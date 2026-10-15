@@ -73,6 +73,10 @@ import {
   qrsPmaxWriteAllowed,
 } from "../providers/google-ads-pmax-test-gate.js";
 import {
+  qrsConversionActionIntentAllowed,
+  qrsConversionActionWriteAllowed,
+} from "../providers/google-ads-conversion-test-gate.js";
+import {
   evaluateMetaAppReviewPrecondition,
   evaluateMetaAppReviewRenamePolicy,
   invariantChanges,
@@ -1447,7 +1451,14 @@ export class McpPreviewService {
     const isolatedPmax =
       version === 4 &&
       qrsPmaxIntentAllowed(this.config, account.externalAccountId, intent);
-    if (!isolatedPmax)
+    const isolatedConversion =
+      version === 4 &&
+      qrsConversionActionIntentAllowed(
+        this.config,
+        account.externalAccountId,
+        intent,
+      );
+    if (!isolatedPmax && !isolatedConversion)
       assertExtendedGate(this.config, account.externalAccountId, version);
     await this.assertControlledPrincipal(principal, account.id);
     const plan = (await this.providers.googleExtended(
@@ -1465,6 +1476,14 @@ export class McpPreviewService {
       throw new GoogleAdsWriteError(
         "google_pmax_test_profile_denied",
         "PMax plan выходит за пределы TEST-only профиля.",
+      );
+    if (
+      isolatedConversion &&
+      !qrsConversionActionWriteAllowed(this.config, plan)
+    )
+      throw new GoogleAdsWriteError(
+        "google_conversion_test_profile_denied",
+        "ConversionAction plan выходит за пределы TEST-only профиля.",
       );
     return this.storeGoogleStage1(principal, account, plan);
   }
@@ -1645,7 +1664,11 @@ export class McpPreviewService {
       assertStage2Plan(plan, account.externalAccountId);
     }
     if (plan.version >= 3) {
-      if (!(plan.version === 4 && qrsPmaxWriteAllowed(this.config, plan)))
+      if (!(
+        plan.version === 4 &&
+        (qrsPmaxWriteAllowed(this.config, plan) ||
+          qrsConversionActionWriteAllowed(this.config, plan))
+      ))
         assertExtendedGate(
           this.config,
           account.externalAccountId,
@@ -2668,10 +2691,17 @@ export class McpPreviewService {
         this.config,
         this.googleStage1Stored(preview, account),
       );
+    const qrsConversionWrite =
+      preview.operation === "GOOGLE_STAGE4_CONVERSION_ACTION_CREATE" &&
+      qrsConversionActionWriteAllowed(
+        this.config,
+        this.googleStage1Stored(preview, account),
+      );
     if (
       !qrsKeywordStatusWrite &&
       !qrsCloneWrite &&
       !qrsPmaxWrite &&
+      !qrsConversionWrite &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(

@@ -36,7 +36,8 @@ export type ExtendedKind =
   | "assetGroupSignals"
   | "campaignConversionGoals"
   | "customConversionGoals"
-  | "conversionGoalCampaignConfigs";
+  | "conversionGoalCampaignConfigs"
+  | "conversionActions";
 export type ExtendedOperation = {
   kind: ExtendedKind;
   method: "create" | "update" | "remove";
@@ -227,6 +228,7 @@ const kinds: ExtendedKind[] = [
   "campaignConversionGoals",
   "customConversionGoals",
   "conversionGoalCampaignConfigs",
+  "conversionActions",
 ];
 export function assertExtendedPlan(plan: ExtendedPlan, account: string) {
   if (
@@ -382,6 +384,7 @@ export function extendedProviderOperation(o: ExtendedOperation) {
     campaignConversionGoals: "campaignConversionGoal",
     customConversionGoals: "customConversionGoal",
     conversionGoalCampaignConfigs: "conversionGoalCampaignConfig",
+    conversionActions: "conversionAction",
   };
   return {
     [`${singular[o.kind]}Operation`]:

@@ -219,6 +219,39 @@ describe("v2 configuration", () => {
     ])
       expect(() => loadConfig({ ...isolated, ...unsafe })).toThrow();
   });
+  it("keeps the first-party TEST ConversionAction gate OFF unless every isolation invariant holds", () => {
+    expect(
+      loadConfig({ NODE_ENV: "test" })
+        .qrsTestConversionActionConfirmedWriteEnabled,
+    ).toBe(false);
+    const safe = {
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED: "true",
+      QRS_TEST_CONVERSION_ACTION_NAME: "HM_MCP_TEST_SIGNUP_20261015_ACCEPTANCE",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+      PROVIDER_GOOGLE_API_VERSION: "v24",
+    };
+    expect(loadConfig(safe)).toMatchObject({
+      qrsTestConversionActionConfirmedWriteEnabled: true,
+      confirmedWriteEnabled: false,
+      providerGoogleAdsStage4WriteEnabled: false,
+    });
+    for (const drift of [
+      { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
+      { QRS_TEST_RESTRICTED_AUTH: "false" },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
+      { V2_CONFIRMED_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "true" },
+      { QRS_TEST_CONVERSION_ACTION_NAME: "Not a controlled TEST name" },
+      { QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "true" },
+    ])
+      expect(() => loadConfig({ ...safe, ...drift })).toThrow();
+  });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
     expect(
       loadConfig({

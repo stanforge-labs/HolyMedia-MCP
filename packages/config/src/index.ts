@@ -85,6 +85,9 @@ const rawConfigSchema = z.object({
     .regex(/^[1-9][0-9]{0,19}$/)
     .optional(),
   QRS_TEST_PMAX_SEARCH_THEME: z.string().min(1).max(80).optional(),
+  QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED:
+    booleanFromEnv.default(false),
+  QRS_TEST_CONVERSION_ACTION_NAME: z.string().min(1).max(100).optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: z.string().optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: z.string().optional(),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
@@ -234,6 +237,8 @@ export type AppConfig = {
   qrsTestPmaxParentCampaignId: string | undefined;
   qrsTestPmaxParentAssetGroupId: string | undefined;
   qrsTestPmaxSearchTheme: string | undefined;
+  qrsTestConversionActionConfirmedWriteEnabled: boolean;
+  qrsTestConversionActionName: string | undefined;
   qrsTestGoogleOwnerBindingEmail: string | undefined;
   qrsTestGoogleOwnerBindingUserId: string | undefined;
   providerMetaClientId: string | undefined;
@@ -595,6 +600,32 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       "TEST PMax confirmed write requires exact isolated profiles and parent binding.",
     );
 
+  if (
+    value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      value.PROVIDER_GOOGLE_API_VERSION.replace(/^v/, "") !== "24" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+      !/^HM_MCP_TEST_SIGNUP_[A-Z0-9_]{8,60}$/.test(
+        value.QRS_TEST_CONVERSION_ACTION_NAME ?? "",
+      ))
+  )
+    throw new Error(
+      "TEST ConversionAction write requires one frozen first-party SIGNUP profile and isolated TEST-only guards.",
+    );
+
   const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
   const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
   if (Boolean(bindingEmail) !== Boolean(bindingUserId))
@@ -672,6 +703,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     qrsTestPmaxParentCampaignId: value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID,
     qrsTestPmaxParentAssetGroupId: value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID,
     qrsTestPmaxSearchTheme: value.QRS_TEST_PMAX_SEARCH_THEME,
+    qrsTestConversionActionConfirmedWriteEnabled:
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED,
+    qrsTestConversionActionName: value.QRS_TEST_CONVERSION_ACTION_NAME,
     qrsTestGoogleOwnerBindingEmail: bindingEmail,
     qrsTestGoogleOwnerBindingUserId: bindingUserId,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,

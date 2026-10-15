@@ -19,6 +19,10 @@ import {
   qrsPmaxWriteAllowed,
 } from "../google-ads-pmax-test-gate.js";
 import {
+  qrsConversionActionIntentAllowed,
+  qrsConversionActionWriteAllowed,
+} from "../google-ads-conversion-test-gate.js";
+import {
   getGoogleTrackingSpecs,
   auditGoogleLinksAndUtms,
 } from "../google-ads-tracking-audit.js";
@@ -843,7 +847,16 @@ export class GoogleAdsAdapter
       (action === "build"
         ? qrsPmaxIntentAllowed(this.config, context.accountId, input)
         : qrsPmaxWriteAllowed(this.config, input));
-    if (!isolatedPmax)
+    const isolatedConversion =
+      version === 4 &&
+      (action === "build"
+        ? qrsConversionActionIntentAllowed(
+            this.config,
+            context.accountId,
+            input,
+          )
+        : qrsConversionActionWriteAllowed(this.config, input));
+    if (!isolatedPmax && !isolatedConversion)
       assertExtendedGate(this.config, context.accountId, version);
     const read = this.stage1Reader(context);
     if (action === "build")
@@ -867,6 +880,7 @@ export class GoogleAdsAdapter
     if (
       !validateOnly &&
       !isolatedPmax &&
+      !isolatedConversion &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
@@ -874,7 +888,7 @@ export class GoogleAdsAdapter
         "Подтверждённая запись выключена.",
       );
     if (
-      isolatedPmax &&
+      (isolatedPmax || isolatedConversion) &&
       !validateOnly &&
       canonical(await rereadExtendedChecks(plan, read)) !==
         canonical(plan.checks)

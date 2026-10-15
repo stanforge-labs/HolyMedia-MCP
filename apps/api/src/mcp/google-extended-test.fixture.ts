@@ -98,6 +98,7 @@ export function extendedFixture(options: { customerId?: string } = {}) {
     campaignConversionGoals: "campaignConversionGoal",
     customConversionGoals: "customConversionGoal",
     conversionGoalCampaignConfigs: "conversionGoalCampaignConfig",
+    conversionActions: "conversionAction",
   };
   const tables: Record<string, string> = {
     campaign: "campaign",

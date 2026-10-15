@@ -80,6 +80,8 @@ const providerAliases: Record<string, ProviderId> = {
   tiktok_ads: "TIKTOK_ADS",
 };
 const extendedDescriptions: Record<string, string> = {
+  google_ads_conversion_action_preview:
+    "Restricted TEST-only first-party SIGNUP ConversionAction configuration preview for the single allowed customer and exact server-configured name. No tracking event is asserted. Google validate_only, immutable preview and separate OWNER browser approval are mandatory before any creation; disabled by default.",
   google_ads_shared_budget_setup_preview:
     "TEST-only typed shared-budget setup. Creates one DAILY shared budget and atomically assigns exactly two existing PAUSED BASE Search MANUAL_CPC campaigns, or restores one/two owned budget references with exact campaign_budget masks. Frozen full consumer inventory/currency; no production, status/strategy changes or auto deletion. Google validate_only, separate browser human approval and immutable commit required; Stage 2 gate OFF by default.",
   google_ads_strategy_modifier_preview:
