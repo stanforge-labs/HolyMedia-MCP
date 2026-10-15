@@ -1,5 +1,7 @@
 # Q/R/S two-client closeout — 2026-10-15 read-only audit
 
+Final-sprint evidence review: `commit_preview` and destructive-deletion preview expose `destructiveHint: true` with typed input schemas and explicit approval-oriented descriptions. The retained server records prove HolyMedia approvals but contain **no ChatGPT and Claude client UI permission-prompt screenshots/transcripts**. The owner may provide existing redacted client evidence; no fresh Google mutation is justified for this purpose. R/M remains a safe client-side block plus human cancellation and zero provider mutation, **not** a fabricated Claude server denial. [Consolidated release verdict](HOLYMEDIA_FINAL_TZ_CLOSEOUT_20261015.md).
+
 Scope: isolated TEST MCP, Google Ads account `8590146099`. This records existing native-client activity; no preview, approval, provider mutation, grant, deployment or production change was made in this audit. Client and grant identifiers below are irreversible aliases, not credentials. The original requirement is the preserved TZ extraction at `artifacts/google-full-scope/original-tz-source-20261009.json`, especially paragraphs 44, 47, 49–52, 58, 61, 64–65, 264–275 and 312–315. The owner later designated Claude as the second client in place of Gemini/Cursor.
 
 ## Claude R/M and R/B–C evidence
