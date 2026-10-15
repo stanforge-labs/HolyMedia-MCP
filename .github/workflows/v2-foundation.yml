@@ -44,7 +44,7 @@ jobs:
       PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:18-alpine
+        image: docker.io/library/postgres:18-alpine
         env:
           POSTGRES_DB: holymedia_v2
           POSTGRES_USER: holymedia
@@ -57,7 +57,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       redis:
-        image: public.ecr.aws/docker/library/redis:7.4-alpine
+        image: docker.io/library/redis:7.4-alpine
         ports:
           - 6379:6379
         options: >-

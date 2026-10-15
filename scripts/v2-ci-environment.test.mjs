@@ -43,19 +43,13 @@ test("CI prepares its dedicated disposable PG18 DB without removing test safety 
   assert.match(source, /expect\(version\[0\]\?\.version\)\.toMatch\(\/\^18/);
 });
 
-test("quality service pulls use official public mirror and exact job service identities", () => {
+test("quality service pulls use official images and exact job service identities", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/v2-foundation.yml", import.meta.url),
     "utf8",
   );
-  assert.match(
-    workflow,
-    /image: public\.ecr\.aws\/docker\/library\/postgres:18-alpine/,
-  );
-  assert.match(
-    workflow,
-    /image: public\.ecr\.aws\/docker\/library\/redis:7\.4-alpine/,
-  );
+  assert.match(workflow, /image: docker\.io\/library\/postgres:18-alpine/);
+  assert.match(workflow, /image: docker\.io\/library\/redis:7\.4-alpine/);
   assert.doesNotMatch(workflow, /image: (?:postgres|redis):|ancestor=/);
   assert.match(
     workflow,
