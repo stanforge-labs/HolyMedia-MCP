@@ -2371,7 +2371,7 @@ export async function buildClonePlan(
   );
   const links = await fetchKind(
     "campaignSharedSet",
-    `campaign.id = ${id} AND campaign_shared_set.status != REMOVED`,
+    `campaign_shared_set.campaign = ${quote(String(campaign.resourceName))} AND campaign_shared_set.status != REMOVED`,
   );
   const sharedLists: { resource: string; name: string; members: JsonRow[] }[] =
     [];
@@ -2815,7 +2815,7 @@ export async function buildClonePlan(
   }[] = [];
   const assetLinks = await fetchKind(
       "campaignAsset",
-      `campaign.id = ${id} AND campaign_asset.status != REMOVED`,
+      `campaign_asset.campaign = ${quote(String(campaign.resourceName))} AND campaign_asset.status != REMOVED`,
     ),
     assets: JsonRow = {
       sitelinks: [],
@@ -2944,7 +2944,7 @@ export async function buildClonePlan(
   }
   const goals = await fetchKind(
       "campaignConversionGoal",
-      `campaign.id = ${id}`,
+      `campaign_conversion_goal.campaign = ${quote(String(campaign.resourceName))}`,
     ),
     actions = list(await q(actionsQuery)).map((r) => row(r.conversionAction));
   const requested = actions
@@ -2961,7 +2961,7 @@ export async function buildClonePlan(
     )
     .map((a) => String(a.id));
   const custom = await q(
-    `SELECT conversion_goal_campaign_config.custom_conversion_goal FROM conversion_goal_campaign_config WHERE campaign.id = ${id}`,
+    `SELECT conversion_goal_campaign_config.resource_name, conversion_goal_campaign_config.campaign, conversion_goal_campaign_config.custom_conversion_goal FROM conversion_goal_campaign_config WHERE conversion_goal_campaign_config.campaign = ${quote(String(campaign.resourceName))}`,
   );
   if (
     custom.some((c) => row(c.conversionGoalCampaignConfig).customConversionGoal)

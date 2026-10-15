@@ -1756,6 +1756,26 @@ describe("Bounded Search clone P104–106: atomic reusable references, mock only
     const plan = await buildClonePlan(account, f.input, neutralRead, f.build);
     expect(plan.operations.length).toBeGreaterThan(0);
   });
+  it("queries related campaign resources by their direct owned campaign reference", async () => {
+    const f = fixture();
+    await buildClonePlan(account, f.input, f.read, f.build);
+    const queries = f.read.mock.calls.map(([query]) => query);
+    for (const [table, field] of [
+      ["campaign_shared_set", "campaign_shared_set.campaign"],
+      ["campaign_asset", "campaign_asset.campaign"],
+      ["campaign_conversion_goal", "campaign_conversion_goal.campaign"],
+      [
+        "conversion_goal_campaign_config",
+        "conversion_goal_campaign_config.campaign",
+      ],
+    ]) {
+      const query = queries.find((value) =>
+        value.includes(`FROM ${table} WHERE`),
+      );
+      expect(query).toContain(`WHERE ${field} = '${prefix}/campaigns/1'`);
+      expect(query).not.toContain("WHERE campaign.id =");
+    }
+  });
   it.each(["duplicate", "missing", "explicit", "nonneutral", "unknown_device"])(
     "rejects %s ad-group modifier rows instead of silently losing settings",
     async (failure) => {
