@@ -10,6 +10,8 @@ describe("v2 configuration", () => {
     expect(config.providerGoogleAdsStage3WriteEnabled).toBe(false);
     expect(config.providerGoogleAdsStage4WriteEnabled).toBe(false);
     expect(config.qrsTestGoogleConfirmedWriteEnabled).toBe(false);
+    expect(config.qrsTestCloneConfirmedWriteEnabled).toBe(false);
+    expect(config.qrsTestCloneSourceCampaignId).toBeUndefined();
     expect(config.googleAdsWriteAccountAllowlist).toEqual([]);
     expect(
       loadConfig({
@@ -114,6 +116,46 @@ describe("v2 configuration", () => {
     ])
       expect(() => loadConfig({ ...isolated, ...unsafe })).toThrow(
         /Q\/R\/S Google confirmed write|Restricted TEST MCP/,
+      );
+  });
+  it("binds the separate Clone commit gate to one TEST source and rejects every broader write surface", () => {
+    const isolated = {
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: "true",
+      QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: "24341802696",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+    };
+    expect(loadConfig(isolated)).toMatchObject({
+      qrsTestCloneConfirmedWriteEnabled: true,
+      qrsTestCloneSourceCampaignId: "24341802696",
+      qrsTestGoogleConfirmedWriteEnabled: false,
+      previewOnly: true,
+      confirmedWriteEnabled: false,
+      googleAdsWriteAccountAllowlist: ["8590146099"],
+    });
+    for (const unsafe of [
+      { QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: undefined },
+      { QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: "not-an-id" },
+      { QRS_TEST_RESTRICTED_AUTH: "false" },
+      { QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true" },
+      { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
+      { PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false" },
+      { V2_PREVIEW_ONLY: "false" },
+      { V2_CONFIRMED_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "true" },
+      { PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true" },
+      { PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true" },
+    ])
+      expect(() => loadConfig({ ...isolated, ...unsafe })).toThrow(
+        /TEST Clone confirmed write|Restricted TEST MCP|Q\/R\/S Google confirmed write|QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID/,
       );
   });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {

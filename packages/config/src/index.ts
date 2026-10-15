@@ -68,6 +68,11 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
   QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
   QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: z.string().optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: z.string().optional(),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
@@ -209,6 +214,8 @@ export type AppConfig = {
   providerGoogleLoginScopes: string;
   qrsTestRestrictedAuth: boolean;
   qrsTestGoogleConfirmedWriteEnabled: boolean;
+  qrsTestCloneConfirmedWriteEnabled: boolean;
+  qrsTestCloneSourceCampaignId: string | undefined;
   qrsTestGoogleOwnerBindingEmail: string | undefined;
   qrsTestGoogleOwnerBindingUserId: string | undefined;
   providerMetaClientId: string | undefined;
@@ -502,6 +509,30 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       "Q/R/S Google confirmed write requires isolated TEST-only guards.",
     );
 
+  // Clone acceptance is a separate, mutually exclusive TEST commit profile.
+  // Its source must be explicitly bound; neither generic V2 nor keyword writes
+  // may be enabled as an accidental side effect of this one-off permission.
+  if (
+    value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      !value.QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error(
+      "TEST Clone confirmed write requires one source and isolated TEST-only guards.",
+    );
+
   const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
   const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
   if (Boolean(bindingEmail) !== Boolean(bindingUserId))
@@ -569,6 +600,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
     qrsTestGoogleConfirmedWriteEnabled:
       value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED,
+    qrsTestCloneConfirmedWriteEnabled:
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED,
+    qrsTestCloneSourceCampaignId: value.QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID,
     qrsTestGoogleOwnerBindingEmail: bindingEmail,
     qrsTestGoogleOwnerBindingUserId: bindingUserId,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,

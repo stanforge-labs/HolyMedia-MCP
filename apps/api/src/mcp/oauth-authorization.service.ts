@@ -56,7 +56,8 @@ export class OAuthAuthorizationService {
     const scope =
       !stringValue(input.scope) &&
       this.config.qrsTestRestrictedAuth &&
-      this.config.qrsTestGoogleConfirmedWriteEnabled &&
+      (this.config.qrsTestGoogleConfirmedWriteEnabled ||
+        this.config.qrsTestCloneConfirmedWriteEnabled) &&
       this.config.providerGoogleAdsWriteEnabled
         ? `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`
         : metadata.scope;

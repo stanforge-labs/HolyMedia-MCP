@@ -53,7 +53,8 @@ export class McpController {
     loadConfig().publicMcpWriteScopeEnabled;
   private readonly restrictedTest = loadConfig().qrsTestRestrictedAuth;
   private readonly qrsWriteEnabled =
-    loadConfig().qrsTestGoogleConfirmedWriteEnabled;
+    loadConfig().qrsTestGoogleConfirmedWriteEnabled ||
+    loadConfig().qrsTestCloneConfirmedWriteEnabled;
 
   private authorizationChallenge(
     request: McpRequest,

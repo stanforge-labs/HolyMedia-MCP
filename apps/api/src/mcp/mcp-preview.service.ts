@@ -61,6 +61,7 @@ import {
   googleWriteFailure,
   writeFailureFromError,
   qrsKeywordStatusWriteAllowed,
+  qrsCloneWriteAllowed,
   isLocalGoogleWriteRejection,
   type GoogleKeywordSnapshot,
   type GoogleMutationResult,
@@ -2640,8 +2641,16 @@ export class McpPreviewService {
     const qrsKeywordStatusWrite =
       qrsKeywordStatusWriteAllowed(this.config) &&
       preview.operation === "GOOGLE_KEYWORD_STATUS";
+    const qrsCloneWrite =
+      this.config.qrsTestCloneConfirmedWriteEnabled &&
+      preview.operation === "GOOGLE_STAGE0_CAMPAIGN_CREATE" &&
+      qrsCloneWriteAllowed(
+        this.config,
+        this.googleStage1Stored(preview, account),
+      );
     if (
       !qrsKeywordStatusWrite &&
+      !qrsCloneWrite &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(

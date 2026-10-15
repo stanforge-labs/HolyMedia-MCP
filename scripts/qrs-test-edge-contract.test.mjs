@@ -47,6 +47,7 @@ test("TEST compose does not reference production data or enable writes", () => {
   );
   for (const gate of [
     "QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED",
+    "QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED",
     "PROVIDER_GOOGLE_ADS_WRITE_ENABLED",
     "PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED",
     "PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED",
@@ -58,6 +59,7 @@ test("TEST compose does not reference production data or enable writes", () => {
     assert.match(compose, new RegExp(`${gate}: "false"`));
   }
   assert.match(compose, /127\.0\.0\.1:14404:4000/);
+  assert.match(compose, /command: \["node", "apps\/api\/dist\/main\.js"\]/);
   assert.match(compose, /127\.0\.0\.1:13300:3000/);
   assert.doesNotMatch(compose, /^\s+worker:/m);
 });

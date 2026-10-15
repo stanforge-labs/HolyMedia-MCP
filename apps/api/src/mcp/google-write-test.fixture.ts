@@ -41,8 +41,12 @@ export function fixture(
     strictCampaignAssetGaql?: boolean;
     stage2?: boolean;
     extended?: boolean;
+    customerId?: string;
+    initialSequence?: number;
   } = {},
 ) {
+  const customer = options.customerId ?? "1234567890";
+  const prefix = `customers/${customer}`;
   for (const [key, value] of Object.entries({
     NODE_ENV: "test",
     PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
@@ -109,7 +113,7 @@ export function fixture(
         cpcBidMicros: "150000000",
       },
     });
-  let sequence = 1000,
+  let sequence = options.initialSequence ?? 1000,
     writes = 0,
     failIndex: number | null = null,
     validationFailure = false,

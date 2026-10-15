@@ -52,6 +52,7 @@ import {
   type Stage0Plan,
 } from "../google-ads-stage0.js";
 import {
+  canonical,
   buildStage1Plan,
   rereadStage1Checks,
   providerOperation,
@@ -67,6 +68,7 @@ import {
   GoogleAdsWriteError,
   writeFailureFromError,
   qrsKeywordStatusWriteAllowed,
+  qrsCloneWriteAllowed,
   googleWriteFailure,
   type GoogleKeywordIdentity,
   type GoogleKeywordSnapshot,
@@ -625,13 +627,28 @@ export class GoogleAdsAdapter
         "google_scope_required",
         "Требуется Google OAuth adwords.",
       );
+    const isolatedClone =
+      !validateOnly && qrsCloneWriteAllowed(this.config, plan);
     if (
       !validateOnly &&
+      !isolatedClone &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
         "confirmed_write_disabled",
         "Подтверждённая запись выключена.",
+      );
+    // The preview service already checked the immutable source immediately
+    // before claiming the one-time commit. Recheck in the provider boundary so
+    // an internal direct adapter call cannot bypass the clone source freeze.
+    if (
+      isolatedClone &&
+      canonical(await rereadStage0Checks(plan, this.stage1Reader(context))) !==
+        canonical(plan.checks)
+    )
+      throw new GoogleAdsWriteError(
+        "google_preview_stale",
+        "Clone source изменился после preview; Google mutation не отправлена.",
       );
     try {
       const response = await providerJson<unknown>(

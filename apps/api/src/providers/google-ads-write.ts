@@ -2,6 +2,7 @@ import type { AppConfig } from "@holymedia/config";
 import { ProviderError } from "./provider.errors.js";
 import { GoogleAdsApiError } from "./google-ads.error.js";
 import type { ProviderReadContext } from "./provider.types.js";
+import type { Stage0Plan } from "./google-ads-stage0.js";
 
 export const GOOGLE_MUTATION_BATCH_LIMIT = 500;
 export const GOOGLE_KEYWORD_PREVIEW_TTL_MS = 30 * 60_000;
@@ -92,6 +93,111 @@ export function qrsKeywordStatusWriteAllowed(config: AppConfig): boolean {
     config.publicBaseUrl === "https://mcp-test.holymedia.kz" &&
     config.googleAdsWriteAccountAllowlist.length === 1 &&
     config.googleAdsWriteAccountAllowlist[0] === "8590146099"
+  );
+}
+
+/** A distinct, default-OFF exception for one frozen Search/RSA TEST clone. */
+export function qrsCloneWriteAllowed(
+  config: AppConfig,
+  input: unknown,
+): input is Stage0Plan {
+  if (
+    !config.qrsTestCloneConfirmedWriteEnabled ||
+    !config.qrsTestRestrictedAuth ||
+    config.qrsTestGoogleConfirmedWriteEnabled ||
+    !config.providerGoogleAdsWriteEnabled ||
+    !config.previewOnly ||
+    config.confirmedWriteEnabled ||
+    config.providerGoogleAdsStage2WriteEnabled ||
+    config.providerGoogleAdsStage3WriteEnabled ||
+    config.providerGoogleAdsStage4WriteEnabled ||
+    config.publicMcpWriteScopeEnabled ||
+    config.publicMcpControlledWriteEnabled ||
+    config.publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+    config.googleAdsWriteAccountAllowlist.length !== 1 ||
+    config.googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+    !/^[1-9][0-9]{0,19}$/.test(config.qrsTestCloneSourceCampaignId ?? "")
+  )
+    return false;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const plan = input as Partial<Stage0Plan>;
+  if (
+    plan.version !== 0 ||
+    plan.account_id !== "8590146099" ||
+    plan.intent?.action !== "campaign_create" ||
+    plan.intent.brief?.account_id !== plan.account_id ||
+    typeof plan.intent.brief.campaign_name !== "string" ||
+    !plan.intent.brief.campaign_name.trim() ||
+    plan.summary?.clone_source_campaign_id !==
+      config.qrsTestCloneSourceCampaignId ||
+    plan.summary?.campaign_name !== plan.intent.brief.campaign_name ||
+    plan.summary?.strategy !== "MANUAL_CPC" ||
+    !Array.isArray(plan.checks) ||
+    !Array.isArray(plan.operations) ||
+    plan.operations.length < 4 ||
+    plan.operations.length > 500
+  )
+    return false;
+  const sourceResource = `customers/8590146099/campaigns/${config.qrsTestCloneSourceCampaignId}`;
+  if (
+    !plan.checks.some((check) =>
+      Array.isArray(check?.rows)
+        ? check.rows.some((row) => {
+            const source = row?.campaign as Record<string, unknown> | undefined;
+            return (
+              source &&
+              typeof source === "object" &&
+              !Array.isArray(source) &&
+              source.resourceName === sourceResource &&
+              source.status === "PAUSED" &&
+              source.advertisingChannelType === "SEARCH" &&
+              source.biddingStrategyType === "MANUAL_CPC"
+            );
+          })
+        : false,
+    )
+  )
+    return false;
+  if (
+    !plan.operations.every(
+      (operation) =>
+        operation?.method === "create" &&
+        operation.before === null &&
+        operation.update_mask === null,
+    )
+  )
+    return false;
+  const budgets = plan.operations.filter((o) => o.kind === "campaignBudget");
+  const campaigns = plan.operations.filter((o) => o.kind === "campaign");
+  const groups = plan.operations.filter((o) => o.kind === "adGroup");
+  const ads = plan.operations.filter((o) => o.kind === "adGroupAd");
+  return (
+    budgets.length === 1 &&
+    budgets[0]!.fields.explicitlyShared === false &&
+    budgets[0]!.fields.deliveryMethod === "STANDARD" &&
+    /^[1-9][0-9]{0,18}$/.test(String(budgets[0]!.fields.amountMicros)) &&
+    campaigns.length === 1 &&
+    campaigns[0]!.fields.status === "PAUSED" &&
+    campaigns[0]!.fields.advertisingChannelType === "SEARCH" &&
+    campaigns[0]!.fields.name === plan.intent.brief.campaign_name &&
+    campaigns[0]!.fields.campaignBudget === budgets[0]!.resource_name &&
+    Object.hasOwn(campaigns[0]!.fields, "manualCpc") &&
+    groups.length >= 1 &&
+    groups.every(
+      (group) =>
+        group.fields.status === "PAUSED" &&
+        group.fields.campaign === campaigns[0]!.resource_name,
+    ) &&
+    ads.length >= 1 &&
+    ads.every(
+      (ad) =>
+        ad.fields.status === "PAUSED" &&
+        ad.fields.ad &&
+        typeof ad.fields.ad === "object" &&
+        !Array.isArray(ad.fields.ad) &&
+        Object.hasOwn(ad.fields.ad, "responsiveSearchAd") &&
+        groups.some((group) => group.resource_name === ad.fields.adGroup),
+    )
   );
 }
 export class GoogleAdsWriteError extends ProviderError {

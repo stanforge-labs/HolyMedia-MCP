@@ -20,6 +20,7 @@ services:
       GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099"
       QRS_TEST_RESTRICTED_AUTH: "true"
       QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "false"
+      QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: "false"
       PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
       PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false"
       PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false"
@@ -29,7 +30,8 @@ services:
       V2_WRITE_ACCOUNT_ALLOWLIST: ""
       PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
       PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
-    command: ["pnpm", "--filter", "@holymedia/api", "start"]
+    # Direct Node avoids an extra long-lived pnpm parent in the constrained TEST cgroup.
+    command: ["node", "apps/api/dist/main.js"]
     ports:
       - "127.0.0.1:14404:4000"
     networks:
