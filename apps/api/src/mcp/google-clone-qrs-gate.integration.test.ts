@@ -156,6 +156,21 @@ describe("isolated TEST Search Clone commit gate", () => {
     expect(confirmedMutates(f)).toHaveLength(1);
   });
 
+  it("rejects a different tenant principal before the one-time claim", async () => {
+    const { f } = await setup();
+    const preview = await clone(f);
+    await f.approve(preview);
+    const writesBefore = f.writes();
+    await expect(
+      f.previews.commit(
+        { ...principal, workspaceId: "other-workspace" },
+        String(preview.preview_token),
+      ),
+    ).rejects.toBeDefined();
+    expect(f.writes()).toBe(writesBefore);
+    expect(confirmedMutates(f)).toHaveLength(1);
+  });
+
   it("blocks non-clone Stage 0 and direct adapter mutations with generic V2 OFF", async () => {
     const { f } = await setup();
     const preview = await f.call("create_campaign_from_brief", {
