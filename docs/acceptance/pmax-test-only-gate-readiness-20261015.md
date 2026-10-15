@@ -1,5 +1,7 @@
 # PMax TEST-only gate — code readiness, 15 October 2026
 
+**Later owner clarification:** HolyPilot is a future name, not the required current advertiser. The [site-backed HolyMedia fixture package](pmax-holymedia-site-fixture-20261015.md) uses the existing `/leads` service and supersedes the speculative HolyPilot copy/landing below. The old text remains historical; it is not approval to use the site media or proof of conversion tracking. Gate scope, default-OFF status, non-deployment and missing provider LIVE evidence are unchanged.
+
 This is a code/mock checkpoint, **not** permission for Google Ads mutation or a deployed TEST feature. Search Clone LIVE evidence is unchanged. Original PMax §§254–257 still lack provider `validate_only` and LIVE editing because TEST customer `8590146099` has no owned PMax parent, eligible images/logo or conversion action/goal (last bounded provider inventory, 15 October).
 
 ## Narrow gate and default state
