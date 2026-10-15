@@ -7,14 +7,22 @@ import {
 import {
   fixture,
   object,
-  prefix,
-  customer,
+  prefix as defaultPrefix,
+  customer as defaultCustomer,
   type MockRow,
 } from "./google-write-test.fixture.js";
 
 // Stock MCP/approval/audit services, HTTP mocked at the provider boundary only.
-export function extendedFixture() {
-  const f = fixture(false, { stage2: true, extended: true });
+export function extendedFixture(options: { customerId?: string } = {}) {
+  const customer = options.customerId ?? defaultCustomer;
+  const prefix = options.customerId
+    ? `customers/${options.customerId}`
+    : defaultPrefix;
+  const f = fixture(false, {
+    stage2: true,
+    extended: true,
+    customerId: customer,
+  });
   const campaign = object(f.resources.get(`${prefix}/campaigns/1`)?.campaign);
   Object.assign(campaign, {
     advertisingChannelType: "SEARCH",

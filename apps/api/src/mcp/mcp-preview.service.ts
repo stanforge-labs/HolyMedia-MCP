@@ -69,6 +69,10 @@ import {
   type GoogleWriteFailure,
 } from "../providers/google-ads-write.js";
 import {
+  qrsPmaxIntentAllowed,
+  qrsPmaxWriteAllowed,
+} from "../providers/google-ads-pmax-test-gate.js";
+import {
   evaluateMetaAppReviewPrecondition,
   evaluateMetaAppReviewRenamePolicy,
   invariantChanges,
@@ -1440,7 +1444,11 @@ export class McpPreviewService {
       customerId(account.externalAccountId) !== customerId(accountId)
     )
       throw new PreviewError("confirmation_context_mismatch");
-    assertExtendedGate(this.config, account.externalAccountId, version);
+    const isolatedPmax =
+      version === 4 &&
+      qrsPmaxIntentAllowed(this.config, account.externalAccountId, intent);
+    if (!isolatedPmax)
+      assertExtendedGate(this.config, account.externalAccountId, version);
     await this.assertControlledPrincipal(principal, account.id);
     const plan = (await this.providers.googleExtended(
       principal.workspaceId,
@@ -1453,6 +1461,11 @@ export class McpPreviewService {
     assertExtendedPlan(plan, account.externalAccountId);
     if (plan.version !== version)
       throw new PreviewError("confirmation_context_mismatch");
+    if (isolatedPmax && !qrsPmaxWriteAllowed(this.config, plan))
+      throw new GoogleAdsWriteError(
+        "google_pmax_test_profile_denied",
+        "PMax plan выходит за пределы TEST-only профиля.",
+      );
     return this.storeGoogleStage1(principal, account, plan);
   }
   private async storeGoogleStage1(
@@ -1632,11 +1645,12 @@ export class McpPreviewService {
       assertStage2Plan(plan, account.externalAccountId);
     }
     if (plan.version >= 3) {
-      assertExtendedGate(
-        this.config,
-        account.externalAccountId,
-        plan.version as 3 | 4 | 5,
-      );
+      if (!(plan.version === 4 && qrsPmaxWriteAllowed(this.config, plan)))
+        assertExtendedGate(
+          this.config,
+          account.externalAccountId,
+          plan.version as 3 | 4 | 5,
+        );
       assertExtendedPlan(plan as ExtendedPlan, account.externalAccountId);
     }
     return plan;
@@ -2648,9 +2662,16 @@ export class McpPreviewService {
         this.config,
         this.googleStage1Stored(preview, account),
       );
+    const qrsPmaxWrite =
+      preview.operation.startsWith("GOOGLE_STAGE4_") &&
+      qrsPmaxWriteAllowed(
+        this.config,
+        this.googleStage1Stored(preview, account),
+      );
     if (
       !qrsKeywordStatusWrite &&
       !qrsCloneWrite &&
+      !qrsPmaxWrite &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(

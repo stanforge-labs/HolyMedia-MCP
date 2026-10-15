@@ -158,6 +158,67 @@ describe("v2 configuration", () => {
         /TEST Clone confirmed write|Restricted TEST MCP|Q\/R\/S Google confirmed write|QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID/,
       );
   });
+  it("keeps PMax TEST profiles default-OFF and rejects generic, Public, production or unbound profiles", () => {
+    expect(
+      loadConfig({ NODE_ENV: "test" }).qrsTestPmaxConfirmedWriteEnabled,
+    ).toBe(false);
+    const isolated = {
+      NODE_ENV: "test",
+      HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "true",
+      QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_create,asset_group_update",
+      QRS_TEST_PMAX_CAMPAIGN_NAME: "HM HolyPilot PAUSED fixture",
+      QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: "24364218182",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+      PROVIDER_GOOGLE_API_VERSION: "v24",
+    };
+    expect(loadConfig(isolated)).toMatchObject({
+      qrsTestPmaxConfirmedWriteEnabled: true,
+      qrsTestPmaxAllowedActions: ["pmax_create", "asset_group_update"],
+      confirmedWriteEnabled: false,
+      providerGoogleAdsStage4WriteEnabled: false,
+    });
+    const theme = {
+      ...isolated,
+      QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_search_theme_add,pmax_signal_remove",
+      QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: "204741020281",
+      QRS_TEST_PMAX_SEARCH_THEME: "personal AI marketer",
+    };
+    expect(loadConfig(theme).qrsTestPmaxAllowedActions).toEqual([
+      "pmax_search_theme_add",
+      "pmax_signal_remove",
+    ]);
+    expect(() =>
+      loadConfig({ ...theme, QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: undefined }),
+    ).toThrow();
+    expect(() =>
+      loadConfig({ ...theme, QRS_TEST_PMAX_SEARCH_THEME: undefined }),
+    ).toThrow();
+    for (const unsafe of [
+      { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
+      { QRS_TEST_RESTRICTED_AUTH: "false" },
+      { QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_negative_add" },
+      { QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_create,pmax_create" },
+      { QRS_TEST_PMAX_CAMPAIGN_NAME: undefined },
+      { QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: undefined },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
+      { PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false" },
+      { V2_PREVIEW_ONLY: "false" },
+      { V2_CONFIRMED_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "true" },
+      { PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "true" },
+      { PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true" },
+      { PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true" },
+      { QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true" },
+      { QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: "true" },
+    ])
+      expect(() => loadConfig({ ...isolated, ...unsafe })).toThrow();
+  });
   it("canonicalizes public origins and rejects issuer-confusing URLs", () => {
     expect(
       loadConfig({

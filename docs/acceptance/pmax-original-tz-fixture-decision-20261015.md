@@ -1,5 +1,7 @@
 # PMax original-TZ editing — TEST fixture decision, 15 October 2026
 
+**Code-only update (later on 15 October):** A narrow, default-OFF TEST PMax exception is now implemented in the feature branch for PAUSED fixture creation, name-only asset-group update and an exact search-theme add/remove pair. It is **not deployed or enabled**; the older gate-blocker paragraph below describes the previous runtime and remains historical. See [gate readiness](pmax-test-only-gate-readiness-20261015.md). The genuine parent/media/conversion blockers and absence of provider `validate_only` or LIVE PMax evidence are unchanged.
+
 This is a decision record, not a Google Ads write approval. The literal [source §§254–257](../../artifacts/google-full-scope/original-tz-source-20261009.json) requires editing existing Performance Max asset groups, text/images, audience signals and search themes, plus API-supported negative keywords and brand exclusions. New non-retail campaign creation is a later fixture/extension, **not** an original-TZ requirement by itself.
 
 ## Evidence boundary

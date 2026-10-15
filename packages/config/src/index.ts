@@ -73,6 +73,18 @@ const rawConfigSchema = z.object({
     .string()
     .regex(/^[1-9][0-9]{0,19}$/)
     .optional(),
+  QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_PMAX_ALLOWED_ACTIONS: z.string().default(""),
+  QRS_TEST_PMAX_CAMPAIGN_NAME: z.string().min(1).max(255).optional(),
+  QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_SEARCH_THEME: z.string().min(1).max(80).optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: z.string().optional(),
   QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: z.string().optional(),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
@@ -216,6 +228,12 @@ export type AppConfig = {
   qrsTestGoogleConfirmedWriteEnabled: boolean;
   qrsTestCloneConfirmedWriteEnabled: boolean;
   qrsTestCloneSourceCampaignId: string | undefined;
+  qrsTestPmaxConfirmedWriteEnabled: boolean;
+  qrsTestPmaxAllowedActions: string[];
+  qrsTestPmaxCampaignName: string | undefined;
+  qrsTestPmaxParentCampaignId: string | undefined;
+  qrsTestPmaxParentAssetGroupId: string | undefined;
+  qrsTestPmaxSearchTheme: string | undefined;
   qrsTestGoogleOwnerBindingEmail: string | undefined;
   qrsTestGoogleOwnerBindingUserId: string | undefined;
   providerMetaClientId: string | undefined;
@@ -533,6 +551,50 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       "TEST Clone confirmed write requires one source and isolated TEST-only guards.",
     );
 
+  const qrsPmaxActions = value.QRS_TEST_PMAX_ALLOWED_ACTIONS.split(",")
+    .map((action) => action.trim())
+    .filter(Boolean);
+  if (
+    value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+      !qrsPmaxActions.length ||
+      new Set(qrsPmaxActions).size !== qrsPmaxActions.length ||
+      qrsPmaxActions.some(
+        (action) =>
+          ![
+            "pmax_create",
+            "asset_group_update",
+            "pmax_search_theme_add",
+            "pmax_signal_remove",
+          ].includes(action),
+      ) ||
+      (qrsPmaxActions.includes("pmax_create") &&
+        !value.QRS_TEST_PMAX_CAMPAIGN_NAME?.trim()) ||
+      (qrsPmaxActions.some((action) => action !== "pmax_create") &&
+        !value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_search_theme_add", "pmax_signal_remove"].includes(action),
+      ) &&
+        (!value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID ||
+          !value.QRS_TEST_PMAX_SEARCH_THEME?.trim())))
+  )
+    throw new Error(
+      "TEST PMax confirmed write requires exact isolated profiles and parent binding.",
+    );
+
   const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
   const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
   if (Boolean(bindingEmail) !== Boolean(bindingUserId))
@@ -603,6 +665,13 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     qrsTestCloneConfirmedWriteEnabled:
       value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED,
     qrsTestCloneSourceCampaignId: value.QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID,
+    qrsTestPmaxConfirmedWriteEnabled:
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED,
+    qrsTestPmaxAllowedActions: qrsPmaxActions,
+    qrsTestPmaxCampaignName: value.QRS_TEST_PMAX_CAMPAIGN_NAME,
+    qrsTestPmaxParentCampaignId: value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID,
+    qrsTestPmaxParentAssetGroupId: value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID,
+    qrsTestPmaxSearchTheme: value.QRS_TEST_PMAX_SEARCH_THEME,
     qrsTestGoogleOwnerBindingEmail: bindingEmail,
     qrsTestGoogleOwnerBindingUserId: bindingUserId,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,

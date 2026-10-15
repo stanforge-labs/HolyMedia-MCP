@@ -15,6 +15,10 @@ import {
 } from "../google-ads-stage3.js";
 import { buildStage4Plan } from "../google-ads-stage4.js";
 import {
+  qrsPmaxIntentAllowed,
+  qrsPmaxWriteAllowed,
+} from "../google-ads-pmax-test-gate.js";
+import {
   getGoogleTrackingSpecs,
   auditGoogleLinksAndUtms,
 } from "../google-ads-tracking-audit.js";
@@ -834,7 +838,13 @@ export class GoogleAdsAdapter
         this.stage1Reader(context),
       );
     }
-    assertExtendedGate(this.config, context.accountId, version);
+    const isolatedPmax =
+      version === 4 &&
+      (action === "build"
+        ? qrsPmaxIntentAllowed(this.config, context.accountId, input)
+        : qrsPmaxWriteAllowed(this.config, input));
+    if (!isolatedPmax)
+      assertExtendedGate(this.config, context.accountId, version);
     const read = this.stage1Reader(context);
     if (action === "build")
       return version === 3
@@ -856,11 +866,22 @@ export class GoogleAdsAdapter
     const validateOnly = action === "validate";
     if (
       !validateOnly &&
+      !isolatedPmax &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
         "confirmed_write_disabled",
         "Подтверждённая запись выключена.",
+      );
+    if (
+      isolatedPmax &&
+      !validateOnly &&
+      canonical(await rereadExtendedChecks(plan, read)) !==
+        canonical(plan.checks)
+    )
+      throw new GoogleAdsWriteError(
+        "google_preview_stale",
+        "PMax source изменился после preview; Google mutation не отправлена.",
       );
     const custom = plan.operations.every((o) => o.kind === "customAudiences");
     try {
