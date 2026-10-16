@@ -1,0 +1,61 @@
+name: HolyPilot brand-only Web image smoke
+
+on:
+  push:
+    branches:
+      - codex/holypilot-brand-only
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  web-only-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WEB_IMAGE: ghcr.io/stanforge-labs/holymedia-mcp-v2:sha-0c123ff87438290442b406e48f758dda8d20227b
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull exact source image and check revision
+        run: |
+          set -euo pipefail
+          docker pull "$WEB_IMAGE"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$WEB_IMAGE")" = 0c123ff87438290442b406e48f758dda8d20227b
+
+      - name: Start only the disposable Web
+        run: |
+          set -euo pipefail
+          docker run -d --name holypilot-web-smoke --user node \
+            --workdir /workspace/apps/web -p 127.0.0.1:3000:3000 \
+            "$WEB_IMAGE" ./node_modules/.bin/next start
+          for attempt in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            if [ "$attempt" -eq 60 ]; then docker logs holypilot-web-smoke; exit 1; fi
+            sleep 2
+          done
+          test "$(docker inspect --format '{{.State.Status}}' holypilot-web-smoke)" = running
+
+      - name: Verify public routes and original brand asset
+        run: |
+          set -euo pipefail
+          for path in / /en /auth /en/auth /mcp/approve /assets/brand/holy-pilot-symbol.svg; do
+            curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:3000$path" >/dev/null
+          done
+          curl -fsS http://127.0.0.1:3000/ > /tmp/holypilot-ru.html
+          curl -fsS http://127.0.0.1:3000/en > /tmp/holypilot-en.html
+          grep -q 'HolyPilot' /tmp/holypilot-ru.html
+          grep -q 'Ваш персональный AI-маркетолог' /tmp/holypilot-ru.html
+          grep -q 'Your personal AI marketer' /tmp/holypilot-en.html
+          grep -q 'astanahub.com' /tmp/holypilot-ru.html
+
+      - name: Stop disposable Web
+        if: always()
+        run: docker rm -f holypilot-web-smoke || true
