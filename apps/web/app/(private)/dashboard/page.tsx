@@ -461,8 +461,8 @@ export default function DashboardPage() {
   useEffect(() => {
     document.title =
       language === "en"
-        ? "HolyMedia MCP — Dashboard"
-        : "HolyMedia MCP — Личный кабинет";
+        ? "HolyPilot — Dashboard"
+        : "HolyPilot — Личный кабинет";
   }, [language, section]);
 
   const [client, setClient] = useState<Client>("codex");
@@ -1526,7 +1526,7 @@ export default function DashboardPage() {
           <a
             className="brand-link"
             href={localizedHref("/dashboard", language)}
-            aria-label="HolyMedia MCP — обзор"
+            aria-label="HolyPilot — обзор"
           >
             <BrandLockup />
           </a>
@@ -1600,7 +1600,7 @@ export default function DashboardPage() {
             className="company-access-gate"
             aria-labelledby="company-access-title"
           >
-            <p className="eyebrow">HOLYMEDIA MCP</p>
+            <p className="eyebrow">HOLYPILOT</p>
             <h1 id="company-access-title">
               {active.accessStatus === "SUSPENDED"
                 ? "Доступ компании приостановлен"
@@ -1710,7 +1710,7 @@ export default function DashboardPage() {
         {section === "tariffs" && (
           <section className="section" aria-label="Тарифы">
             <h1 className="sr-only">
-              {"\u0422\u0430\u0440\u0438\u0444\u044b HolyMedia MCP"}
+              {"\u0422\u0430\u0440\u0438\u0444\u044b HolyPilot"}
             </h1>
             <TariffCatalog
               subscription={subscription}
@@ -2402,7 +2402,7 @@ export default function DashboardPage() {
             <div className="report-layout">
               <section className="panel report-panel report-builder-card">
                 <p className="report-builder-card__eyebrow">
-                  HOLYMEDIA MCP · ОТЧЁТ
+                  HOLYPILOT · ОТЧЁТ
                 </p>
                 <h2>Собрать отчёт</h2>
                 <p className="report-builder-card__note">
@@ -2627,7 +2627,7 @@ export default function DashboardPage() {
                   <span>{reportFormat.toUpperCase()}</span>
                 </div>
                 <div className="report-preview-card__body">
-                  <span>HOLYMEDIA MCP</span>
+                  <span>HOLYPILOT</span>
                   <strong>{reportCardCopy.title}</strong>
                   <em>
                     {reportPreview

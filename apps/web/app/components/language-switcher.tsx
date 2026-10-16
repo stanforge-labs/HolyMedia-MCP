@@ -146,8 +146,8 @@ const PAIRS: Array<[string, string]> = [
   ["Безопасность", "Security"],
   ["Изменения — только после подтверждения", "Changes require your approval"],
   [
-    "По умолчанию HolyMedia MCP только читает данные. Любое доступное изменение сначала показывает предварительный результат и ждёт вашего подтверждения.",
-    "HolyMedia MCP is read-only by default. Any available change is previewed first and waits for your approval.",
+    "По умолчанию HolyPilot только читает данные. Любое доступное изменение сначала показывает предварительный результат и ждёт вашего подтверждения.",
+    "HolyPilot is read-only by default. Any available change is previewed first and waits for your approval.",
   ],
   ["Только выбранные кабинеты", "Only selected accounts"],
   ["Доступ ограничен вашим аккаунтом.", "Access is limited to your account."],
@@ -462,7 +462,7 @@ const PAIRS: Array<[string, string]> = [
     "презентацию с показателями, сравнением и кампаниями.",
     "a presentation with metrics, comparisons, and campaigns.",
   ],
-  ["HOLYMEDIA MCP · ОТЧЁТ", "HOLYMEDIA MCP · REPORT"],
+  ["HOLYPILOT · ОТЧЁТ", "HOLYPILOT · REPORT"],
   ["Не удалось подготовить отчёт", "Couldn't prepare the report"],
   ["Повторить проверку", "Retry check"],
   [

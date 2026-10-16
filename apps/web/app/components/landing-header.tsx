@@ -17,7 +17,7 @@ export function LandingHeader() {
 
   return (
     <header className={scrolled ? "site-header is-scrolled" : "site-header"}>
-      <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
+      <Link className="site-brand" href="/" aria-label="HolyPilot — на главную">
         <BrandLockup />
       </Link>
       <nav className="site-nav" aria-label="Навигация">

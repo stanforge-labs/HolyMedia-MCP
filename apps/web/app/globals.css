@@ -611,13 +611,38 @@ pre {
   filter: none;
 }
 .brand-lockup {
-  display: block;
-  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  text-align: left;
 }
-.brand-lockup__image {
+.brand-lockup__symbol {
   display: block;
-  height: 36px;
-  width: auto;
+  flex: none;
+  width: 38px;
+  height: 39px;
+  filter: invert(1);
+}
+.brand-lockup__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.brand-lockup__name {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.brand-lockup__tagline {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 .btn,
 .primary-button,
@@ -1127,14 +1152,8 @@ form {
   min-width: 0;
 }
 .footer__identity {
-  display: grid;
-  gap: 8px;
-  justify-items: start;
-}
-.footer__brand-logo {
-  display: block;
-  width: 136px;
-  height: auto;
+  display: flex;
+  align-items: flex-start;
 }
 .footer__contact {
   color: var(--text-muted);
@@ -2329,9 +2348,9 @@ pre {
     margin-bottom: 22px;
     padding-bottom: 18px;
   }
-  .oauth-consent-card__header .brand-lockup,
-  .oauth-consent-card__header .brand-lockup__image {
-    height: 30px;
+  .oauth-consent-card__header .brand-lockup__symbol {
+    width: 30px;
+    height: 31px;
   }
   .oauth-permissions-grid,
   .oauth-workspace-list {
@@ -4306,15 +4325,17 @@ pre {
     width: 118px;
   }
   .brand-lockup {
-    height: 30px;
+    gap: 8px;
   }
-  .brand-lockup__image {
-    height: 30px;
-    width: auto;
+  .brand-lockup__symbol {
+    width: 31px;
+    height: 32px;
   }
-
-  .footer__brand-logo {
-    width: 126px;
+  .brand-lockup__name {
+    font-size: 18px;
+  }
+  .site-header .brand-lockup__tagline {
+    display: none;
   }
 
   .legal-header {
@@ -5499,20 +5520,10 @@ pre {
   font-size: 13px;
 }
 .brand-lockup {
-  position: relative;
-  width: 128px;
+  max-width: 100%;
 }
-.brand-lockup__image--light,
-.footer__brand-logo--light {
-  display: none;
-}
-html[data-theme="light"] .brand-lockup__image--dark,
-html[data-theme="light"] .footer__brand-logo--dark {
-  display: none;
-}
-html[data-theme="light"] .brand-lockup__image--light,
-html[data-theme="light"] .footer__brand-logo--light {
-  display: block;
+html[data-theme="light"] .brand-lockup__symbol {
+  filter: none;
 }
 .app-loader {
   position: fixed;
@@ -5540,59 +5551,10 @@ html[data-theme="light"] .footer__brand-logo--light {
   justify-items: center;
   gap: 18px;
 }
-.app-loader__mark svg {
-  width: 62px;
-  height: 64px;
-  overflow: visible;
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.app-loader__stream,
-.app-loader__channel {
-  stroke-dasharray: 120;
-  stroke-dashoffset: 120;
-  animation: loader-draw 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-.app-loader__stream--center {
-  animation-delay: 40ms;
-}
-.app-loader__stream--right {
-  animation-delay: 80ms;
-}
-.app-loader__channel {
-  animation-delay: 120ms;
-}
-.app-loader__wordmark {
-  position: relative;
-  display: block;
-  width: 164px;
-  height: 47px;
-}
-
-.app-loader__wordmark img {
-  position: absolute;
-  inset: 0;
-  width: 164px;
-  height: auto;
-  opacity: 0;
-  animation: loader-wordmark 220ms ease-out 350ms forwards;
-}
-.app-loader__wordmark--light {
-  display: none;
-}
-html[data-theme="light"] .app-loader__wordmark--dark {
-  display: none;
-}
-html[data-theme="light"] .app-loader__wordmark--light {
-  display: block;
-}
-@keyframes loader-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
+.brand-lockup--loader {
+  transform: scale(1.2);
+  transform-origin: center;
+  animation: loader-wordmark 220ms ease-out 350ms both;
 }
 @keyframes loader-wordmark {
   to {
@@ -5772,10 +5734,6 @@ html[data-theme="light"] .company-status--suspended {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
-  }
-  .app-loader__wordmark img {
-    opacity: 1;
-    transform: none;
   }
 }
 @media (max-width: 620px) {
@@ -6301,7 +6259,7 @@ html[data-theme="light"] .company-status--suspended {
   color: var(--ok);
 }
 
-/* Loader: four streams converge into the approved symbol before the wordmark. */
+/* The loader uses the same identity as the site headers and footers. */
 .app-loader {
   align-content: center;
   grid-template-columns: 1fr;
@@ -6394,7 +6352,7 @@ html[data-theme="light"] .company-status--suspended {
     display: none;
   }
   .app-loader__caption,
-  .app-loader__wordmark img {
+  .brand-lockup--loader {
     opacity: 1;
     transform: none;
   }

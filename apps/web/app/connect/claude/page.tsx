@@ -213,7 +213,7 @@ export default function ClaudeConsentPage() {
           <a
             className="oauth-consent-brand"
             href={localizedHref("/", language)}
-            aria-label="HolyMedia MCP"
+            aria-label="HolyPilot"
           >
             <BrandLockup />
           </a>

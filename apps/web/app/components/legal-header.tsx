@@ -43,7 +43,7 @@ export function LegalHeader() {
       <Link
         className="legal-brand"
         href={destination ?? "/"}
-        aria-label="HolyMedia MCP"
+        aria-label="HolyPilot — на главную"
         onClick={(event) => {
           if (destination) return;
           event.preventDefault();
