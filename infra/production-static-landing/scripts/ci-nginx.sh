@@ -26,6 +26,11 @@ http {
 EOF
 
 cleanup() {
+  local result=$?
+  if (( result != 0 )); then
+    echo 'Nginx error log on isolated test failure:' >&2
+    sudo cat /tmp/holypilot-static-nginx-error.log >&2 || true
+  fi
   sudo nginx -s stop -c "$fixture" >/dev/null 2>&1 || true
   rm -f "$fixture"
 }
