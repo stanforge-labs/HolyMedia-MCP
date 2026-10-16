@@ -192,6 +192,8 @@ jobs:
     env:
       V2_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:prod-web-sha-${{ github.sha }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -212,6 +214,19 @@ jobs:
             test ! -d /ms-playwright
           '
           docker image inspect -f 'Uncompressed bytes: {{.Size}}' "$V2_IMAGE"
+
+      - name: Validate the optional production Web healthcheck override
+        shell: bash
+        run: |
+          set -euo pipefail
+          V2_WEB_IMAGE="$V2_IMAGE" docker compose \
+            -f infra/docker-compose.v2.web-only-release.yml config --format json \
+            | jq -e --arg image "$V2_IMAGE" '
+                .services.web.image == $image and
+                .services.web.healthcheck.test == ["CMD", "/usr/local/bin/holypilot-web-health", "3000", "/api/health"] and
+                .services.web.healthcheck.interval == "5s" and
+                .services.web.healthcheck.timeout == "5s"
+              '
 
       - name: Smoke the exact production Web command and brand routes
         shell: bash
@@ -239,3 +254,26 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:3000/ >/tmp/web-home.html
           grep -q 'HolyPilot' /tmp/web-home.html
           grep -q 'Ваш персональный AI-маркетолог' /tmp/web-home.html
+          docker exec holypilot-web-smoke /usr/local/bin/holypilot-web-health 3000 /api/health
+          if docker exec holypilot-web-smoke /usr/local/bin/holypilot-web-health 3999 /api/health; then
+            echo '::error::HTTP probe passed without a listener'
+            exit 1
+          fi
+          docker exec -d holypilot-web-smoke node -e '
+            const http = require("node:http");
+            for (const [port, status] of [[3997, 404], [3998, 500]]) {
+              http.createServer((_request, response) => {
+                response.writeHead(status);
+                response.end("error");
+              }).listen(port, "127.0.0.1");
+            }
+            http.createServer(() => {}).listen(3996, "127.0.0.1");
+            setInterval(() => {}, 1000);
+          '
+          sleep 1
+          for port in 3997 3998 3996; do
+            if docker exec holypilot-web-smoke /usr/local/bin/holypilot-web-health "$port" /api/health; then
+              echo "::error::HTTP probe accepted failure case on $port"
+              exit 1
+            fi
+          done

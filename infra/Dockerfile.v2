@@ -59,6 +59,8 @@ RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
 
 FROM base AS production-web-runtime
 ENV NODE_ENV=production
+COPY --chown=node:node infra/production-web/http-healthcheck.sh /usr/local/bin/holypilot-web-health
+RUN chmod 0755 /usr/local/bin/holypilot-web-health
 COPY --from=production-web-prod-deps --chown=node:node /workspace /workspace
 COPY --from=production-web-build --chown=node:node /workspace/apps/web/.next ./apps/web/.next
 COPY --from=production-web-build --chown=node:node /workspace/apps/web/public ./apps/web/public

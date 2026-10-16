@@ -1,0 +1,10 @@
+services:
+  web:
+    image: ${V2_WEB_IMAGE:?V2_WEB_IMAGE is required}
+    healthcheck:
+      test:
+        ["CMD", "/usr/local/bin/holypilot-web-health", "3000", "/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
