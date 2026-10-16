@@ -8,6 +8,12 @@ on:
       - "codex/production-image-optimization"
       - "codex/google-ads-image-optimization"
   workflow_dispatch:
+    inputs:
+      web_only:
+        description: Smoke only the Web process for a Web-only release
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -59,6 +65,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   image-smoke:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.web_only != true }}
     needs: build-and-push
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -174,3 +181,51 @@ jobs:
         shell: bash
         run: |
           docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml down -v --remove-orphans || true
+
+  web-only-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.web_only == true }}
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      V2_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:sha-${{ github.sha }}
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull immutable image and verify revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$V2_IMAGE"
+          test "$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$V2_IMAGE")" = "$GITHUB_SHA"
+
+      - name: Smoke the exact production Web command and brand routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name holypilot-web-smoke \
+            -p 127.0.0.1:3000:3000 \
+            --workdir /workspace/apps/web \
+            "$V2_IMAGE" ./node_modules/.bin/next start
+          trap 'docker stop holypilot-web-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health >/tmp/web-health.json; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs holypilot-web-smoke
+              exit 1
+            fi
+            sleep 2
+          done
+          grep -q '"status":"ok"' /tmp/web-health.json
+          for route in / /auth /mcp/approve /assets/brand/holy-pilot-symbol.svg /icon.svg; do
+            curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:3000$route" >/tmp/web-route-body
+          done
+          curl --fail --silent --show-error http://127.0.0.1:3000/ >/tmp/web-home.html
+          grep -q 'HolyPilot' /tmp/web-home.html
+          grep -q 'Ваш персональный AI-маркетолог' /tmp/web-home.html
