@@ -4,6 +4,7 @@ services:
     build: !reset null
     environment:
       NODE_ENV: production
+      HOLYMEDIA_PUBLIC_BASE_URL: https://mcp-ci.example.test
 
   worker:
     image: ${V2_IMAGE:?V2_IMAGE is required}

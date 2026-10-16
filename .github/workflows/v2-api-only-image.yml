@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           compose=(docker compose -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml -f infra/docker-compose.v2.api-release.yml)
-          "${compose[@]}" config --format json | jq -e --arg api "$API_IMAGE" --arg old "$CURRENT_IMAGE" '.services.api.image == $api and .services.web.image == $old and .services.worker.image == $old and .services.api.environment.NODE_ENV == "production"'
+          "${compose[@]}" config --format json | jq -e --arg api "$API_IMAGE" --arg old "$CURRENT_IMAGE" '.services.api.image == $api and .services.web.image == $old and .services.worker.image == $old and .services.api.environment.NODE_ENV == "production" and .services.api.environment.HOLYMEDIA_PUBLIC_BASE_URL == "https://mcp-ci.example.test"'
           trap 'status=$?; if [ "$status" -ne 0 ]; then "${compose[@]}" ps; "${compose[@]}" logs --no-color api postgres redis; fi' EXIT
           "${compose[@]}" up -d --no-build postgres redis api
           for attempt in {1..60}; do
