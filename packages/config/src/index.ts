@@ -76,6 +76,20 @@ const rawConfigSchema = z.object({
   QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   QRS_TEST_PMAX_ALLOWED_ACTIONS: z.string().default(""),
   QRS_TEST_PMAX_CAMPAIGN_NAME: z.string().min(1).max(255).optional(),
+  QRS_TEST_PMAX_GROUP_NAME: z.string().min(1).max(128).optional(),
+  QRS_TEST_PMAX_FINAL_URL: z.literal("https://mcp.holymedia.kz/").optional(),
+  QRS_TEST_PMAX_CONVERSION_ACTION_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_GEO_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_LANGUAGE_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
   QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: z
     .string()
     .regex(/^[1-9][0-9]{0,19}$/)
@@ -95,6 +109,26 @@ const rawConfigSchema = z.object({
     .regex(/^[1-9][0-9]{0,19}$/)
     .optional(),
   QRS_TEST_PMAX_ASSET_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_CRITERION_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_ASSET_FIELD_TYPE: z
+    .enum([
+      "HEADLINE",
+      "LONG_HEADLINE",
+      "DESCRIPTION",
+      "MARKETING_IMAGE",
+      "SQUARE_MARKETING_IMAGE",
+      "LOGO",
+      "BUSINESS_NAME",
+    ])
+    .optional(),
+  QRS_TEST_PMAX_REPLACEMENT_TEXT: z.string().min(1).max(90).optional(),
+  QRS_TEST_PMAX_REPLACEMENT_ASSET_ID: z
     .string()
     .regex(/^[1-9][0-9]{0,19}$/)
     .optional(),
@@ -247,6 +281,11 @@ export type AppConfig = {
   qrsTestPmaxConfirmedWriteEnabled: boolean;
   qrsTestPmaxAllowedActions: string[];
   qrsTestPmaxCampaignName: string | undefined;
+  qrsTestPmaxGroupName: string | undefined;
+  qrsTestPmaxFinalUrl: "https://mcp.holymedia.kz/" | undefined;
+  qrsTestPmaxConversionActionId: string | undefined;
+  qrsTestPmaxGeoId: string | undefined;
+  qrsTestPmaxLanguageId: string | undefined;
   qrsTestPmaxParentCampaignId: string | undefined;
   qrsTestPmaxParentAssetGroupId: string | undefined;
   qrsTestPmaxSearchTheme: string | undefined;
@@ -254,6 +293,18 @@ export type AppConfig = {
   qrsTestPmaxAudienceId: string | undefined;
   qrsTestPmaxBrandSharedSetId: string | undefined;
   qrsTestPmaxAssetId: string | undefined;
+  qrsTestPmaxCriterionId: string | undefined;
+  qrsTestPmaxAssetFieldType:
+    | "HEADLINE"
+    | "LONG_HEADLINE"
+    | "DESCRIPTION"
+    | "MARKETING_IMAGE"
+    | "SQUARE_MARKETING_IMAGE"
+    | "LOGO"
+    | "BUSINESS_NAME"
+    | undefined;
+  qrsTestPmaxReplacementText: string | undefined;
+  qrsTestPmaxReplacementAssetId: string | undefined;
   qrsTestConversionActionConfirmedWriteEnabled: boolean;
   qrsTestConversionActionName: string | undefined;
   qrsTestGoogleOwnerBindingEmail: string | undefined;
@@ -581,6 +632,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     (!value.QRS_TEST_RESTRICTED_AUTH ||
       value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
       value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED ||
       !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
       !value.V2_PREVIEW_ONLY ||
       value.V2_CONFIRMED_WRITE_ENABLED ||
@@ -605,10 +657,24 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
             "pmax_brand_exclude",
             "pmax_audience_signal_add",
             "pmax_asset_attach",
+            "pmax_asset_detach",
+            "pmax_asset_replace",
+            "pmax_campaign_asset_detach",
+            "pmax_campaign_asset_replace",
+            "pmax_negative_remove",
+            "pmax_brand_remove",
+            "pmax_asset_group_create",
           ].includes(action),
       ) ||
       (qrsPmaxActions.includes("pmax_create") &&
-        !value.QRS_TEST_PMAX_CAMPAIGN_NAME?.trim()) ||
+        (!value.QRS_TEST_PMAX_CAMPAIGN_NAME?.trim() ||
+          !value.QRS_TEST_PMAX_FINAL_URL ||
+          !value.QRS_TEST_PMAX_CONVERSION_ACTION_ID ||
+          !value.QRS_TEST_PMAX_GEO_ID ||
+          !value.QRS_TEST_PMAX_LANGUAGE_ID)) ||
+      (qrsPmaxActions.includes("pmax_asset_group_create") &&
+        (!value.QRS_TEST_PMAX_GROUP_NAME?.trim() ||
+          !value.QRS_TEST_PMAX_FINAL_URL)) ||
       (qrsPmaxActions.some((action) => action !== "pmax_create") &&
         !value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID) ||
       (qrsPmaxActions.some((action) =>
@@ -618,21 +684,57 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
           "pmax_signal_remove",
           "pmax_audience_signal_add",
           "pmax_asset_attach",
+          "pmax_asset_detach",
+          "pmax_asset_replace",
         ].includes(action),
       ) &&
         !value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID) ||
       (qrsPmaxActions.some((action) =>
-        ["pmax_search_theme_add", "pmax_signal_remove"].includes(action),
+        ["pmax_search_theme_add"].includes(action),
       ) &&
         !value.QRS_TEST_PMAX_SEARCH_THEME?.trim()) ||
-      (qrsPmaxActions.includes("pmax_negative_add") &&
+      (qrsPmaxActions.includes("pmax_signal_remove") &&
+        Boolean(value.QRS_TEST_PMAX_SEARCH_THEME?.trim()) ===
+          Boolean(value.QRS_TEST_PMAX_AUDIENCE_ID)) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_negative_add", "pmax_negative_remove"].includes(action),
+      ) &&
         !value.QRS_TEST_PMAX_NEGATIVE_TEXT?.trim()) ||
       (qrsPmaxActions.includes("pmax_audience_signal_add") &&
         !value.QRS_TEST_PMAX_AUDIENCE_ID) ||
-      (qrsPmaxActions.includes("pmax_brand_exclude") &&
+      (qrsPmaxActions.some((action) =>
+        ["pmax_brand_exclude", "pmax_brand_remove"].includes(action),
+      ) &&
         !value.QRS_TEST_PMAX_BRAND_SHARED_SET_ID) ||
-      (qrsPmaxActions.includes("pmax_asset_attach") &&
-        !value.QRS_TEST_PMAX_ASSET_ID))
+      (qrsPmaxActions.some((action) =>
+        [
+          "pmax_asset_attach",
+          "pmax_asset_detach",
+          "pmax_asset_replace",
+          "pmax_campaign_asset_detach",
+          "pmax_campaign_asset_replace",
+        ].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_ASSET_ID) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_negative_remove", "pmax_brand_remove"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_CRITERION_ID) ||
+      (qrsPmaxActions.some((action) =>
+        [
+          "pmax_asset_attach",
+          "pmax_asset_detach",
+          "pmax_asset_replace",
+          "pmax_campaign_asset_detach",
+          "pmax_campaign_asset_replace",
+        ].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_ASSET_FIELD_TYPE) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_asset_replace", "pmax_campaign_asset_replace"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_REPLACEMENT_TEXT &&
+        !value.QRS_TEST_PMAX_REPLACEMENT_ASSET_ID))
   )
     throw new Error(
       "TEST PMax confirmed write requires exact isolated profiles and parent binding.",
@@ -738,6 +840,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED,
     qrsTestPmaxAllowedActions: qrsPmaxActions,
     qrsTestPmaxCampaignName: value.QRS_TEST_PMAX_CAMPAIGN_NAME,
+    qrsTestPmaxGroupName: value.QRS_TEST_PMAX_GROUP_NAME,
+    qrsTestPmaxFinalUrl: value.QRS_TEST_PMAX_FINAL_URL,
+    qrsTestPmaxConversionActionId: value.QRS_TEST_PMAX_CONVERSION_ACTION_ID,
+    qrsTestPmaxGeoId: value.QRS_TEST_PMAX_GEO_ID,
+    qrsTestPmaxLanguageId: value.QRS_TEST_PMAX_LANGUAGE_ID,
     qrsTestPmaxParentCampaignId: value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID,
     qrsTestPmaxParentAssetGroupId: value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID,
     qrsTestPmaxSearchTheme: value.QRS_TEST_PMAX_SEARCH_THEME,
@@ -745,6 +852,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     qrsTestPmaxAudienceId: value.QRS_TEST_PMAX_AUDIENCE_ID,
     qrsTestPmaxBrandSharedSetId: value.QRS_TEST_PMAX_BRAND_SHARED_SET_ID,
     qrsTestPmaxAssetId: value.QRS_TEST_PMAX_ASSET_ID,
+    qrsTestPmaxCriterionId: value.QRS_TEST_PMAX_CRITERION_ID,
+    qrsTestPmaxAssetFieldType: value.QRS_TEST_PMAX_ASSET_FIELD_TYPE,
+    qrsTestPmaxReplacementText: value.QRS_TEST_PMAX_REPLACEMENT_TEXT,
+    qrsTestPmaxReplacementAssetId: value.QRS_TEST_PMAX_REPLACEMENT_ASSET_ID,
     qrsTestConversionActionConfirmedWriteEnabled:
       value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED,
     qrsTestConversionActionName: value.QRS_TEST_CONVERSION_ACTION_NAME,

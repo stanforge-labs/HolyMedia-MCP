@@ -1,10 +1,10 @@
-// Generate deterministic first-party HolyMedia MCP TEST advertising media.
+// Generate deterministic first-party HolyPilot TEST advertising media.
 // Usage: node scripts/pmax-firstparty-media.mjs <absolute-output-directory>
 // Output is deliberately outside Git. No remote assets or advertising API calls.
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(
@@ -17,13 +17,23 @@ const output = process.argv[2];
 if (!output || !isAbsolute(output))
   throw new Error("Pass an absolute output directory outside the repository.");
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-if (resolve(output).toLowerCase().startsWith(`${root.toLowerCase()}\\`))
+const insideRepo = (candidate) => {
+  const path = relative(root, candidate);
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+  );
+};
+if (insideRepo(resolve(output)))
   throw new Error("Media output must remain outside the repository.");
 
-const icon = await readFile(
-  new URL("../apps/web/app/icon.svg", import.meta.url),
+const symbol = await readFile(
+  new URL(
+    "../apps/web/public/assets/brand/holy-pilot-symbol.svg",
+    import.meta.url,
+  ),
 );
-const iconData = `data:image/svg+xml;base64,${icon.toString("base64")}`;
+const symbolData = `data:image/svg+xml;base64,${symbol.toString("base64")}`;
 const escape = (value) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
 const background = (width, height, color) =>
@@ -41,11 +51,12 @@ function landscape() {
     <circle cx="1050" cy="-30" r="340" fill="#172554" opacity=".8"/>
     <circle cx="1050" cy="-30" r="260" fill="#1e3a8a" opacity=".45"/>
     <rect x="52" y="52" width="1096" height="524" rx="36" fill="#111d33" stroke="#32445f" stroke-width="2"/>
-    <image href="${iconData}" x="88" y="94" width="80" height="80"/>
-    ${text(190, 146, "HolyMedia MCP", 44, "#f8fafc")}
+    <rect x="88" y="94" width="80" height="80" rx="20" fill="#ffffff"/>
+    <image href="${symbolData}" x="96" y="102" width="64" height="64"/>
+    ${text(190, 146, "HolyPilot", 44, "#f8fafc")}
     ${text(88, 265, "Рекламные кабинеты", 49, "#f8fafc")}
     ${text(88, 328, "в AI-чате", 49, "#a5b4fc")}
-    ${text(88, 404, "Анализ  •  Предпросмотр  •  Подтверждение", 24, "#cbd5e1", 500)}
+    ${text(88, 404, "Ваш персональный AI-маркетолог", 24, "#cbd5e1", 500)}
     <rect x="88" y="465" width="290" height="60" rx="18" fill="#6366f1"/>
     ${text(119, 504, "Контроль изменений", 22, "#ffffff")}
     <rect x="710" y="174" width="364" height="300" rx="24" fill="#f8fafc"/>
@@ -64,8 +75,9 @@ function square() {
     <circle cx="1070" cy="145" r="310" fill="#dbeafe"/>
     <circle cx="110" cy="1100" r="310" fill="#c7d2fe"/>
     <rect x="74" y="74" width="1052" height="1052" rx="68" fill="#101a2f"/>
-    <image href="${iconData}" x="145" y="142" width="210" height="210"/>
-    ${text(145, 442, "HolyMedia MCP", 86, "#ffffff")}
+    <rect x="145" y="142" width="210" height="210" rx="48" fill="#ffffff"/>
+    <image href="${symbolData}" x="163" y="160" width="174" height="174"/>
+    ${text(145, 442, "HolyPilot", 86, "#ffffff")}
     ${text(145, 544, "Анализ рекламы", 67, "#a5b4fc")}
     ${text(145, 618, "в вашем AI-чате", 54, "#e2e8f0", 500)}
     <rect x="145" y="707" width="910" height="287" rx="34" fill="#1e2b45" stroke="#405477" stroke-width="2"/>
@@ -79,9 +91,11 @@ function square() {
 }
 
 await mkdir(output, { recursive: true });
+if (insideRepo(await realpath(output)))
+  throw new Error("Resolved media output must remain outside the repository.");
 const files = [
   {
-    name: "holymedia-mcp-landscape.jpg",
+    name: "holypilot-landscape.jpg",
     kind: "landscape_marketing_image",
     bytes: await sharp(landscape())
       .jpeg({ quality: 88, mozjpeg: true })
@@ -89,15 +103,15 @@ const files = [
     mime_type: "image/jpeg",
   },
   {
-    name: "holymedia-mcp-square.png",
+    name: "holypilot-square.png",
     kind: "square_marketing_image",
     bytes: await sharp(square()).png({ palette: true, quality: 86 }).toBuffer(),
     mime_type: "image/png",
   },
   {
-    name: "holymedia-mcp-logo.png",
+    name: "holypilot-logo.png",
     kind: "square_logo",
-    bytes: await sharp(icon)
+    bytes: await sharp(symbol)
       .resize(880, 880, { fit: "contain" })
       .extend({
         top: 160,
@@ -112,7 +126,8 @@ const files = [
   },
 ];
 const manifest = {
-  source: "apps/web/app/icon.svg",
+  source: "apps/web/public/assets/brand/holy-pilot-symbol.svg",
+  source_sha256: createHash("sha256").update(symbol).digest("hex"),
   account: "8590146099",
   purpose: "closed_TEST_PMax_acceptance",
   files: [],

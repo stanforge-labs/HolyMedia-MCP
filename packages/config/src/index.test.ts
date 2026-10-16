@@ -169,6 +169,10 @@ describe("v2 configuration", () => {
       QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "true",
       QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_create,asset_group_update",
       QRS_TEST_PMAX_CAMPAIGN_NAME: "HM HolyPilot PAUSED fixture",
+      QRS_TEST_PMAX_FINAL_URL: "https://mcp.holymedia.kz/",
+      QRS_TEST_PMAX_CONVERSION_ACTION_ID: "5",
+      QRS_TEST_PMAX_GEO_ID: "100",
+      QRS_TEST_PMAX_LANGUAGE_ID: "1031",
       QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: "24364218182",
       QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: "204741020281",
       PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
@@ -207,6 +211,7 @@ describe("v2 configuration", () => {
       QRS_TEST_PMAX_AUDIENCE_ID: "91",
       QRS_TEST_PMAX_BRAND_SHARED_SET_ID: "92",
       QRS_TEST_PMAX_ASSET_ID: "93",
+      QRS_TEST_PMAX_ASSET_FIELD_TYPE: "MARKETING_IMAGE",
     };
     expect(loadConfig(extended).qrsTestPmaxAllowedActions).toHaveLength(4);
     for (const key of [
@@ -214,14 +219,51 @@ describe("v2 configuration", () => {
       "QRS_TEST_PMAX_AUDIENCE_ID",
       "QRS_TEST_PMAX_BRAND_SHARED_SET_ID",
       "QRS_TEST_PMAX_ASSET_ID",
+      "QRS_TEST_PMAX_ASSET_FIELD_TYPE",
     ] as const)
       expect(() => loadConfig({ ...extended, [key]: undefined })).toThrow();
+    const removals = {
+      ...extended,
+      QRS_TEST_PMAX_ALLOWED_ACTIONS:
+        "pmax_negative_remove,pmax_brand_remove,pmax_asset_replace",
+      QRS_TEST_PMAX_CRITERION_ID: "94",
+      QRS_TEST_PMAX_ASSET_FIELD_TYPE: "HEADLINE",
+      QRS_TEST_PMAX_REPLACEMENT_TEXT: "Approved replacement",
+    };
+    expect(loadConfig(removals).qrsTestPmaxAllowedActions).toHaveLength(3);
+    const groupCreate = {
+      ...isolated,
+      QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_asset_group_create",
+      QRS_TEST_PMAX_GROUP_NAME: "HolyPilot second PAUSED group",
+    };
+    expect(loadConfig(groupCreate).qrsTestPmaxGroupName).toBe(
+      "HolyPilot second PAUSED group",
+    );
+    expect(() =>
+      loadConfig({ ...groupCreate, QRS_TEST_PMAX_GROUP_NAME: undefined }),
+    ).toThrow();
+    for (const key of [
+      "QRS_TEST_PMAX_CRITERION_ID",
+      "QRS_TEST_PMAX_ASSET_FIELD_TYPE",
+      "QRS_TEST_PMAX_REPLACEMENT_TEXT",
+    ] as const)
+      expect(() => loadConfig({ ...removals, [key]: undefined })).toThrow();
+    expect(() =>
+      loadConfig({
+        ...removals,
+        QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED: "true",
+      }),
+    ).toThrow();
     for (const unsafe of [
       { HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz" },
       { QRS_TEST_RESTRICTED_AUTH: "false" },
       { QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_negative_add" },
       { QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_create,pmax_create" },
       { QRS_TEST_PMAX_CAMPAIGN_NAME: undefined },
+      { QRS_TEST_PMAX_FINAL_URL: undefined },
+      { QRS_TEST_PMAX_CONVERSION_ACTION_ID: undefined },
+      { QRS_TEST_PMAX_GEO_ID: undefined },
+      { QRS_TEST_PMAX_LANGUAGE_ID: undefined },
       { QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: undefined },
       { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
       { PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false" },

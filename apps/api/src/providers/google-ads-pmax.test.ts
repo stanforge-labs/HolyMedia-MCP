@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+import { loadConfig } from "@holymedia/config";
 import {
   buildStage4Plan,
   parseStage4Intent,
@@ -18,6 +19,10 @@ import {
   type ExtendedRow,
 } from "./google-ads-extended-plan.js";
 import { safeMediaSummary } from "./google-ads-media.js";
+import {
+  qrsPmaxIntentAllowed,
+  qrsPmaxWriteAllowed,
+} from "./google-ads-pmax-test-gate.js";
 import {
   stage4ToolSchema,
   stage4ToolIntent,
@@ -238,7 +243,319 @@ const edit = (name: string, row: ExtendedRow) => ({
     },
   ],
 });
+const isolatedGate = (actions: string, bindings: Record<string, string>) =>
+  loadConfig({
+    NODE_ENV: "test",
+    HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp-test.holymedia.kz",
+    QRS_TEST_RESTRICTED_AUTH: "true",
+    QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "true",
+    QRS_TEST_PMAX_ALLOWED_ACTIONS: actions,
+    QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: "1",
+    QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: "2",
+    PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+    GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: account,
+    V2_PREVIEW_ONLY: "true",
+    V2_CONFIRMED_WRITE_ENABLED: "false",
+    PROVIDER_GOOGLE_API_VERSION: "v24",
+    ...bindings,
+  });
 describe("v24 non-retail PMax exact atomic provider plans (mock only)", () => {
+  it("binds TEST-only reversible PMax removal and replacement plans to exact old and new resources", async () => {
+    const negative = {
+      action: "pmax_negative_remove",
+      items: [
+        { campaign_id: "1", criterion_id: "7", acknowledge_irreversible: true },
+      ],
+    };
+    const negativeConfig = isolatedGate(negative.action, {
+      QRS_TEST_PMAX_CRITERION_ID: "7",
+      QRS_TEST_PMAX_NEGATIVE_TEXT: "irrelevant test",
+    });
+    const negativePlan = await buildPmaxEditPlan(
+      account,
+      negative,
+      reader({
+        criteria: [
+          {
+            campaignCriterion: {
+              resourceName: `${prefix}/campaignCriteria/1~7`,
+              campaign: campaign.resourceName,
+              negative: true,
+              keyword: { text: "irrelevant test", matchType: "EXACT" },
+            },
+          },
+        ],
+      }),
+    );
+    expect(qrsPmaxIntentAllowed(negativeConfig, account, negative)).toBe(true);
+    expect(qrsPmaxWriteAllowed(negativeConfig, negativePlan)).toBe(true);
+    expect(
+      qrsPmaxWriteAllowed(negativeConfig, {
+        ...negativePlan,
+        operations: negativePlan.operations.map((op) => ({
+          ...op,
+          before: { ...op.before, negative: false },
+        })),
+      }),
+    ).toBe(false);
+
+    const brand = {
+      action: "pmax_brand_remove",
+      items: [
+        { campaign_id: "1", criterion_id: "8", acknowledge_irreversible: true },
+      ],
+    };
+    const brandConfig = isolatedGate(brand.action, {
+      QRS_TEST_PMAX_CRITERION_ID: "8",
+      QRS_TEST_PMAX_BRAND_SHARED_SET_ID: "50",
+    });
+    const brandPlan = await buildPmaxEditPlan(
+      account,
+      brand,
+      reader({
+        criteria: [
+          {
+            campaignCriterion: {
+              resourceName: `${prefix}/campaignCriteria/1~8`,
+              campaign: campaign.resourceName,
+              negative: true,
+              brandList: { sharedSet: `${prefix}/sharedSets/50` },
+            },
+          },
+        ],
+      }),
+    );
+    expect(qrsPmaxWriteAllowed(brandConfig, brandPlan)).toBe(true);
+    expect(
+      qrsPmaxIntentAllowed(brandConfig, account, {
+        ...brand,
+        items: [{ ...brand.items[0], criterion_id: "9" }],
+      }),
+    ).toBe(false);
+
+    const detach = edit("pmax_asset_detach", {
+      asset_id: "101",
+      field_type: "HEADLINE",
+    });
+    const assetBindings = {
+      QRS_TEST_PMAX_ASSET_ID: "101",
+      QRS_TEST_PMAX_ASSET_FIELD_TYPE: "HEADLINE",
+    };
+    const detachConfig = isolatedGate(detach.action, assetBindings);
+    const detachPlan = await buildPmaxEditPlan(
+      account,
+      detach,
+      reader({ links: links(1) }),
+    );
+    expect(qrsPmaxWriteAllowed(detachConfig, detachPlan)).toBe(true);
+    const replace = edit("pmax_asset_replace", {
+      asset_id: "101",
+      field_type: "HEADLINE",
+      text: "New safe headline",
+    });
+    const replaceConfig = isolatedGate(replace.action, {
+      ...assetBindings,
+      QRS_TEST_PMAX_REPLACEMENT_TEXT: "New safe headline",
+    });
+    const replacePlan = await buildPmaxEditPlan(
+      account,
+      replace,
+      reader({ links: links() }),
+    );
+    expect(qrsPmaxWriteAllowed(replaceConfig, replacePlan)).toBe(true);
+    expect(
+      qrsPmaxWriteAllowed(replaceConfig, {
+        ...replacePlan,
+        operations: replacePlan.operations.map((op) =>
+          op.kind === "assets"
+            ? { ...op, fields: { ...op.fields, textAsset: { text: "other" } } }
+            : op,
+        ),
+      }),
+    ).toBe(false);
+
+    const campaignReplace = {
+      action: "pmax_campaign_asset_replace",
+      items: [
+        {
+          campaign_id: "1",
+          asset_id: "13",
+          field_type: "BUSINESS_NAME",
+          text: "New Test Business",
+          acknowledge_irreversible: true,
+        },
+      ],
+    };
+    const campaignConfig = isolatedGate(campaignReplace.action, {
+      QRS_TEST_PMAX_ASSET_ID: "13",
+      QRS_TEST_PMAX_ASSET_FIELD_TYPE: "BUSINESS_NAME",
+      QRS_TEST_PMAX_REPLACEMENT_TEXT: "New Test Business",
+    });
+    const campaignPlan = await buildPmaxEditPlan(
+      account,
+      campaignReplace,
+      reader(),
+    );
+    expect(qrsPmaxWriteAllowed(campaignConfig, campaignPlan)).toBe(true);
+
+    const imageReplace = edit("pmax_asset_replace", {
+      asset_id: "107",
+      field_type: "MARKETING_IMAGE",
+      media: { asset_id: "10" },
+    });
+    const imageConfig = isolatedGate(imageReplace.action, {
+      QRS_TEST_PMAX_ASSET_ID: "107",
+      QRS_TEST_PMAX_ASSET_FIELD_TYPE: "MARKETING_IMAGE",
+      QRS_TEST_PMAX_REPLACEMENT_ASSET_ID: "10",
+    });
+    const imagePlan = await buildPmaxEditPlan(
+      account,
+      imageReplace,
+      reader({ links: links() }),
+    );
+    expect(qrsPmaxWriteAllowed(imageConfig, imagePlan)).toBe(true);
+
+    const redundantLogo = {
+      campaignAsset: {
+        campaign: campaign.resourceName,
+        resourceName: `${prefix}/campaignAssets/1~14~LOGO`,
+        asset: `${prefix}/assets/14`,
+        fieldType: "LOGO",
+        status: "ENABLED",
+      },
+      asset: asset("14", 128, 128),
+    };
+    const detachBrand = {
+      action: "pmax_campaign_asset_detach",
+      items: [
+        {
+          campaign_id: "1",
+          asset_id: "12",
+          field_type: "LOGO",
+          acknowledge_irreversible: true,
+        },
+      ],
+    };
+    const detachBrandConfig = isolatedGate(detachBrand.action, {
+      QRS_TEST_PMAX_ASSET_ID: "12",
+      QRS_TEST_PMAX_ASSET_FIELD_TYPE: "LOGO",
+    });
+    const detachBrandPlan = await buildPmaxEditPlan(
+      account,
+      detachBrand,
+      reader({
+        brandLinks: [
+          {
+            campaignAsset: {
+              campaign: campaign.resourceName,
+              resourceName: `${prefix}/campaignAssets/1~12~LOGO`,
+              asset: `${prefix}/assets/12`,
+              fieldType: "LOGO",
+              status: "ENABLED",
+            },
+            asset: refs[2],
+          },
+          redundantLogo,
+          {
+            campaignAsset: {
+              campaign: campaign.resourceName,
+              resourceName: `${prefix}/campaignAssets/1~13~BUSINESS_NAME`,
+              asset: `${prefix}/assets/13`,
+              fieldType: "BUSINESS_NAME",
+              status: "ENABLED",
+            },
+            asset: {
+              resourceName: `${prefix}/assets/13`,
+              type: "TEXT",
+              textAsset: { text: "HolyMedia Test" },
+            },
+          },
+        ],
+      }),
+    );
+    expect(qrsPmaxWriteAllowed(detachBrandConfig, detachBrandPlan)).toBe(true);
+  });
+
+  it("allows exact audience signal removal but rejects an unrelated signal", async () => {
+    const input = edit("pmax_signal_remove", { signal_id: "7" });
+    const config = isolatedGate(input.action, {
+      QRS_TEST_PMAX_AUDIENCE_ID: "9",
+    });
+    const plan = await buildPmaxEditPlan(
+      account,
+      input,
+      reader({
+        signals: [
+          {
+            assetGroupSignal: {
+              resourceName: `${prefix}/assetGroupSignals/2~7`,
+              assetGroup: group.resourceName,
+              audience: { audience: `${prefix}/audiences/9` },
+            },
+          },
+        ],
+      }),
+    );
+    expect(qrsPmaxWriteAllowed(config, plan)).toBe(true);
+    expect(
+      qrsPmaxWriteAllowed(config, {
+        ...plan,
+        operations: plan.operations.map((op) => ({
+          ...op,
+          before: {
+            ...op.before,
+            audience: { audience: `${prefix}/audiences/8` },
+          },
+        })),
+      }),
+    ).toBe(false);
+  });
+  it("allows one complete PAUSED TEST asset group with owned referenced images and exact landing", async () => {
+    const input = {
+      action: "pmax_asset_group_create",
+      items: [
+        {
+          campaign_id: "1",
+          asset_group: {
+            ...brief().asset_groups[0],
+            name: "HolyPilot second PAUSED group",
+            final_url: "https://mcp.holymedia.kz/",
+          },
+        },
+      ],
+    };
+    const config = isolatedGate(input.action, {
+      QRS_TEST_PMAX_GROUP_NAME: "HolyPilot second PAUSED group",
+      QRS_TEST_PMAX_FINAL_URL: "https://mcp.holymedia.kz/",
+    });
+    const plan = await buildStage4Plan(account, input, reader());
+    expect(qrsPmaxIntentAllowed(config, account, input)).toBe(true);
+    expect(qrsPmaxWriteAllowed(config, plan)).toBe(true);
+    expect(
+      qrsPmaxWriteAllowed(config, {
+        ...plan,
+        operations: plan.operations.map((op) =>
+          op.kind === "assetGroups"
+            ? { ...op, fields: { ...op.fields, status: "ENABLED" } }
+            : op,
+        ),
+      }),
+    ).toBe(false);
+    expect(
+      qrsPmaxIntentAllowed(config, account, {
+        ...input,
+        items: [
+          {
+            ...input.items[0],
+            asset_group: {
+              ...input.items[0]!.asset_group,
+              final_url: "https://holymedia.kz/",
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
   it("creates full paused graph, actual same-account goals, atomic temp dependencies and provider-derived budget name", async () => {
     const p = await buildPmaxCreatePlan(account, brief(), reader());
     expect(p.atomic).toBe(true);

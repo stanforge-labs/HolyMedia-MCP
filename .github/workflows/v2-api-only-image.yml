@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/google-ads-api-only-image
+      - codex/qrs-test-auth-recovery
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ env:
 
 jobs:
   build-and-push:
-    if: github.ref == 'refs/heads/codex/google-ads-api-only-image'
+    if: github.ref == 'refs/heads/codex/google-ads-api-only-image' || github.ref == 'refs/heads/codex/qrs-test-auth-recovery'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     outputs:
@@ -44,6 +45,9 @@ jobs:
           target: api-runtime
           push: true
           tags: ${{ env.API_IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.holymedia.acceptance-only=true
           platforms: linux/amd64
           provenance: false
           sbom: false
@@ -108,6 +112,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(docker image inspect --format '{{.Config.User}}' "$API_IMAGE")" = node
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$API_IMAGE")" = "${{ github.sha }}"
           docker run --rm --entrypoint sh "$API_IMAGE" -ec '
             test -f /workspace/apps/api/dist/main.js
             test -f /workspace/packages/database/dist/index.js

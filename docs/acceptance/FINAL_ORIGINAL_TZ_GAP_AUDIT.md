@@ -1,5 +1,7 @@
 # Финальная ревизия исходного Google Ads Write ТЗ
 
+**Дополнение 17.10.2026:** [Batch 1: обновлённая матрица всех 39 групп, code delta и deployment package](BATCH1_OFFLINE_EXECUTION_PACKAGE_20261017.md). Ни один прежний LIVE-статус не изменён; упоминания узкого PMax gate ниже описывают проверенный срез 16.10.
+
 **Срез:** 16.10.2026, read-only. Проверенный кодовый baseline ветки `codex/qrs-test-auth-recovery` — `651e7a40f313869040cfe9db08480f7958b3f36b` (до документационного commit); независимый Web patch `codex/holypilot-brand-only` — `fa9805b0adeed1b225e34605b02ad0b67d5ebc33`. Это аудит, а не выпуск или разрешение на запись. Исходник — [извлечение 336 абзацев](../../artifacts/google-full-scope/original-tz-source-20261009.json), SHA-256 исходного DOCX `51C94D3D2953B32821DC872822147B1FF6C28E36258211D9DDD916BFF2C30DB0`; номера ниже — номера абзацев, не страницы. За основу нормализации взят [реестр 62 строк от 09.10](../../artifacts/google-full-scope/requirements-matrix-20261009.json), затем каждая строка пересверена с кодом и поздним evidence. Его старые статусы не перенесены автоматически.
 
 ## Правило подсчёта и достоверность

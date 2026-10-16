@@ -1,5 +1,7 @@
 # Единый план закрытия остатка исходного ТЗ
 
+**Обновление 17.10.2026:** Batch 1 выполнен локально; [code/CI package, обновлённая матрица и внешние prerequisites](BATCH1_OFFLINE_EXECUTION_PACKAGE_20261017.md). Следующие batches сохраняют отдельные owner stop-points. Ни один TEST/production cutover или Google commit этим обновлением не разрешён.
+
 **Статус:** проект следующего задания, **не запущен**. Аудит 16.10.2026 — [постатейная матрица](FINAL_ORIGINAL_TZ_GAP_AUDIT.md), [ресурсная выполнимость](../operations/ZERO_COST_100_PERCENT_FEASIBILITY.md). Основной код `codex/qrs-test-auth-recovery@651e7a40f313869040cfe9db08480f7958b3f36b`; branding-only `codex/holypilot-brand-only@fa9805b0adeed1b225e34605b02ad0b67d5ebc33`. `origin/main@a00817b746211a295bcb966f7fd7ef12cd6178fb` не трогать. Текущий TEST API/Web — прежние образы; production Web — прежний образ и надпись HolyMedia MCP. Текущий API candidate `sha256:d86773bb2b4e85faee2b273115459e07f7d85cf7d12f92379257f8d49eb1dcea` прошёл [exact-source CI](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38907043086), **не запущен**. Web brand candidate `sha256:1c39775ffbb095cc7d9037dfbea874be146ad25fe88ce255eaa794b0ccfd9ec0` прошёл [image/smoke CI](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38943970037), **не опубликован**.
 
 ## Предсказуемые блокировки — проверить до первой будущей замены

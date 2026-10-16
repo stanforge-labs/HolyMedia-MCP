@@ -17,7 +17,10 @@ async function prepared() {
   const f = extendedFixture({ customerId: account });
   Object.assign(
     object(f.resources.get(`${prefix}/customers/${account}`)?.customer),
-    { conversionTrackingSetting: { googleAdsConversionCustomer: prefix } },
+    {
+      currencyCode: "USD",
+      conversionTrackingSetting: { googleAdsConversionCustomer: prefix },
+    },
   );
   f.resources.set(`${prefix}/conversionActions/5`, {
     conversionAction: {
@@ -63,7 +66,7 @@ async function prepared() {
   ).toString("base64");
   const brief = {
     campaign_name: campaignName,
-    daily_budget: { amount: "100", currency: "KZT" },
+    daily_budget: { amount: "2", currency: "USD" },
     conversion_actions: ["5"],
     business_name: "HolyPilot",
     logos: [{ mime_type: "image/png", data_base64: logo }],
@@ -74,7 +77,7 @@ async function prepared() {
     asset_groups: [
       {
         name: "PAUSED MOCK group",
-        final_url: "https://example.com/",
+        final_url: "https://mcp.holymedia.kz/",
         headlines: ["HolyPilot", "Your AI marketer", "HolyPilot by HolyMedia"],
         long_headlines: ["HolyPilot — your personal AI marketer"],
         descriptions: [
@@ -96,6 +99,10 @@ async function prepared() {
     QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "true",
     QRS_TEST_PMAX_ALLOWED_ACTIONS: "pmax_create",
     QRS_TEST_PMAX_CAMPAIGN_NAME: campaignName,
+    QRS_TEST_PMAX_FINAL_URL: "https://mcp.holymedia.kz/",
+    QRS_TEST_PMAX_CONVERSION_ACTION_ID: "5",
+    QRS_TEST_PMAX_GEO_ID: "100",
+    QRS_TEST_PMAX_LANGUAGE_ID: "1031",
     QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "false",
     QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: "false",
     PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
@@ -340,7 +347,10 @@ describe("isolated TEST PMax gate", () => {
           asset_id: "50",
           field_type: "MARKETING_IMAGE",
         },
-        binding: { qrsTestPmaxAssetId: "50" },
+        binding: {
+          qrsTestPmaxAssetId: "50",
+          qrsTestPmaxAssetFieldType: "MARKETING_IMAGE",
+        },
       },
     ] as const) {
       const f = await prepared();
@@ -465,6 +475,29 @@ describe("isolated TEST PMax gate", () => {
     const p = await f.preview();
     const plan = f.plan();
     expect(qrsPmaxWriteAllowed(f.isolated, plan)).toBe(true);
+    for (const unsafeBrief of [
+      { business_name: "Agency" },
+      { daily_budget: { amount: "20", currency: "USD" } },
+      { conversion_actions: ["99"] },
+      { locations: [{ geo_target_id: "999" }] },
+      {
+        asset_groups: [
+          { ...f.brief.asset_groups[0], final_url: "https://holymedia.kz/" },
+        ],
+      },
+    ]) {
+      const unsafe = {
+        action: "pmax_create",
+        items: [{ brief: { ...f.brief, ...unsafeBrief } }],
+      };
+      expect(qrsPmaxIntentAllowed(f.isolated, account, unsafe)).toBe(false);
+      expect(
+        qrsPmaxWriteAllowed(f.isolated, {
+          ...plan,
+          intent: unsafe,
+        }),
+      ).toBe(false);
+    }
     // The isolated TEST Docker container intentionally uses NODE_ENV=production.
     expect(
       qrsPmaxWriteAllowed({ ...f.isolated, environment: "production" }, plan),
