@@ -1,6 +1,6 @@
 # HolyPilot: static public landing via the existing Nginx
 
-Status: **review candidate; production unchanged**. This route does not start another Next.js process or replace the running production Web image. Nginx publication requires the owner's separate explicit approval.
+Status: **REJECTED by the owner; DO NOT PUBLISH**. The owner revoked the Nginx publication approval before any configuration change or staging on the VPS. This static page changes the public content and design and is outside the approved branding-only scope. The package is retained solely as historical evidence. Do not run `publish-once.sh` or reuse the earlier approval. The replacement work is a minimal header/footer patch based on the running production source `a00817b746211a295bcb966f7fd7ef12cd6178fb` in `codex/holypilot-brand-only`.
 
 ## Scope and source
 
@@ -55,4 +55,4 @@ The Windows `git archive` command was observed to convert HTML line endings to C
 
 `scripts/rollback-nginx.sh <protected-backup-dir>` verifies the original config checksum, atomically restores `/etc/nginx/sites-enabled/adforge-mcp`, tests syntax and reloads Nginx. The existing running Web again serves `/` and `/en`. The static files can remain unused for audit; no image rollback or Docker restart is required. Publication automation invokes this once on failure and stops without retrying.
 
-**Approval point:** after Linux CI PASS and review of the four screenshots, the owner must explicitly approve this single production Nginx include/reload. Earlier Web-only deployment approval does not cover this change. No production file or live route has been changed for this candidate.
+**Closed approval:** the owner rejected this approach and revoked publication before any production change. The historical approval must not be used. No production file or live route was changed for this candidate.
