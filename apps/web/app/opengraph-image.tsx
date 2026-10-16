@@ -1,9 +1,21 @@
 import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function OpenGraphImage() {
+export default async function OpenGraphImage() {
+  const symbol = await readFile(
+    join(
+      process.cwd(),
+      "public",
+      "assets",
+      "brand",
+      "holy-pilot-symbol-og.png",
+    ),
+  );
+
   return new ImageResponse(
     <div
       style={{
@@ -28,15 +40,13 @@ export default function OpenGraphImage() {
           fontWeight: 700,
         }}
       >
-        <span
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            background: "#4158b4",
-          }}
-        />{" "}
-        HOLYMEDIA MCP
+        <img
+          src={`data:image/png;base64,${symbol.toString("base64")}`}
+          width={48}
+          height={48}
+          alt=""
+        />
+        HolyPilot
       </div>
       <div
         style={{

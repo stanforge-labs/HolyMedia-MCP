@@ -6,8 +6,8 @@ import { publicPageMetadata } from "../components/page-metadata";
 
 export function generateMetadata() {
   return publicPageMetadata("/", {
-    ru: "HolyMedia MCP — AI-доступ к рекламным кабинетам",
-    en: "HolyMedia MCP — AI access to advertising accounts",
+    ru: "HolyPilot — ваш персональный AI-маркетолог",
+    en: "HolyPilot — your personal AI marketer",
   });
 }
 
@@ -19,14 +19,14 @@ export default function PublicHomePage() {
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      name: "HolyMedia MCP",
+      name: "HolyPilot",
       url: baseUrl,
       inLanguage: "ru-KZ",
     },
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: "HolyMedia MCP",
+      name: "HolyPilot",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       url: baseUrl,
@@ -164,7 +164,7 @@ export default function PublicHomePage() {
               <span className="control__eyebrow">Безопасность</span>
               <h2 id="control-title">Изменения — только после подтверждения</h2>
               <p>
-                По умолчанию HolyMedia MCP только читает данные. Любое доступное
+                По умолчанию HolyPilot только читает данные. Любое доступное
                 изменение сначала показывает предварительный результат и ждёт
                 вашего подтверждения.
               </p>

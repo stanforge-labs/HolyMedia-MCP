@@ -2,6 +2,7 @@
 
 import Link from "./locale-link";
 import { useLanguage } from "./language-switcher";
+import { BrandLockup } from "./brand-lockup";
 
 export function SiteFooter({ compact = false }: { compact?: boolean }) {
   const language = useLanguage();
@@ -29,16 +30,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
     >
       <div className="footer__left">
         <div className="footer__identity">
-          <img
-            className="footer__brand-logo footer__brand-logo--dark"
-            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
-            alt="HolyMedia MCP"
-          />
-          <img
-            className="footer__brand-logo footer__brand-logo--light"
-            src="/assets/brand/holymedia-mcp-horizontal.svg"
-            alt="HolyMedia MCP"
-          />
+          <BrandLockup />
         </div>
         <a
           className="footer__partner"

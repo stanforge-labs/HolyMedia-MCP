@@ -109,7 +109,7 @@ export function TariffCatalog({
       <div className="tariffs__head">
         <div>
           <p className="eyebrow">
-            {ru ? "ТАРИФЫ HOLYMEDIA" : "HOLYMEDIA PLANS"}
+            {ru ? "ТАРИФЫ HOLYPILOT" : "HOLYPILOT PLANS"}
           </p>
           <h2 id="tariffs-title">
             {ru ? "Выберите формат работы" : "Choose how you work"}

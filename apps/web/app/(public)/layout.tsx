@@ -6,14 +6,14 @@ const publicBaseUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicBaseUrl),
-  title: { default: "HolyMedia MCP", template: "%s | HolyMedia MCP" },
+  title: { default: "HolyPilot", template: "%s | HolyPilot" },
   description:
-    "HolyMedia MCP — AI-доступ к рекламным кабинетам для аналитики и отчётов.",
+    "HolyPilot — ваш персональный AI-маркетолог для аналитики и отчётов.",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    siteName: "HolyMedia MCP",
-    title: "HolyMedia MCP — AI-доступ к рекламным кабинетам",
+    siteName: "HolyPilot",
+    title: "HolyPilot — ваш персональный AI-маркетолог",
     description:
       "Подключайте Meta Ads, Google Ads, TikTok Ads и Яндекс Директ к AI для аналитики и отчётов.",
     url: "/",
@@ -23,13 +23,13 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "HolyMedia MCP",
+        alt: "HolyPilot",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "HolyMedia MCP — AI-доступ к рекламным кабинетам",
+    title: "HolyPilot — ваш персональный AI-маркетолог",
     description: "Рекламная аналитика и отчёты в AI-чате.",
     images: ["/opengraph-image"],
   },

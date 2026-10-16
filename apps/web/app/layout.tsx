@@ -10,9 +10,9 @@ const publicBaseUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicBaseUrl),
-  title: "HolyMedia MCP — AI-доступ к рекламным кабинетам",
+  title: "HolyPilot — ваш персональный AI-маркетолог",
   description:
-    "Подключайте рекламные кабинеты к AI для аналитики и отчётов в HolyMedia MCP.",
+    "Подключайте рекламные кабинеты к AI для аналитики и отчётов в HolyPilot.",
   icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
