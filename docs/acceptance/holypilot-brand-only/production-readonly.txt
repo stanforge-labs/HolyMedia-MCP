@@ -1,0 +1,21 @@
+Read-only verification after owner stopped Nginx publication. No deployment command ran.
+c711bb0b6f85390afa8482ed58611371c3648690a55f09f421254475e8fd1b91  /etc/nginx/sites-enabled/adforge-mcp
+STATIC_SNIPPET_ABSENT
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+547645eb99c0014029f247fa2fbe04dc5a114f6159d3038a013e39d913d9f0e5 ghcr.io/stanforge-labs/holymedia-mcp-v2:public-mcp-candidate-a00817b746211a295bcb966f7fd7ef12cd6178fb@sha256:09c08234278a6eee22c866bd260d5c6ddc66806a977afc2e6b51077c0677a833 2026-10-16T13:17:05.448315522Z healthy
+holymedia-v2-web-1 Up 4 hours (healthy)
+holymedia-qrs-test-qrs_api-1 Up 32 hours (healthy)
+holymedia-qrs-test-qrs_web-1 Up 35 hours (healthy)
+holymedia-google-acceptance-redis-1 Up 9 days (healthy)
+holymedia-google-acceptance-postgres-1 Up 9 days (healthy)
+holymedia-v2-worker-1 Up 11 days (healthy)
+holymedia-v2-api-1 Up 11 days (healthy)
+holymedia-v2-postgres-1 Up 11 days (healthy)
+holymedia-v2-redis-1 Up 11 days (healthy)
+/ 200 0.122501
+/en 200 0.125453
+/health 200 0.104145
+/ready 200 0.146177
+/auth 200 0.183712
+/mcp/approve 200 0.197795

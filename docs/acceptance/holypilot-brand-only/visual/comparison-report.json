@@ -1,0 +1,431 @@
+{
+  "policy": "Exact geometry/DOM and pixels outside .site-brand and .footer__identity. Only the byte-identical, position-identical Astana Hub SVG allows raster noise <=2/255 per RGB channel; raw noise counts are disclosed.",
+  "live_baseline": [
+    {
+      "key": "ru-dark-desktop",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "ru-dark-mobile",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "ru-light-desktop",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "ru-light-mobile",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "en-dark-desktop",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "en-dark-mobile",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "en-light-desktop",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    },
+    {
+      "key": "en-light-mobile",
+      "changed_pixels": 0,
+      "outside_brand_raw_pixels": 0,
+      "unchanged_partner_alpha_noise_pixels": 0,
+      "outside_allowed_pixels": 0
+    }
+  ],
+  "candidate": [
+    {
+      "key": "ru-dark-desktop",
+      "changed_pixels": 5075,
+      "outside_brand_raw_pixels": 365,
+      "unchanged_partner_alpha_noise_pixels": 365,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 100,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 100,
+          "y": 3574.203125,
+          "width": 136,
+          "height": 38.390625
+        }
+      ]
+    },
+    {
+      "key": "ru-dark-tablet",
+      "changed_pixels": 5085,
+      "outside_brand_raw_pixels": 372,
+      "unchanged_partner_alpha_noise_pixels": 372,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 24,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 24,
+          "y": 5263.359375,
+          "width": 136,
+          "height": 38.390625
+        }
+      ]
+    },
+    {
+      "key": "ru-dark-mobile",
+      "changed_pixels": 4043,
+      "outside_brand_raw_pixels": 313,
+      "unchanged_partner_alpha_noise_pixels": 313,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 5591.046875,
+          "width": 126,
+          "height": 35.5625
+        }
+      ]
+    },
+    {
+      "key": "ru-dark-narrow",
+      "changed_pixels": 4036,
+      "outside_brand_raw_pixels": 308,
+      "unchanged_partner_alpha_noise_pixels": 308,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 6076.953125,
+          "width": 126,
+          "height": 35.5625
+        }
+      ]
+    },
+    {
+      "key": "ru-light-desktop",
+      "changed_pixels": 5330,
+      "outside_brand_raw_pixels": 386,
+      "unchanged_partner_alpha_noise_pixels": 386,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 100,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 100,
+          "y": 3574.203125,
+          "width": 136,
+          "height": 39.21875
+        }
+      ]
+    },
+    {
+      "key": "ru-light-tablet",
+      "changed_pixels": 5355,
+      "outside_brand_raw_pixels": 386,
+      "unchanged_partner_alpha_noise_pixels": 386,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 24,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 24,
+          "y": 5263.359375,
+          "width": 136,
+          "height": 39.21875
+        }
+      ]
+    },
+    {
+      "key": "ru-light-mobile",
+      "changed_pixels": 4245,
+      "outside_brand_raw_pixels": 317,
+      "unchanged_partner_alpha_noise_pixels": 317,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 5591.046875,
+          "width": 126,
+          "height": 36.328125
+        }
+      ]
+    },
+    {
+      "key": "ru-light-narrow",
+      "changed_pixels": 4241,
+      "outside_brand_raw_pixels": 313,
+      "unchanged_partner_alpha_noise_pixels": 313,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 6076.953125,
+          "width": 126,
+          "height": 36.328125
+        }
+      ]
+    },
+    {
+      "key": "en-dark-desktop",
+      "changed_pixels": 4414,
+      "outside_brand_raw_pixels": 368,
+      "unchanged_partner_alpha_noise_pixels": 368,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 100,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 100,
+          "y": 3488.5625,
+          "width": 136,
+          "height": 38.390625
+        }
+      ]
+    },
+    {
+      "key": "en-dark-tablet",
+      "changed_pixels": 4412,
+      "outside_brand_raw_pixels": 366,
+      "unchanged_partner_alpha_noise_pixels": 366,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 24,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 24,
+          "y": 5115.734375,
+          "width": 136,
+          "height": 38.390625
+        }
+      ]
+    },
+    {
+      "key": "en-dark-mobile",
+      "changed_pixels": 3718,
+      "outside_brand_raw_pixels": 310,
+      "unchanged_partner_alpha_noise_pixels": 310,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 5473.359375,
+          "width": 126,
+          "height": 35.5625
+        }
+      ]
+    },
+    {
+      "key": "en-dark-narrow",
+      "changed_pixels": 3716,
+      "outside_brand_raw_pixels": 308,
+      "unchanged_partner_alpha_noise_pixels": 308,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 5745.25,
+          "width": 126,
+          "height": 35.5625
+        }
+      ]
+    },
+    {
+      "key": "en-light-desktop",
+      "changed_pixels": 4690,
+      "outside_brand_raw_pixels": 388,
+      "unchanged_partner_alpha_noise_pixels": 388,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 100,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 100,
+          "y": 3488.5625,
+          "width": 136,
+          "height": 39.21875
+        }
+      ]
+    },
+    {
+      "key": "en-light-tablet",
+      "changed_pixels": 4687,
+      "outside_brand_raw_pixels": 385,
+      "unchanged_partner_alpha_noise_pixels": 385,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 24,
+          "y": 18,
+          "width": 128,
+          "height": 36
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 24,
+          "y": 5115.734375,
+          "width": 136,
+          "height": 39.21875
+        }
+      ]
+    },
+    {
+      "key": "en-light-mobile",
+      "changed_pixels": 3961,
+      "outside_brand_raw_pixels": 315,
+      "unchanged_partner_alpha_noise_pixels": 315,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 5473.359375,
+          "width": 126,
+          "height": 36.328125
+        }
+      ]
+    },
+    {
+      "key": "en-light-narrow",
+      "changed_pixels": 3955,
+      "outside_brand_raw_pixels": 318,
+      "unchanged_partner_alpha_noise_pixels": 318,
+      "outside_allowed_pixels": 0,
+      "allowed_rectangles": [
+        {
+          "selector": ".site-brand",
+          "x": 14,
+          "y": 17,
+          "width": 128,
+          "height": 30
+        },
+        {
+          "selector": ".footer__identity",
+          "x": 14,
+          "y": 5745.25,
+          "width": 126,
+          "height": 36.328125
+        }
+      ]
+    }
+  ]
+}
