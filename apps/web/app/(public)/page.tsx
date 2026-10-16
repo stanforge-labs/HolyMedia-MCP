@@ -207,7 +207,7 @@ export default function PublicHomePage() {
           </Link>
         </section>
       </div>
-      <SiteFooter />
+      <SiteFooter holyPilot />
     </main>
   );
 }
