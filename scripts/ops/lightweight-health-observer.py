@@ -11,6 +11,9 @@ import os
 import pathlib
 import subprocess
 import time
+import urllib.error
+import urllib.request
+import statistics
 
 
 NAMES = (
@@ -80,6 +83,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seconds", type=int, default=70)
     parser.add_argument("--interval", type=float, default=0.1)
+    parser.add_argument("--cutover-guard", action="store_true")
     args = parser.parse_args()
     if not 10 <= args.seconds <= 660:
         parser.error("seconds must be 10..660")
@@ -100,6 +104,12 @@ def main():
     transient = {}
     observer_pss = 0
     minimum_available = None
+    available_samples = []
+    minimum_swap_free = None
+    minimum_disk_free_mib = None
+    maximum_prod_latency = 0.0
+    failed_http_checks = []
+    next_http_check = 0.0
     swap_before = key_value("/proc/vmstat", "pswpout")
     vm_before = {
         key: key_value("/proc/vmstat", key)
@@ -154,6 +164,33 @@ def main():
         available = key_value("/proc/meminfo", "MemAvailable")
         if available is not None:
             minimum_available = min(minimum_available or available, available)
+            available_samples.append(available)
+        if args.cutover_guard:
+            swap_free = key_value("/proc/meminfo", "SwapFree")
+            if swap_free is not None:
+                minimum_swap_free = min(minimum_swap_free or swap_free, swap_free)
+            disk_free_mib = os.statvfs("/").f_bavail * os.statvfs("/").f_frsize // 1048576
+            minimum_disk_free_mib = min(minimum_disk_free_mib or disk_free_mib, disk_free_mib)
+            if time.monotonic() >= next_http_check:
+                next_http_check = time.monotonic() + 10
+                for label, url in (
+                    ("prod_health", "https://mcp.holymedia.kz/health"),
+                    ("prod_ready", "https://mcp.holymedia.kz/ready"),
+                    ("test_api", "http://127.0.0.1:14404/ready"),
+                    ("test_web_auth", "http://127.0.0.1:13300/auth"),
+                    ("test_web_approve", "http://127.0.0.1:13300/mcp/approve"),
+                ):
+                    started = time.monotonic()
+                    try:
+                        with urllib.request.urlopen(url, timeout=3) as response:
+                            status = response.status
+                    except (OSError, urllib.error.URLError):
+                        status = 0
+                    latency = time.monotonic() - started
+                    if label == "prod_ready":
+                        maximum_prod_latency = max(maximum_prod_latency, latency)
+                    if status != 200 or (label == "prod_ready" and latency >= 0.8):
+                        failed_http_checks.append({"check": label, "status": status, "latency_s": round(latency, 3)})
         try:
             for line in pathlib.Path("/proc/pressure/memory").read_text().splitlines():
                 if line.startswith("full "):
@@ -186,6 +223,11 @@ def main():
         "observer_cpu_seconds": round(time.process_time() - cpu_start, 3),
         "observer_peak_pss_kib": observer_pss,
         "minimum_mem_available_kib": minimum_available,
+        "median_mem_available_kib": int(statistics.median(available_samples)) if available_samples else None,
+        "minimum_swap_free_kib": minimum_swap_free,
+        "minimum_disk_free_mib": minimum_disk_free_mib,
+        "maximum_prod_ready_latency_s": round(maximum_prod_latency, 3) if args.cutover_guard else None,
+        "failed_http_checks": failed_http_checks,
         "swap_out_pages": (last_swap - swap_before) if last_swap is not None and swap_before is not None else None,
         "swap_out_pages_while_transient_seen": swap_during_transient,
         "vmstat_deltas": {

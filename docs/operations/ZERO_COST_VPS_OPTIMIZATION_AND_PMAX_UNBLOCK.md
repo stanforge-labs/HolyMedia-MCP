@@ -2,6 +2,8 @@
 
 16 October 2026 (Asia/Qyzylorda). Scope: `codex/qrs-test-auth-recovery`; no production, system, credential, database, or running TEST container changes. This is a candidate and investigation, not a TEST deployment or Google LIVE acceptance.
 
+**Later 2026-10-16 Web-only cutover decision:** The owner granted one conditional TEST Web replacement, but the fresh 600-second preflight again failed the unchanged no-swap guard (**+6 pages**; 842,776 KiB minimum MemAvailable, PSI full peak 0.06, OOM 0, all checked routes 200). The candidate was not pulled or started, and the old Node healthcheck remains active. The permission was not consumed. Exact image CI/source, measured transient PSS, observer overhead and the preserved recovery point are in [TEST Web cutover evidence](TEST_WEB_HEALTHCHECK_CUTOVER_20261016.md) and [recovery checkpoint](TEST_WEB_HEALTHCHECK_RECOVERY_CHECKPOINT.md). PMax LIVE remains blocked by the deployment guard; prior code/mock and provider validate-only classifications are unchanged.
+
 ## 1. Memory pressure and what the measurements prove
 
 The existing 2 GiB host previously failed the unchanged 10-minute resource guard: minimum MemAvailable **765,628 KiB** versus **819,200 KiB**, swap-out **+940 pages**, 32/61 failed samples, PSI full avg10 peak 1.45, OOM delta 0. Production `/health` and `/ready` and the TEST API/Web/PostgreSQL/Redis remained available. This proves intermittent host pressure, not a single culpable service.
