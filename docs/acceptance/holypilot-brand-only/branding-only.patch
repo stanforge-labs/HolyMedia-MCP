@@ -169,16 +169,16 @@ index 287ea65..caf7f9f 100644
 --- a/apps/web/app/components/landing-header.tsx
 +++ b/apps/web/app/components/landing-header.tsx
 @@ -2,7 +2,7 @@
- 
+
  import Link from "./locale-link";
  import { useEffect, useState } from "react";
 -import { BrandLockup } from "./brand-lockup";
 +import { LandingBrandLockup } from "./landing-brand-lockup";
  import { LanguageSwitcher } from "./language-switcher";
- 
+
  export function LandingHeader() {
 @@ -17,8 +17,8 @@ export function LandingHeader() {
- 
+
    return (
      <header className={scrolled ? "site-header is-scrolled" : "site-header"}>
 -      <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
@@ -193,11 +193,11 @@ index b590ca4..e29fcb9 100644
 --- a/apps/web/app/components/site-footer.tsx
 +++ b/apps/web/app/components/site-footer.tsx
 @@ -2,8 +2,15 @@
- 
+
  import Link from "./locale-link";
  import { useLanguage } from "./language-switcher";
 +import { LandingBrandLockup } from "./landing-brand-lockup";
- 
+
 -export function SiteFooter({ compact = false }: { compact?: boolean }) {
 +export function SiteFooter({
 +  compact = false,
