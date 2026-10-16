@@ -46,6 +46,37 @@ def _rolling_peak(samples, key, seconds=60):
     return peak
 
 
+def immediate_reasons(sample, baseline, window_start, http_failures, ready_latency):
+    """Conditions that require stopping observation and rolling back promptly."""
+    reasons = []
+    if sample["mem_available_kib"] < LIMITS["mem_available_kib"]:
+        reasons.append("mem_available_floor")
+    if sample["swap_free_kib"] < LIMITS["swap_free_kib"]:
+        reasons.append("swap_free_floor")
+    if sample["disk_free_mib"] < LIMITS["disk_free_mib"]:
+        reasons.append("disk_free_floor")
+    if sample["psi_full_avg10"] >= LIMITS["psi_full_avg10"]:
+        reasons.append("psi_full")
+    if sample["psi_some_avg10"] >= LIMITS["psi_some_avg10"]:
+        reasons.append("psi_some")
+    for key, total_limit, rolling_limit, label in (
+        ("pswpout", "swap_out_600s", "swap_out_60s", "swap_out_limit"),
+        ("pswpin", "swap_in_600s", "swap_in_60s", "swap_in_limit"),
+        ("pgmajfault", "major_faults_600s", "major_faults_60s", "major_fault_limit"),
+    ):
+        if sample[key] - baseline[key] > LIMITS[total_limit] or sample[key] - window_start[key] > LIMITS[rolling_limit]:
+            reasons.append(label)
+    if sample["oom_kill"] != baseline["oom_kill"]:
+        reasons.append("oom")
+    if http_failures:
+        reasons.append("http_health")
+    if ready_latency >= LIMITS["prod_ready_latency_s"]:
+        reasons.append("prod_latency")
+    if sample["pswpout"] > baseline["pswpout"] and ready_latency >= LIMITS["prod_ready_latency_with_swap_s"]:
+        reasons.append("swap_with_prod_latency")
+    return reasons
+
+
 def evaluate_trace(samples, checks):
     """Evaluate a complete 600-second trace; missing evidence always fails."""
     reasons = []

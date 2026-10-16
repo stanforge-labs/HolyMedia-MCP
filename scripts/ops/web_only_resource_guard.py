@@ -6,6 +6,7 @@ script never changes Docker, system settings, credentials, or provider state.
 """
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import os
@@ -16,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-from web_only_guard_policy import LIMITS, evaluate_trace
+from web_only_guard_policy import LIMITS, evaluate_trace, immediate_reasons
 
 
 CONTAINERS = (
@@ -190,6 +191,9 @@ def main():
         steady_before = steady_web_pss(groups["holymedia-qrs-test-qrs_web-1"])
         opener = urllib.request.build_opener(NoRedirect())
         samples = []
+        window = deque()
+        minute_bins = [{"out": 0, "in": 0} for _ in range(11)]
+        early_abort = []
         transient = {}
         observer_peak_pss = 0
         cpu_before = time.process_time()
@@ -197,7 +201,15 @@ def main():
         next_http = start
         deadline = start + LIMITS["duration_s"]
         while time.monotonic() < deadline:
-            samples.append(sample_at(start))
+            sample = sample_at(start)
+            if samples:
+                minute = min(10, int(sample["t"] // 60))
+                minute_bins[minute]["out"] += max(0, sample["pswpout"] - samples[-1]["pswpout"])
+                minute_bins[minute]["in"] += max(0, sample["pswpin"] - samples[-1]["pswpin"])
+            samples.append(sample)
+            window.append(sample)
+            while len(window) > 1 and window[1]["t"] <= sample["t"] - 60:
+                window.popleft()
             for name, group in groups.items():
                 for pid in cgroup_pids(group) - original_pids[name]:
                     value = pss_kib(pid)
@@ -209,8 +221,18 @@ def main():
                 failures, latency = probe_http(opener)
                 checks["http_failures"].extend(failures)
                 checks["prod_ready_latency_max_s"] = max(checks["prod_ready_latency_max_s"], latency)
+            early_abort = immediate_reasons(
+                sample, samples[0], window[0], checks["http_failures"], checks["prod_ready_latency_max_s"]
+            )
+            if any(all(minute_bins[j]["out"] > 0 for j in range(i, i + 3)) for i in range(len(minute_bins) - 2)):
+                early_abort.append("sustained_swap_out")
+            if any(all(minute_bins[j]["out"] > 0 and minute_bins[j]["in"] > 0 for j in range(i, i + 2)) for i in range(len(minute_bins) - 1)):
+                early_abort.append("sustained_swap_in_out")
+            if early_abort:
+                break
             time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-        samples.append(sample_at(start))
+        if not early_abort:
+            samples.append(sample_at(start))
         after = docker_state()
         checks["container_check_end"] = containers_healthy(after) and all(
             before[name]["image"] == after[name]["image"]
@@ -221,6 +243,9 @@ def main():
         checks["approvals_end"] = approval_counts()
         steady_after = steady_web_pss(groups["holymedia-qrs-test-qrs_web-1"])
         result = evaluate_trace(samples, checks)
+        if early_abort:
+            result["status"] = "FAIL"
+            result["reasons"] = sorted(set(result["reasons"] + early_abort))
         result.update({
             "profile": "TEST_WEB_ONLY_V1",
             "started_utc": started_utc,

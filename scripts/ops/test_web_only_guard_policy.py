@@ -2,7 +2,7 @@ import json
 import pathlib
 import unittest
 
-from web_only_guard_policy import evaluate_historical_summary, evaluate_trace
+from web_only_guard_policy import evaluate_historical_summary, evaluate_trace, immediate_reasons
 
 
 def trace(out=None, incoming=None, major=None):
@@ -67,6 +67,18 @@ class WebOnlyPolicyTest(unittest.TestCase):
         result = evaluate_trace(samples, checks())
         self.assertIn("major_fault_limit", result["reasons"])
         self.assertIn("psi_some", result["reasons"])
+
+    def test_immediate_abort_catches_a_pressure_spike(self):
+        samples = trace(out={40: 33})
+        self.assertIn(
+            "swap_out_limit",
+            immediate_reasons(samples[40], samples[0], samples[0], [], 0.1),
+        )
+        samples[40]["psi_full_avg10"] = 1.5
+        samples[40]["oom_kill"] = 1
+        reasons = immediate_reasons(samples[40], samples[0], samples[0], [{"route": "prod_ready"}], 0.9)
+        for reason in ("psi_full", "oom", "http_health", "prod_latency"):
+            self.assertIn(reason, reasons)
 
     def test_ram_oom_health_approval_and_latency_fail_closed(self):
         samples = trace(out={20: 1})
