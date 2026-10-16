@@ -1,0 +1,42 @@
+[
+  {
+    "id": "host_pressure_940",
+    "swap_out_pages": 940,
+    "min_mem_available_kib": 765628,
+    "peak_psi_full_avg10": 1.45,
+    "oom_delta": 0,
+    "expected": "REJECTED"
+  },
+  {
+    "id": "post_pull_pressure_388",
+    "swap_out_pages": 388,
+    "min_mem_available_kib": 887796,
+    "peak_psi_full_avg10": 0.14,
+    "oom_delta": 0,
+    "expected": "REJECTED"
+  },
+  {
+    "id": "observer_37",
+    "swap_out_pages": 37,
+    "min_mem_available_kib": 851604,
+    "peak_psi_full_avg10": 0.18,
+    "oom_delta": 0,
+    "expected": "INDETERMINATE"
+  },
+  {
+    "id": "preflight_6",
+    "swap_out_pages": 6,
+    "min_mem_available_kib": 842776,
+    "peak_psi_full_avg10": 0.06,
+    "oom_delta": 0,
+    "expected": "INDETERMINATE"
+  },
+  {
+    "id": "quiet_window_18",
+    "swap_out_pages": 18,
+    "min_mem_available_kib": 847428,
+    "peak_psi_full_avg10": 0.0,
+    "oom_delta": 0,
+    "expected": "INDETERMINATE"
+  }
+]
