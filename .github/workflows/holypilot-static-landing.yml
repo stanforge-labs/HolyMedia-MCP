@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify static content, links, original symbol and route scope
         run: node infra/production-static-landing/scripts/verify-static.mjs
+      - name: Verify exact Git blob deployment stage
+        run: node infra/production-static-landing/scripts/stage-from-commit.mjs "$GITHUB_SHA" "$RUNNER_TEMP/holypilot-stage"
       - name: Install Nginx for isolated syntax and routing checks
         run: |
           sudo apt-get update -qq
