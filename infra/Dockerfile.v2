@@ -44,6 +44,27 @@ RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
     --filter "@holymedia/worker..." install --prod --frozen-lockfile \
     --store-dir=/pnpm/store
 
+# Web-only release target. Keep the production build origin and the complete
+# Next.js runtime while excluding API, Worker and Chromium from this image.
+FROM build-deps AS production-web-build
+COPY . .
+ARG NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+RUN pnpm exec turbo run build --filter=@holymedia/web...
+
+FROM manifests AS production-web-prod-deps
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm --filter "@holymedia/web..." install --prod --frozen-lockfile \
+    --store-dir=/pnpm/store
+
+FROM base AS production-web-runtime
+ENV NODE_ENV=production
+COPY --from=production-web-prod-deps --chown=node:node /workspace /workspace
+COPY --from=production-web-build --chown=node:node /workspace/apps/web/.next ./apps/web/.next
+COPY --from=production-web-build --chown=node:node /workspace/apps/web/public ./apps/web/public
+COPY --from=production-web-build --chown=node:node /workspace/apps/web/next.config.ts ./apps/web/next.config.ts
+USER node
+
 # The API image uses its own dependency graph; Web and Worker are neither
 # installed nor built for this target. The common runtime below is unchanged.
 FROM build-deps AS api-build

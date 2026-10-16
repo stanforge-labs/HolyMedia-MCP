@@ -45,14 +45,16 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,format=long
-            type=raw,value=production,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/install-memora' }}
+            type=sha,format=long,enable=${{ inputs.web_only != true }}
+            type=raw,value=prod-web-sha-${{ github.sha }},enable=${{ inputs.web_only == true }}
+            type=raw,value=production,enable=${{ inputs.web_only != true && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/install-memora') }}
 
       - name: Build and push immutable production image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: infra/Dockerfile.v2
+          target: ${{ inputs.web_only == true && 'production-web-runtime' || 'runtime' }}
           push: true
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
@@ -188,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      V2_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:sha-${{ github.sha }}
+      V2_IMAGE: ghcr.io/${{ github.repository_owner }}/holymedia-mcp-v2:prod-web-sha-${{ github.sha }}
     steps:
       - uses: docker/login-action@v3
         with:
@@ -202,6 +204,14 @@ jobs:
           set -euo pipefail
           docker pull "$V2_IMAGE"
           test "$(docker image inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$V2_IMAGE")" = "$GITHUB_SHA"
+          docker run --rm --entrypoint sh "$V2_IMAGE" -ec '
+            test -d /workspace/apps/web/.next
+            test -f /workspace/apps/web/public/assets/brand/holy-pilot-symbol.svg
+            test ! -d /workspace/apps/api/dist
+            test ! -d /workspace/apps/worker/dist
+            test ! -d /ms-playwright
+          '
+          docker image inspect -f 'Uncompressed bytes: {{.Size}}' "$V2_IMAGE"
 
       - name: Smoke the exact production Web command and brand routes
         shell: bash
