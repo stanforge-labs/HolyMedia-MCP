@@ -1,5 +1,26 @@
 # TEST Web healthcheck cutover decision — 2026-10-16
 
+## Final quiet-window opportunity, 09:00–09:11 UTC
+
+The owner retained the unused permission for one conditional Web-only replacement. A new full preflight was scheduled in the naturally quiet 09:00–09:11 UTC window: `pswpout` had stayed flat since the prior interval, PSI full avg10 was 0, no systemd jobs were queued, TEST/production containers were healthy, and the next APT timer was more than two hours away. There was no Docker pull, deployment or other visible heavy process. Approvals and uncertain commits were 0/0/0. The exact Web manifest digest and source SHA were rechecked against the successful CI job log. No production or system setting was changed to create this window.
+
+| New 600-second / 589-sample guard   |            Measurement | Decision                                   |
+| ----------------------------------- | ---------------------: | ------------------------------------------ |
+| MemAvailable minimum / median       |  847,428 / 887,136 KiB | PASS ≥819,200 KiB; minimum margin 27.6 MiB |
+| Free swap minimum                   |          1,562,576 KiB | PASS ≥262,144 KiB                          |
+| Free disk minimum                   |             11,198 MiB | PASS ≥10,240 MiB                           |
+| PSI full avg10 peak                 |                   0.00 | PASS <1.5                                  |
+| OOM delta                           |                      0 | PASS                                       |
+| Production `/ready` maximum latency |          0.062 seconds | PASS <0.8 seconds                          |
+| HTTP checks                         |             0 failures | PASS                                       |
+| **Active swap-out**                 | **+18 pages (72 KiB)** | **FAIL; required 0**                       |
+
+The observer used one SSH connection, one Docker inspect at startup and procfs/cgroupfs sampling; it cost 4.747 CPU seconds and reached 16,081 KiB (15.7 MiB) PSS. At most three Node probes overlapped, with at most two from TEST; the old TEST Web probe reached 58,237 KiB (56.9 MiB) PSS. All 18 page-outs occurred while transient cgroup processes were observed, but this does not identify the initiating process. The observer's own memory and periodic HTTP checks remain possible contributors. Earlier full windows also had +37 and +6 page-outs; the quiet gap before this run had a flat `pswpout` counter. This is correlation, not proof that Node healthchecks, the observer, or any single service caused the swapping.
+
+**Decision: BLOCKED again before pull.** No second full preflight will be started automatically. The candidate image remains absent from the VPS; the original Web/API images and TEST Compose hash are unchanged. Final TEST and production containers were healthy with zero restarts/OOM; production health/ready and TEST API ready, Web auth/approval returned 200. Approvals and uncertain commits remained 0/0/0. The Bash probe's prior ~2.5 MiB read-only PSS demonstrates a likely transient saving of about 54 MiB against the latest Web Node peak, but its sustained effect on host swapping and permanent Web PSS is still unmeasured. This does not establish capacity for the later TEST API cutover.
+
+The absolute zero-swap condition is operationally restrictive on this host: the last two 600-second intervals failed on just 24 and 72 KiB of page-outs while RAM, PSI, OOM, health and latency passed. That observation warrants a **separate policy and workload assessment**, not an automatic threshold change. The current guard remains in force. Without restarting production, safe free work remains limited to offline CI/mock integration, read-only attribution or a new independently justified TEST-only footprint reduction; none of those is equivalent to a Google LIVE acceptance. The already built Web image is the only measured transient-memory candidate, and activating it still requires a full guard PASS and Web restart.
+
 ## Authorized boundary and artifact
 
 The owner authorized one conditional TEST Web-only replacement. The unchanged preflight requires MemAvailable ≥819,200 KiB, free swap ≥262,144 KiB, free disk ≥10,240 MiB, memory PSI full avg10 <1.5, no new swap-out or OOM, production `/health` and `/ready` HTTP 200 with `/ready` under 0.8 seconds, and healthy TEST API, Web, PostgreSQL, Redis and approval routes. The permission does not cover TEST API, production or Google Ads mutations.

@@ -2,6 +2,8 @@
 
 Date: 2026-10-16. Branch: `codex/qrs-test-auth-recovery`. Starting HEAD: `db1bca3a0aeb4f62e4cb95ad8f568f4c1dc38f29`.
 
+**Latest 09:00–09:11 UTC decision:** The single newly selected quiet-window preflight also failed the unchanged no-swap guard: +18 pages in 600 seconds, despite MemAvailable minimum 847,428 KiB, PSI full 0.00, zero OOM, production ready latency ≤0.062 seconds and zero failed HTTP checks. There was no pull or TEST Web replacement. The old TEST Web `sha256:5e131625e622fe91aa578c0a53a586ffc5f30d49bf8ba39c8080bbd18835a0d6` and Compose SHA-256 `4dab03f890eb4d27a0f42776ec7ac152806ffe6b7e96f877c8d8f265497e51ec` remain active. Candidate digest `sha256:3e8b44908bc9f6752ea996aa699da49b91a85953a98f5c41638811719c888669` is still absent from the VPS. All TEST and production containers finished healthy with zero restarts/OOM; approvals/uncertain commits 0/0/0. No repeat preflight, pull or cutover is queued. The conditional Web-only permission remains unused; TEST API has no cutover permission. See [dated evidence](TEST_WEB_HEALTHCHECK_CUTOVER_20261016.md) for measured observer overhead and the separate no-swap policy assessment.
+
 ## Preserved state
 
 - Existing TEST Web: `sha256:5e131625e622fe91aa578c0a53a586ffc5f30d49bf8ba39c8080bbd18835a0d6`, source `367a634c063492a6592e708b179ac240f9a68b61`, Node `/auth` healthcheck every 15 seconds.
