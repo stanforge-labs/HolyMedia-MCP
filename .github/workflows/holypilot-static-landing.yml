@@ -1,0 +1,28 @@
+name: HolyPilot static landing candidate
+
+on:
+  push:
+    branches:
+      - codex/holypilot-production-web
+    paths:
+      - "infra/production-static-landing/**"
+      - ".github/workflows/holypilot-static-landing.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-nginx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify static content, links, original symbol and route scope
+        run: node infra/production-static-landing/scripts/verify-static.mjs
+      - name: Install Nginx for isolated syntax and routing checks
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq nginx-light
+      - name: Verify Nginx exact locations and protected fallback
+        run: bash infra/production-static-landing/scripts/ci-nginx.sh
