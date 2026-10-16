@@ -1,6 +1,6 @@
 # TEST Web-only resource guard profile v1
 
-Status: engineering candidate, awaiting exact-source Linux CI and a fresh full-stack preflight. Scope: **one TEST Web image replacement only**. This file and `scripts/ops/web_only_*` do not change `RECOVERY_PMAX_RESOURCE_10M.sh`, TEST API policy, production, Linux settings, or Google Ads permissions.
+Status: historical safety backtest and exact-source Linux CI **PASS**; first fresh full-stack preflight **FAIL** and the TEST Web replacement **BLOCKED**. Scope: **one TEST Web image replacement only**. This file and `scripts/ops/web_only_*` do not change `RECOVERY_PMAX_RESOURCE_10M.sh`, TEST API policy, production, Linux settings, or Google Ads permissions.
 
 ## Evidence and policy boundary
 
@@ -41,3 +41,15 @@ No historical unsafe case is reclassified as PASS. The lower totals are **not re
 The host-side observer `scripts/ops/web_only_resource_guard.py` collects the new counters in one root Python process, performs Docker inspect and preview-count reads only at interval boundaries, and samples HTTP routes approximately every ten seconds. Its own PSS and CPU use are reported. Optional mode-0600 trace output contains metrics only, with no environment, OAuth credential or protected DB data. The pure policy and historical boundary tests run in Linux CI.
 
 The observer aborts immediately when a floor, PSI, OOM, swap/major-fault cap, sustained-paging rule or HTTP/production-latency condition fails. This permits prompt Web-only rollback during a post-start observation; an early abort is always a FAIL, never a shortened PASS.
+
+## Exact-source CI and first fresh preflight
+
+[Foundation Linux CI run 38883763729](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38883763729) passed at `c490b6bab40f9ddfe543556b0879c9489acf1df3`, including the ten policy/history regressions and observer syntax. Both Python files were staged in a root-owned TEST-only guard directory on the VPS; SHA-256 matched local source. One-shot runtime smoke found nine required healthy containers, approvals 0/0/0 and all five HTTP routes available before the preflight.
+
+The fresh observation began at 09:58:38 UTC and aborted at 10:05:50 UTC after 430.703 seconds. It **cannot be a PASS** because it did not complete 600 seconds. The immediate trigger was one interval with 86 swap-in pages and 67 major faults, exceeding the conservative 32-page and 64-fault rolling 60-second caps. Total observed swap-in was 99 pages; swap-out was only one page. The 86 page-ins and 67 faults arrived in the same 0.25-second sample, with PSI some/full 0.00, MemAvailable 868,668 KiB at that sample, no page-out in that minute, no HTTP failure and maximum production `/ready` latency 0.054 seconds. This is not proof that the burst caused production pressure; the initiating process was not identified. TEST Web and API Node healthchecks ran nearby in time, but temporal overlap is not attribution.
+
+Across the incomplete interval, minimum MemAvailable was 837,224 KiB, free swap 1,562,576 KiB, free disk 11,198 MiB, PSI some/full peak 0.00, OOM delta 0 and container/start/end health PASS. The observer reached 17,311 KiB PSS and used 10.453 CPU seconds; its contribution to page-ins cannot be separated. The old Web transient probe reached 64,858 KiB PSS and steady Web PSS was 87,022–87,146 KiB. The candidate image was **not pulled** and no Web cutover or rollback occurred. Protected original Compose SHA-256 remains `4dab03f890eb4d27a0f42776ec7ac152806ffe6b7e96f877c8d8f265497e51ec`; old Web and API images remained running.
+
+The isolated page-in burst with no PSI or latency impact suggests that the new absolute swap-in and major-fault caps may reject benign cold-page reaccess. That is a **policy-review hypothesis**, not permission to delete these caps or reinterpret the failed trace as a full PASS. The retained 64-page swap-out cap still rejects both dangerous historical intervals. A changed profile would require its own regression and CI evidence plus a new complete preflight before any deployment. This authorized attempt stops here; TEST API keeps its independent guard and authorization boundary.
+
+A separate read-only snapshot at 10:07:38 UTC, after the preflight had already stopped, found **829 additional swap-out pages** and 167 swap-ins relative to the saved trace end, with PSI full avg10 **1.61** (above the unchanged 1.5 guard) and OOM still zero. This was not part of the completed trace and its initiating process is unknown. It independently confirms that immediate Web pull/cutover would be unsafe; the isolated earlier page-in burst cannot be used as a reason to relax this decision.
