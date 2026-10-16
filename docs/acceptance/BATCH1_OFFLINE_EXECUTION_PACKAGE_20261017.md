@@ -1,6 +1,6 @@
 # Batch 1 — локальное закрытие кода и пакет следующей приёмки
 
-**Дата:** 17.10.2026. **Режим:** только локальная работа и GitHub CI. Этот документ дополняет [первоначальную матрицу 39 групп](FINAL_ORIGINAL_TZ_GAP_AUDIT.md); её исторические LIVE статусы не повышаются локальными тестами. Кодовый SHA, Linux CI и digest образов заполняются в финальном evidence ниже после immutable build.
+**Дата:** 17.10.2026. **Режим:** только локальная работа и GitHub CI. Этот документ дополняет [первоначальную матрицу 39 групп](FINAL_ORIGINAL_TZ_GAP_AUDIT.md); её исторические LIVE статусы не повышаются локальными тестами. Кодовый SHA, Linux CI и digest образов приведены в финальном evidence ниже.
 
 ## Дельта кода
 
@@ -9,6 +9,7 @@
 - [Локальный медиагенератор](../../scripts/pmax-firstparty-media.mjs) теперь использует **официальный** `apps/web/public/assets/brand/holy-pilot-symbol.svg`, имя HolyPilot и утверждённый русский слоган. Старый агентский media pack не используется. Новый пакет сохранён **вне Git**: `C:\Users\geros\Проекты Codex\HolyPilot-Batch1-Media-20261017-v2`. Он декодирован Sharp и принят реальным `validateInlineMedia`; визуально проверено, что знак виден на светлом фоне. Это не Google upload/approval.
 - [Тест границы регистрации](../../apps/api/src/auth/signup-conversion-boundary.test.ts) проверяет успешный `signup` только после транзакции user/workspace/OWNER membership, подготовки verification и session; при ошибке session успешный audit не появляется. Работающий restricted TEST по-прежнему блокирует signup. **Google tag, действительный `sign_up` delivery, ConversionAction и conversion metrics не созданы.** Успешный внутренний audit `signup` не выдаётся за измеренную Google conversion.
 - Сохранён **отдельный** Web-only брендовый пакет `codex/holypilot-brand-only@fa9805b0adeed1b225e34605b02ad0b67d5ebc33`. В нём меняются только блоки header/footer публичной главной: оригинальный знак, HolyPilot, RU/EN слоганы; Astana Hub, hero, тарифы, auth/OAuth и другие страницы остаются исходными. [Design preservation CI](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38944455196) и [Web-only image/smoke CI](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38943970037) — SUCCESS на этом exact SHA. Web image `sha256:1c39775ffbb095cc7d9037dfbea874be146ad25fe88ce255eaa794b0ccfd9ec0`; Web smoke запускается **без API/Worker**. Ветку не сливать целиком в API-ветку: она содержит отдельную сохранённую product baseline. Production Web не опубликован.
+- Web image имеет **592 583 759 B uncompressed** по тому же CI. Это размер image, а не обещание соответствующего объёма RAM. Существующие startup memory guards сохраняются.
 
 ### Реальный локальный медиапакет
 
@@ -91,4 +92,15 @@
 
 ## Exact-source CI и образы
 
-Заполняется по завершении CI на коммите Batch 1; local checks до commit не являются Linux evidence.
+Функциональный commit: `ff30cb4b1b42b69daa3e971b79c0c00febc5b74f`. Финальный exact-source CI/image commit: `e5216c8f66a5e6b9c8afd1290b221accff069f41` (`codex/qrs-test-auth-recovery`); второй commit исправляет только disposable Compose origin и его CI assertion.
+
+| Проверка | Evidence | Результат |
+|---|---|---|
+| Foundation Linux, PostgreSQL 18/Redis, migration, backup/restore, OAuth/approval, full tests, build, secrets, dependency audit | [run 38955503844](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38955503844) | **PASS**; 108/108 test files, 0 skipped; format/lint/typecheck/build/migrations/security PASS |
+| Stage 2–4 isolated API image regression | [run 38955504096](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38955504096) | **PASS** |
+| API-only immutable image build and disposable PostgreSQL/Redis smoke | [run 38955503851](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38955503851) | **PASS**; digest `sha256:68d718998795dd6a0d6229fda0d747c0cb503dbd625d772542b1edacaf48a76f`; exact revision label, non-root/content checks, `/health`, `/ready`, MCP 401 without auth, Prisma status, authenticated MCP initialize/tools/list |
+| Локально Windows | Тот же code tree до commit | Format/lint/typecheck/build/Prisma/secrets/dependency audit PASS; API 1496 passed, 22 skipped, 100 test files passed, 8 skipped. Локальные skips заменены полным Linux evidence выше. |
+
+API image: 216 261 529 B compressed, 705 008 360 B uncompressed. Его pull поверх сохранённого baseline image использовал дополнительно **812 802 048 B (0,757 GiB)** на GitHub runner; shared compressed layers 0. На VPS фактический расход диска будет проверен свежим preflight после pull, при сохранении старого image/rollback. Предыдущий [image smoke run 38954196930](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/38954196930) отклонил CI-only `NODE_ENV=production` + localhost HTTP origin; `e5216c8` добавил canonical HTTPS origin только в disposable Compose, не меняя production/TEST конфигурацию или runtime. Финальный smoke PASS. Prisma в контейнере выдаёт предупреждение о нераспознанном OpenSSL, однако миграции и `prisma:status` завершились успешно; это остаётся явным диагностическим наблюдением, а не основанием снижать release guards.
+
+**Batch 1 offline PASS** для точного API SHA выше и отдельного Web SHA. Ни один образ не развернут на VPS, ни один Google объект не изменён. Наличие immutable image и Linux CI не доказывает память/latency существующего VPS и не отменяет отдельное owner разрешение для Batch 2.
