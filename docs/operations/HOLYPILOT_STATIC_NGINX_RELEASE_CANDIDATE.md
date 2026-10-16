@@ -5,7 +5,7 @@ Status: **review candidate; production unchanged**. This route does not start an
 ## Scope and source
 
 - Source branch: `codex/holypilot-production-web`. The static site and its verification scripts are in `infra/production-static-landing/`.
-- The round symbol in `site/symbol.svg` is byte-for-byte identical to `apps/web/public/assets/brand/holy-pilot-symbol.svg` (SHA-256 `5ba14c84e7d56b4b7bd41ffbba64400cdd766cbe9ec141c192a0079aec5b83ce`). The icon, 256 × 256 first-party Open Graph PNG, and Cyrillic Manrope font are copied from the existing Web source. No logo redraw or external image/script/font request is used.
+- The round symbol in `site/symbol.svg` is byte-for-byte identical to the committed `apps/web/public/assets/brand/holy-pilot-symbol.svg` (Git blob SHA-256 `6001ff52f6ea2e1044c31a86bb3991c1e1783d0e9a6a14e940d5bea917b8c63e`). The icon, 256 × 256 first-party Open Graph PNG, and Cyrillic Manrope font are copied from the existing Web source. No logo redraw or external image/script/font request is used.
 - RU and EN pages are independent HTML/CSS with no JavaScript or React hydration. They retain the current dark palette, typography, brand lockup, hero/chat composition, steps, capabilities, confirmation explanation and footer. The chat panel labels its content as an illustration and contains no fabricated performance numbers. All sign-in, sign-up, support, Privacy and Terms links point to existing live routes.
 - [RU desktop preview](../../infra/production-static-landing/preview/ru-desktop.png), [RU mobile preview](../../infra/production-static-landing/preview/ru-mobile.png), [EN desktop preview](../../infra/production-static-landing/preview/en-desktop.png), [EN mobile preview](../../infra/production-static-landing/preview/en-mobile.png).
 

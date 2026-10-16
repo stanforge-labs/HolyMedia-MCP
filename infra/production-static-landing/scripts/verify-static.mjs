@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const site = join(root, "site");
+const packageBytes = async (path) => {
+  const bytes = await readFile(path);
+  return /\.(?:html|css|svg|conf)$/.test(path)
+    ? Buffer.from(bytes.toString("utf8").replace(/\r\n/g, "\n"))
+    : bytes;
+};
 const manifest = await readFile(join(root, "MANIFEST.sha256"), "utf8");
 for (const line of manifest.trim().split("\n")) {
   const match = line.match(
@@ -13,7 +19,7 @@ for (const line of manifest.trim().split("\n")) {
   );
   assert.ok(match, `Malformed manifest line: ${line}`);
   const actual = createHash("sha256")
-    .update(await readFile(join(root, match[2])))
+    .update(await packageBytes(join(root, match[2])))
     .digest("hex");
   assert.equal(actual, match[1], `Changed package file: ${match[2]}`);
 }
@@ -28,11 +34,11 @@ const sourceSymbol = join(
   "brand",
   "holy-pilot-symbol.svg",
 );
-const symbol = await readFile(join(site, "symbol.svg"));
+const symbol = await packageBytes(join(site, "symbol.svg"));
 assert.equal(
   createHash("sha256").update(symbol).digest("hex"),
   createHash("sha256")
-    .update(await readFile(sourceSymbol))
+    .update(await packageBytes(sourceSymbol))
     .digest("hex"),
   "official symbol must be byte-identical",
 );
