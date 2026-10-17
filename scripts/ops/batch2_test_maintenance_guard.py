@@ -16,7 +16,14 @@ import time
 import urllib.error
 import urllib.request
 
-from web_only_guard_policy import LIMITS, evaluate_trace, immediate_reasons
+from maintenance_guard_policy import (
+    evaluate_trace as evaluate_maintenance_trace,
+    immediate_reasons as maintenance_immediate_reasons,
+)
+from web_only_guard_policy import (
+    evaluate_trace as evaluate_full_trace,
+    immediate_reasons as full_immediate_reasons,
+)
 
 
 PROD = (
@@ -157,6 +164,35 @@ def write_json(path, item):
         os.fsync(out.fileno())
 
 
+def phase_immediate_reasons(phase, row, baseline, samples, window_start,
+                            http_failures, ready_latency):
+    if phase == "maintenance":
+        return maintenance_immediate_reasons(
+            row, baseline, samples, http_failures, ready_latency,
+        )
+    if phase == "full":
+        reasons = full_immediate_reasons(
+            row, baseline, window_start, http_failures, ready_latency,
+        )
+        if row["pswpout"] != baseline["pswpout"]:
+            reasons.append("strict_api_no_swap_out")
+        return reasons
+    raise ValueError("unknown_guard_phase")
+
+
+def phase_evaluate_trace(phase, samples, checks):
+    if phase == "maintenance":
+        result = evaluate_maintenance_trace(samples, checks)
+    elif phase == "full":
+        result = evaluate_full_trace(samples, checks)
+    else:
+        raise ValueError("unknown_guard_phase")
+    if samples and samples[-1]["pswpout"] != samples[0]["pswpout"]:
+        result["status"] = "FAIL"
+        result["reasons"] = sorted(set(result["reasons"] + ["strict_api_no_swap_out"]))
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", required=True, choices=("maintenance", "full"))
@@ -203,12 +239,10 @@ def main():
                 failed, latency = probe(opener, args.phase)
                 checks["http_failures"].extend(failed)
                 checks["prod_ready_latency_max_s"] = max(checks["prod_ready_latency_max_s"], latency)
-            failure = immediate_reasons(
-                row, samples[0], window[0], checks["http_failures"],
-                checks["prod_ready_latency_max_s"],
+            failure = phase_immediate_reasons(
+                args.phase, row, samples[0], samples, window[0],
+                checks["http_failures"], checks["prod_ready_latency_max_s"],
             )
-            if row["pswpout"] != samples[0]["pswpout"]:
-                failure.append("strict_api_no_swap_out")
             if not checks["container_check_start"] or checks["approvals_start"] != [0, 0, 0]:
                 failure.append("bad_initial_state")
             if failure:
@@ -229,7 +263,7 @@ def main():
         for name in ALL
     )
     checks["approvals_end"] = approvals()
-    result = evaluate_trace(samples, checks)
+    result = phase_evaluate_trace(args.phase, samples, checks)
     if failure:
         result["status"] = "FAIL"
         result["reasons"] = sorted(set(result["reasons"] + failure))
