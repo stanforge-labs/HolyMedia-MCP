@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { hasForbiddenValue } from "./v2-secret-scan-policy.mjs";
 
 const tracked = execFileSync(
@@ -22,6 +22,7 @@ const contentIgnoredPaths = new Set(["pnpm-lock.yaml"]);
 const files = tracked.filter(
   (file) =>
     existsSync(file) &&
+    statSync(file).isFile() &&
     !ignoredPrefixes.some((prefix) => file.startsWith(prefix)),
 );
 const forbiddenPath =
