@@ -19,7 +19,7 @@ import batch2_test_maintenance_once_v2 as prior
 import no_pull_api_bundle as bundle_tool
 
 
-RUN = prior.BASE / "rollback" / "batch2-no-pull-20261018-once"
+RUN = prior.BASE / "rollback" / "batch2-no-pull-20261018-phase-v2-once"
 STAGE = prior.BASE / "batch2-no-pull-staging"
 ARCHIVE_SHA256 = "999d9ba21329217c7f71b76f8cda180190ac3fc8be7006bb13bf03840622cf32"
 MANIFEST_SHA256 = "7c062c11bb1ab0eda1bcc7b71682d77f32dd6450bcfbeada23f1c27080c7594a"
@@ -125,7 +125,7 @@ def model_gate() -> None:
     if (env.get("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST") != "8590146099" or
             env.get("QRS_TEST_RESTRICTED_AUTH") != "true" or
             env.get("QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED", "false") != "false" or
-            env.get("QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED") != "false" or
+            env.get("QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED", "false") != "false" or
             env.get("V2_CONFIRMED_WRITE_ENABLED") != "false"):
         raise RuntimeError("test_write_gate_drift")
 

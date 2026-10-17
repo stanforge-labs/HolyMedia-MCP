@@ -67,7 +67,6 @@ class NoPullRunnerTests(unittest.TestCase):
             "qrs_api": {"image": runner.prior.OLD_API, "environment": {
                 "GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST": "8590146099",
                 "QRS_TEST_RESTRICTED_AUTH": "true",
-                "QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED": "false",
                 "V2_CONFIRMED_WRITE_ENABLED": "false",
             }, "healthcheck": {"test": ["CMD", "node"]}},
             "qrs_web": {"image": runner.prior.OLD_WEB,
@@ -84,6 +83,10 @@ class NoPullRunnerTests(unittest.TestCase):
             return json.dumps(changed if candidate else base).encode()
         with patch.object(runner, "compose", side_effect=fake_compose):
             runner.model_gate()
+            changed["services"]["qrs_api"]["environment"]["QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED"] = "true"
+            with self.assertRaisesRegex(RuntimeError, "test_write_gate_drift"):
+                runner.model_gate()
+            del changed["services"]["qrs_api"]["environment"]["QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED"]
             changed["services"]["qrs_api"]["command"] = ["unexpected"]
             with self.assertRaisesRegex(RuntimeError, "unapproved_service_change"):
                 runner.model_gate()
