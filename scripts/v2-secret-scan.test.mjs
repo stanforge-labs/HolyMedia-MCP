@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join, relative, sep } from "node:path";
 import { test } from "node:test";
 import {
   hasForbiddenValue,
@@ -10,6 +18,36 @@ import {
 
 const pattern =
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|sk-proj-[A-Za-z0-9_-]{20,}|GOCSPX-[A-Za-z0-9_-]{20,}|EA[A-Za-z0-9_-]{30,}/;
+
+test("scanner skips an untracked embedded Git directory without ignoring ordinary files", () => {
+  const root = process.cwd();
+  const probe = mkdtempSync(join(root, ".secret-scan-embedded-"));
+  assert.ok(relative(root, probe).startsWith(".secret-scan-embedded-"));
+  assert.ok(!relative(root, probe).includes(sep));
+  try {
+    execFileSync("git", ["init", "--quiet", probe]);
+    writeFileSync(join(probe, "ordinary.txt"), "public probe\n");
+    const listed = execFileSync(
+      "git",
+      ["ls-files", "--others", "--exclude-standard"],
+      { encoding: "utf8" },
+    );
+    assert.ok(
+      listed.includes(`${relative(root, probe).replaceAll(sep, "/")}/`),
+    );
+    const result = execFileSync(
+      process.execPath,
+      ["scripts/v2-secret-scan.mjs"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    );
+    assert.match(result, /v2 secret scan passed/);
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+});
 const status = "CREATE_PASS_" + "WAITING_FOR_MEMBERS_APPROVAL";
 const hit = "EATE_PASS_" + "WAITING_FOR_MEMBERS_APPROVAL";
 const content = JSON.stringify({ acceptance: { E: { status } } });
