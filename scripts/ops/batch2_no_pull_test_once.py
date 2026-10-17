@@ -178,6 +178,7 @@ def prepare(archive: Path) -> None:
     prior.event("prepare_started", baseline=baseline, source_gate="PASS")
     for src, name in ((prior.COMPOSE, "docker-compose.yml"), (prior.CLONE, "qrs-clone.override.yml"),
                       (prior.ENV, "acceptance.env"), (prior.LOGIN_ENV, "google-login.env"),
+                      (Path(__file__), "batch2_no_pull_test_once.py"),
                       *[(STAGE / name, name) for name in SOURCE_HASHES]):
         target = RUN / name
         shutil.copyfile(src, target)
@@ -205,6 +206,7 @@ def prepare(archive: Path) -> None:
         "archive_sha256": ARCHIVE_SHA256,
         "old_api_id": prior.image(prior.OLD_API), "old_web_id": prior.image(prior.OLD_WEB),
         "base_sha256": prior.digest(prior.COMPOSE), "clone_sha256": prior.digest(prior.CLONE),
+        "runner_sha256": prior.digest(RUN / "batch2_no_pull_test_once.py"),
         "files": {name: prior.digest(RUN / name) for name in SOURCE_HASHES},
         "api_mounts_sha256": prior.digest(RUN / "api-mounts.json"),
         "backups": {"db": {"sha256": prior.digest(db), "bytes": db.stat().st_size},
@@ -275,6 +277,9 @@ def execute() -> None:
         source_gate()
         preflight()
         model_gate()
+        if (prior.digest(Path(__file__)) != manifest["runner_sha256"] or
+                prior.digest(RUN / "batch2_no_pull_test_once.py") != manifest["runner_sha256"]):
+            raise RuntimeError("runner_source_drift")
         if (prior.digest(RUN / "docker-compose.yml") != prior.BASE_SHA or
                 prior.digest(RUN / "qrs-clone.override.yml") != prior.CLONE_SHA or
                 prior.digest(RUN / "api-mounts.json") != manifest["api_mounts_sha256"]):
