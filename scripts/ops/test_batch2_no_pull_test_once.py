@@ -83,9 +83,11 @@ class NoPullRunnerTests(unittest.TestCase):
             return json.dumps(changed if candidate else base).encode()
         with patch.object(runner, "compose", side_effect=fake_compose):
             runner.model_gate()
+            base["services"]["qrs_api"]["environment"]["QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED"] = "true"
             changed["services"]["qrs_api"]["environment"]["QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED"] = "true"
             with self.assertRaisesRegex(RuntimeError, "test_write_gate_drift"):
                 runner.model_gate()
+            del base["services"]["qrs_api"]["environment"]["QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED"]
             del changed["services"]["qrs_api"]["environment"]["QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED"]
             changed["services"]["qrs_api"]["command"] = ["unexpected"]
             with self.assertRaisesRegex(RuntimeError, "unapproved_service_change"):
