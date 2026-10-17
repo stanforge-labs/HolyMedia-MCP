@@ -68,7 +68,7 @@ jobs:
           compose=(docker compose -p qrs-no-pull-web -f /tmp/qrs-no-pull-web-base.yml -f "$GITHUB_WORKSPACE/infra/test-mcp/no-pull-web-health.override.yml")
           trap '"${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true' EXIT
           "${compose[@]}" config --format json > /tmp/qrs-no-pull-web-model.json
-          jq -e '.services.qrs_web.image == env.OLD_WEB and .services.qrs_web.healthcheck.test[0:3] == ["CMD","bash","-ec"] and .services.qrs_web.healthcheck.interval == "15s"' /tmp/qrs-no-pull-web-model.json
+          jq -e '.services.qrs_web.image == env.OLD_WEB and .services.qrs_web.healthcheck.test[0:3] == ["CMD","bash","-ec"] and .services.qrs_web.healthcheck.interval == "15s" and (.services.qrs_web.healthcheck.test[3] | contains("$version") and contains("$status"))' /tmp/qrs-no-pull-web-model.json
           docker run --rm --entrypoint bash "$OLD_WEB" -c 'test -n "$BASH_VERSION"; test -f /workspace/apps/web/.next/BUILD_ID'
           "${compose[@]}" up -d --no-build --pull never qrs_web
           for attempt in $(seq 1 30); do
