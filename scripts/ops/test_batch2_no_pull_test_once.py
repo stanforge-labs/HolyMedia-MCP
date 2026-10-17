@@ -13,6 +13,21 @@ import batch2_no_pull_test_once as runner
 
 
 class NoPullRunnerTests(unittest.TestCase):
+    def test_prepare_creates_audit_directory_before_pending_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory) / "single-use"
+
+            def checked_preflight():
+                self.assertTrue(run.is_dir())
+                self.assertTrue((run / "events.jsonl").is_file())
+                raise RuntimeError("preflight_stop")
+
+            with (patch.object(runner, "RUN", run), patch.object(runner.prior, "RUN", run),
+                  patch.object(runner, "source_gate"),
+                  patch.object(runner, "preflight", side_effect=checked_preflight)):
+                with self.assertRaisesRegex(RuntimeError, "preflight_stop"):
+                    runner.prepare(Path("unused"))
+
     def test_safe_archive_and_pinned_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

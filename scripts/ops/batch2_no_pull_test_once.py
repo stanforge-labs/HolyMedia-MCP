@@ -173,9 +173,10 @@ def prepare(archive: Path) -> None:
     if RUN.exists():
         raise RuntimeError("one_attempt_directory_exists")
     source_gate()
-    baseline = preflight()
     RUN.mkdir(mode=0o700)
-    prior.event("prepare_started", baseline=baseline, source_gate="PASS")
+    prior.event("prepare_started", source_gate="PASS")
+    baseline = preflight()
+    prior.event("preflight_pass", baseline=baseline)
     for src, name in ((prior.COMPOSE, "docker-compose.yml"), (prior.CLONE, "qrs-clone.override.yml"),
                       (prior.ENV, "acceptance.env"), (prior.LOGIN_ENV, "google-login.env"),
                       (Path(__file__), "batch2_no_pull_test_once.py"),
