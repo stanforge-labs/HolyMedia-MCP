@@ -141,7 +141,18 @@ jobs:
         run: |
           set -euo pipefail
           export V2_IMAGE="$OLD_API" V2_API_IMAGE="$OLD_API"
-          compose=(docker compose -p qrs-no-pull-api -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml -f infra/docker-compose.v2.api-release.yml -f /tmp/qrs-api-mounts.json)
+          cat > /tmp/qrs-api-smoke-mount.yml <<'YAML'
+          services:
+            api:
+              volumes:
+                - type: bind
+                  source: ${GITHUB_WORKSPACE:?}/scripts/v2-api-image-smoke.mjs
+                  target: /tmp/v2-api-image-smoke.mjs
+                  read_only: true
+                  bind:
+                    create_host_path: false
+          YAML
+          compose=(docker compose -p qrs-no-pull-api -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml -f infra/docker-compose.v2.api-release.yml -f /tmp/qrs-api-mounts.json -f /tmp/qrs-api-smoke-mount.yml)
           trap 'status=$?; if [ "$status" -ne 0 ]; then "${compose[@]}" ps; "${compose[@]}" logs --no-color --tail 80 api postgres redis; fi; "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true' EXIT
           "${compose[@]}" config --format json | jq -e --arg old "$OLD_API" '.services.api.image == $old and (.services.api.volumes | length > 0)'
           # CI's disposable DB/Redis images are independent of the VPS no-pull contract.
@@ -164,7 +175,6 @@ jobs:
           PY
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/mcp)" = 401
           "${compose[@]}" exec -T api pnpm --dir packages/database run prisma:status
-          docker cp scripts/v2-api-image-smoke.mjs "$cid:/tmp/v2-api-image-smoke.mjs"
           "${compose[@]}" exec -T api node /tmp/v2-api-image-smoke.mjs
           for route in /.well-known/oauth-authorization-server /api/v1/auth/csrf; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:4000$route")
