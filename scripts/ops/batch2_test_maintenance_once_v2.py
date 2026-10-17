@@ -186,18 +186,26 @@ def prod_check():
     return ready
 
 
-def host_gate(baseline, *, strict_swap=True, reserve=0):
+def host_gate(baseline, *, strict_swap=True, reserve=0, context="unspecified"):
     value = metric()
+    reason = None
     if value["mem_kib"] < 819200 or value["swap_free_kib"] < 262144:
-        raise RuntimeError("memory_floor")
-    if value["disk_free_mib"] < ROOT_FREE_REQUIRED + reserve:
-        raise RuntimeError("disk_floor")
-    if value["psi_full"] >= 1.5 or value["psi_some"] >= 2.0:
-        raise RuntimeError("memory_psi")
-    if value["oom_kill"] != baseline["oom_kill"]:
-        raise RuntimeError("new_oom")
-    if strict_swap and value["pswpout"] != baseline["pswpout"]:
-        raise RuntimeError("new_swap_out")
+        reason = "memory_floor"
+    elif value["disk_free_mib"] < ROOT_FREE_REQUIRED + reserve:
+        reason = "disk_floor"
+    elif value["psi_full"] >= 1.5 or value["psi_some"] >= 2.0:
+        reason = "memory_psi"
+    elif value["oom_kill"] != baseline["oom_kill"]:
+        reason = "new_oom"
+    elif strict_swap and value["pswpout"] != baseline["pswpout"]:
+        reason = "new_swap_out"
+    if reason:
+        event("host_gate_failed", context=context, reason=reason, metric=value,
+              baseline_pswpout=baseline["pswpout"], baseline_oom=baseline["oom_kill"],
+              limits={"mem_kib": 819200, "swap_free_kib": 262144,
+                      "disk_free_mib": ROOT_FREE_REQUIRED + reserve,
+                      "psi_full": 1.5, "psi_some": 2.0})
+        raise RuntimeError(reason)
     return value
 
 
@@ -440,7 +448,8 @@ def pull(ref, name, baseline):
 
 def wait_health(name, baseline, route):
     for attempt in range(25):
-        host_gate(baseline, reserve=ROLLBACK_RESERVE_MIB)
+        host_gate(baseline, reserve=ROLLBACK_RESERVE_MIB,
+                  context="candidate_health:" + name)
         if attempt % 3 == 0:
             prod_check()
         item = docker(name)

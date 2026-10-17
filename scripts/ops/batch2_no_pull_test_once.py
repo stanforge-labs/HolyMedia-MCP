@@ -30,7 +30,7 @@ EXPECTED_FILES = 36
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024
 MAX_EXPANDED_BYTES = 3 * 1024 * 1024
 SOURCE_HASHES = {
-    "batch2_test_maintenance_once_v2.py": "2a51f40e2b4327222bf009658a1c2124e3f94d06b2b88ee3357a36daae6349ab",
+    "batch2_test_maintenance_once_v2.py": "1fbd85329620931b0cb709ccdf2692c2e3b5877f8e214a1a9d402764ea66164c",
     "batch2_test_maintenance_guard.py": "ba393db3d1bd67bbefe562b1e150b8158ce078c24b5ddda1a894d6188bd990d8",
     "maintenance_guard_policy.py": "9e7a631a34a7ac84f3c902553d13f20b09a11abcbb3854ccd3e858ff23295a9a",
     "web_only_guard_policy.py": "812c9e899546460d7a220943cf08ccb21f2ce436266a2c4b95d5f759724097bf",
@@ -266,6 +266,31 @@ def candidate_gate() -> None:
     prior.event("candidate_routes_pass", checked=len(routes) + 1)
 
 
+def start_candidate_service(service, baseline, route):
+    """Keep the TEST-stop counters across maintenance and startup."""
+    checked = prior.host_gate(baseline, reserve=prior.ROLLBACK_RESERVE_MIB,
+                              context="pre_candidate_start:" + service)
+    prior.event("candidate_start_begin", service=service, metric=checked)
+    compose(["up", "-d", "--no-deps", "--no-build", "--pull", "never", service],
+            candidate=True)
+    checked = prior.host_gate(baseline, reserve=prior.ROLLBACK_RESERVE_MIB,
+                              context="candidate_start_returned:" + service)
+    prior.event("candidate_start_returned", service=service, metric=checked)
+    name = prior.API_NAME if service == "qrs_api" else prior.WEB_NAME
+    prior.wait_health(name, baseline, route)
+    prior.event("candidate_healthy", service=service, metric=prior.metric())
+
+
+def activate_after_maintenance(test_stop_baseline):
+    prior.guard("maintenance")
+    # The baseline predates the guard and both starts; a new snapshot here
+    # would hide swap-out in the unobserved phase transition.
+    start_candidate_service("qrs_api", test_stop_baseline,
+                            "http://127.0.0.1:14404/ready")
+    start_candidate_service("qrs_web", test_stop_baseline,
+                            "http://127.0.0.1:13300/auth")
+
+
 def execute() -> None:
     marker = RUN / "EXECUTION_STARTED"
     if not (RUN / "manifest.json").is_file() or marker.exists():
@@ -303,13 +328,7 @@ def execute() -> None:
         prior.no_pending()
         after = prior.metric()
         prior.event("after_stop", metric=after, mem_gain_kib=after["mem_kib"] - before["mem_kib"])
-        prior.guard("maintenance")
-        baseline = prior.metric()
-        prior.host_gate(baseline, reserve=prior.ROLLBACK_RESERVE_MIB)
-        compose(["up", "-d", "--no-deps", "--no-build", "--pull", "never", "qrs_api"], candidate=True)
-        prior.wait_health(prior.API_NAME, baseline, "http://127.0.0.1:14404/ready")
-        compose(["up", "-d", "--no-deps", "--no-build", "--pull", "never", "qrs_web"], candidate=True)
-        prior.wait_health(prior.WEB_NAME, baseline, "http://127.0.0.1:13300/auth")
+        activate_after_maintenance(after)
         candidate_gate()
         prior.prod_check()
         prior.check_production_unchanged(manifest)

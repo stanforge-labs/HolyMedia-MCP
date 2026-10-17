@@ -1,0 +1,35 @@
+# Batch 2: причина PSI-отказа и бесплатный путь продолжения
+
+**Решение: Batch 2 остаётся BLOCKED; нового deployment нет.** Исходный TEST восстановлен. Этот разбор использует сохранённые [events, полный trace и результат](../../artifacts/batch2-no-pull-as-run-20261018/) последней единственной попытки, защищённый журнал VPS за 20:00:25–20:00:45 UTC и точный исполнявшийся код `f50bca15316f327906365a06d6b3533002de61fa`. Запуск дополнительных 600-секундных проверок не требуется.
+
+## Что установлено и что неизвестно
+
+| UTC, 17.10.2026 | Доказательство |
+|---|---|
+| 20:00:33 | Maintenance guard **PASS** после 600,001 с и 593 samples. Последний sample: MemAvailable 1 114 084 KiB, PSI full/some 0,00/0,00, `pswpout` 1 352 248. За интервал swap-out 0, OOM 0; минимум RAM 1 088 488 KiB. |
+| 20:00:34–35 | `journalctl` фиксирует создание Docker cgroup, containerd shim, veth и `sbJoin` для `holymedia-qrs-test-qrs_api-1`. Следовательно, `docker compose up` успел запустить кандидатный **API** с уже установленным образом. Загрузки образа не было. |
+| 20:00:41 | Runner пишет `attempt_failed: memory_psi` и начинает rollback. По исходному `host_gate` это означает **PSI full avg10 ≥1,5 или PSI some avg10 ≥2,0**. Точное значение, RAM и cgroup memory в этот момент runner **не сохранял**. Эти числа нельзя вывести из последнего maintenance sample или сегодняшних показателей. |
+| 20:00:42 | Candidate API остановлен при rollback. Docker указал runtime 7,498 с; systemd scope — 4,568 с CPU. Candidate TEST Web не запускался. |
+| 20:01:16 | `ROLLED_BACK`; исходные девять контейнеров затем проверены healthy, production unchanged. |
+
+**Ближайший инициатор события — запуск кандидатного TEST API**, а не простой восьмисекундный разрыв после idle guard. Но точная причина *memory stall* остаётся **UNKNOWN**. Возможны холодная загрузка Node/36 mounts, Docker/containerd/network setup, давление внутри 512 MiB no-swap API cgroup или параллельная host-нагрузка. Журнал показывает также неуспешные внешние SSH-подключения, но не доказывает их вклад. Healthcheck API имеет интервал 15 с, а контейнер прожил 7,5 с; выполнения именно probe в этом окне не зафиксировано. Ни `pswpout`, ни OOM не выросли во время maintenance и rollback, однако это не доказывает безопасность PSI-пика в промежутке запуска. Снятые после отката cgroup counters и изменяющиеся PSI avg10 не являются историей candidate cgroup.
+
+## Исправления offline
+
+1. [Runner](../../scripts/ops/batch2_no_pull_test_once.py) теперь передаёт исходный снимок **после остановки TEST** через весь maintenance guard и оба старта. Прежнее чтение нового baseline после guard могло скрыть swap-out за фазовый разрыв. Строгий no-swap, RAM 819 200 KiB, swap free 262 144 KiB, disk 10 240 MiB плюс rollback reserve, PSI full 1,5 / some 2,0, OOM и production guards не ослаблены.
+2. `host_gate` записывает `host_gate_failed` с точными full/some PSI, RAM, swap, faults, OOM, лимитами и контекстом **до** исключения. События `candidate_start_begin/returned/healthy` различают запуск API/Web; gate проверяет метрики немедленно после `compose up` и в health wait. Изменения касаются только кода будущего runner; уже сохранённые as-run файлы не переписаны.
+3. [Регрессии](../../scripts/ops/test_batch2_no_pull_test_once.py) покрывают сквозной stop-baseline, порядок API→Web, точный снимок PSI-отказа, запрет старта после swap-out и unchanged thresholds. No-pull Linux workflow запускает эти тесты, maintenance policy и image compatibility. Ранее verified bundle `12112096387`, SHA-256 `999d9ba21329217c7f71b76f8cda180190ac3fc8be7006bb13bf03840622cf32`, не изменён.
+
+Эти исправления **улучшают safety и устанавливают причину следующего отказа**, но сами по себе не освобождают RAM и не разрешают повторную попытку на VPS. Занятый single-use run directory исключает случайный повтор старым script.
+
+## Один бесплатный альтернативный путь: изолированный TEST на ПК владельца
+
+Существующий VPS остаётся HTTPS ingress для `mcp-test.holymedia.kz`; production не меняется. На ПК — отдельные TEST API, Web, PostgreSQL и Redis в WSL2/Linux с отдельной БД и TEST-only vault. Из ПК к VPS идут **два исходящих SSH reverse forwards**, привязанных только к `127.0.0.1` VPS, для существующих Nginx upstream портов `14404` (API) и `13300` (Web). Проверено read-only: действующий TEST Nginx уже маршрутизирует OAuth/API/MCP на `127.0.0.1:14404`, auth/consent/approval/Web на `127.0.0.1:13300`; `sshd` имеет `allowtcpforwarding yes`, `gatewayports no`. Значит будущий TEST-only switch может сохранить публичный HTTPS origin, текущие Google OAuth redirect URI, cookies, CORS/CSRF и browser OWNER approval **без изменения Nginx или production**. Это архитектурная возможность, а не сейчас работающий стенд; одновременное владение этими портами старым TEST и туннелем недопустимо.
+
+Локальный ПК проверен read-only: 16 294 MiB RAM всего, на момент проверки около **2 070 MiB свободно**, C: около **592,5 GiB свободно**, virtualization enabled; Docker отсутствует, WSL не установлен. Поэтому он **пока не готов**. Перед TEST switch нужно установить бесплатную WSL2/контейнерную среду, освободить и подтвердить устойчивый запас RAM под полный стек с резервом Windows, локально пройти функциональные и ресурсные проверки, затем отдельно разрешить остановку только старого TEST Web/API и привязку tunnel к освобождённым loopback портам. Если ПК нельзя держать включённым и защищённым во время LIVE-приёмки, этот способ не подходит.
+
+Секреты и реальные токены запрещено помещать в GitHub Actions, публичный CI artifact или репозиторий. Предпочтителен **новый пустой локальный TEST PostgreSQL/Redis** и ручная повторная авторизация владельца через сохранённый HTTPS origin; TEST OAuth client secret и прочие необходимые TEST-only значения должны быть внесены в зашифрованное хранилище ПК через отдельную защищённую процедуру, без production credentials и без копирования БД с токенами. Требуются exact allowlist customer `8590146099`, flags default-OFF, проверка OWNER browser approval и audit. Потеря SSH tunnel означает недоступность TEST, а не переключение на production. Rollback будущего switch: закрыть оба tunnel, вернуть прежние TEST Web/API в их loopback порты, проверить маршруты и все девять VPS контейнеров. Это требует **нового отдельного разрешения**; сейчас ничего не останавливалось и не перенастраивалось.
+
+CI runners остаются пригодны для mock/integration/security и сборки, но не дают постоянного публичного HTTPS TEST origin и не заменяют реальную provider LIVE-приёмку с owner approval. На текущем VPS новый TEST API startup уже пересёк PSI guard; доказанного исходного условия, при котором он устойчиво пройдёт полный стек, нет. Покупка ресурсов, снижение лимитов и новая попытка на удачу исключены.
+
+**Следующее действие владельца:** отдельно разрешить только подготовку изолированного TEST в WSL2 на его ПК (включая установку WSL2 и возможную перезагрузку ПК), без переключения TEST ingress. После готового локального стека решение о самом switch принимается отдельно по результатам его проверки.

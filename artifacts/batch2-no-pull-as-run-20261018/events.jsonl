@@ -1,0 +1,13 @@
+{"at_utc": "2026-10-17T19:49:54Z", "event": "prepare_started", "source_gate": "PASS"}
+{"at_utc": "2026-10-17T19:49:55Z", "event": "test_work_state", "long_transactions": [0], "oauth": [0, 0], "previews": [0, 0, 0]}
+{"at_utc": "2026-10-17T19:49:55Z", "baseline": {"disk_free_mib": 12383, "mem_kib": 892432, "oom_kill": 0, "pgmajfault": 682716, "psi_full": 0.09, "psi_some": 0.09, "pswpin": 803417, "pswpout": 1352219, "swap_free_kib": 1599920}, "event": "preflight_pass"}
+{"at_utc": "2026-10-17T19:50:03Z", "event": "test_work_state", "long_transactions": [0], "oauth": [0, 0], "previews": [0, 0, 0]}
+{"at_utc": "2026-10-17T19:50:04Z", "disk_free_mib": 12382, "event": "prepared"}
+{"at_utc": "2026-10-17T19:50:30Z", "event": "test_work_state", "long_transactions": [0], "oauth": [0, 0], "previews": [0, 0, 0]}
+{"at_utc": "2026-10-17T19:50:31Z", "event": "before_stop", "metric": {"disk_free_mib": 12382, "mem_kib": 895892, "oom_kill": 0, "pgmajfault": 682768, "psi_full": 0.0, "psi_some": 0.0, "pswpin": 803432, "pswpout": 1352248, "swap_free_kib": 1599664}}
+{"at_utc": "2026-10-17T19:50:33Z", "event": "test_work_state", "long_transactions": [0], "oauth": [0, 0], "previews": [0, 0, 0]}
+{"at_utc": "2026-10-17T19:50:33Z", "event": "after_stop", "mem_gain_kib": 213876, "metric": {"disk_free_mib": 12382, "mem_kib": 1109768, "oom_kill": 0, "pgmajfault": 682779, "psi_full": 0.0, "psi_some": 0.0, "pswpin": 803437, "pswpout": 1352248, "swap_free_kib": 1599664}}
+{"at_utc": "2026-10-17T20:00:33Z", "event": "guard_result", "min_disk_mib": 12382, "min_mem_kib": 1088488, "phase": "maintenance", "reasons": [], "status": "PASS", "swap_out_pages": 0}
+{"at_utc": "2026-10-17T20:00:41Z", "event": "attempt_failed", "reason": "memory_psi"}
+{"at_utc": "2026-10-17T20:00:41Z", "event": "rollback_started", "reason": "memory_psi"}
+{"at_utc": "2026-10-17T20:01:16Z", "event": "rollback_complete", "metric": {"disk_free_mib": 12382, "mem_kib": 928440, "oom_kill": 0, "pgmajfault": 682840, "psi_full": 0.04, "psi_some": 0.06, "pswpin": 803445, "pswpout": 1352248, "swap_free_kib": 1599664}}
