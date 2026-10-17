@@ -97,7 +97,10 @@ def verify(bundle):
     names = []
     for entry in entries:
         relative = entry["path"]
-        if not any(relative.startswith(prefix + "/") for prefix in COMPILED_ROOTS) or not relative.endswith(ALLOWED_SUFFIXES):
+        parts = Path(relative).parts
+        if (Path(relative).is_absolute() or any(part in (".", "..") for part in parts) or
+                not any(relative.startswith(prefix + "/") for prefix in COMPILED_ROOTS) or
+                not relative.endswith(ALLOWED_SUFFIXES)):
             raise ValueError("bundle_path_outside_compiled_roots")
         path = bundle / "files" / relative
         if path.is_symlink() or not path.is_file() or path.stat().st_size != entry["bytes"] or sha256(path) != entry["sha256"]:
@@ -105,6 +108,8 @@ def verify(bundle):
         names.append(relative)
     if names != sorted(set(names)):
         raise ValueError("manifest_paths_not_sorted_unique")
+    if any(path.is_symlink() for path in (bundle / "files").rglob("*")):
+        raise ValueError("bundle_symlink")
     actual = {path.relative_to(bundle / "files").as_posix()
               for path in (bundle / "files").rglob("*") if path.is_file()}
     if actual != set(names):

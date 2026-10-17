@@ -8,6 +8,8 @@ on:
       - infra/test-mcp/no-pull-web-health.override.yml
       - scripts/ops/no_pull_api_bundle.py
       - scripts/ops/test_no_pull_api_bundle.py
+      - scripts/ops/batch2_no_pull_test_once.py
+      - scripts/ops/test_batch2_no_pull_test_once.py
   workflow_dispatch:
 
 permissions:
@@ -33,7 +35,9 @@ jobs:
       - name: Code-only bundle contract tests and syntax
         run: |
           python3 -m unittest discover -s scripts/ops -p 'test_no_pull_api_bundle.py'
+          python3 -m unittest discover -s scripts/ops -p 'test_batch2_no_pull_test_once.py'
           python3 -m py_compile scripts/ops/no_pull_api_bundle.py
+          python3 -m py_compile scripts/ops/batch2_no_pull_test_once.py
           node --test scripts/v2-secret-scan.test.mjs
           node scripts/v2-secret-scan.mjs
       - uses: docker/login-action@v3

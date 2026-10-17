@@ -61,6 +61,16 @@ class BundleTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bundle_file_drift"):
             verify(bundle)
 
+    def test_manifest_path_traversal_fails(self):
+        bundle = self.build_bundle()
+        manifest_path = bundle / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["files"][0]["path"] = "apps/api/dist/../../escape.js"
+        manifest_path.chmod(0o644)
+        manifest_path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "bundle_path_outside_compiled_roots"):
+            verify(bundle)
+
 
 if __name__ == "__main__":
     unittest.main()
