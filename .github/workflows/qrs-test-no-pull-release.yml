@@ -1,0 +1,179 @@
+name: QRS TEST no-pull release compatibility (no deploy)
+
+on:
+  push:
+    branches: [codex/qrs-test-auth-recovery]
+    paths:
+      - .github/workflows/qrs-test-no-pull-release.yml
+      - infra/test-mcp/no-pull-web-health.override.yml
+      - scripts/ops/no_pull_api_bundle.py
+      - scripts/ops/test_no_pull_api_bundle.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  OLD_WEB: ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:5e131625e622fe91aa578c0a53a586ffc5f30d49bf8ba39c8080bbd18835a0d6
+  OLD_API: ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:35e95779d59df2b83eb45f3dfc481ffa9e2e09d494ee26315c6ae656d7111595
+  BATCH1_API: ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:68d718998795dd6a0d6229fda0d747c0cb503dbd625d772542b1edacaf48a76f
+  OLD_API_SOURCE: 207ddbe3708be5cde28dfc250c30e29360e9d246
+  OLD_WEB_SOURCE: 367a634c063492a6592e708b179ac240f9a68b61
+  BATCH1_SOURCE: e5216c8f66a5e6b9c8afd1290b221accff069f41
+
+jobs:
+  prove-no-pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Code-only bundle contract tests and syntax
+        run: |
+          python3 -m unittest discover -s scripts/ops -p 'test_no_pull_api_bundle.py'
+          python3 -m py_compile scripts/ops/no_pull_api_bundle.py
+          node --test scripts/v2-secret-scan.test.mjs
+          node scripts/v2-secret-scan.mjs
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull pinned old and Batch 1 images on disposable CI runner only
+        run: |
+          set -euo pipefail
+          docker pull "$OLD_WEB"
+          docker pull "$OLD_API"
+          docker pull "$BATCH1_API"
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$OLD_WEB")" = "$OLD_WEB_SOURCE"
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$OLD_API")" = "$OLD_API_SOURCE"
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$BATCH1_API")" = "$BATCH1_SOURCE"
+          test "$(docker image inspect -f '{{.Config.User}}' "$OLD_WEB")" = node
+          test "$(docker image inspect -f '{{.Config.User}}' "$OLD_API")" = node
+          test "$(docker image inspect -f '{{.Config.User}}' "$BATCH1_API")" = node
+      - name: Prove old Web can use inline Bash healthcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/qrs-no-pull-web-base.yml <<'YAML'
+          services:
+            qrs_web:
+              image: ${OLD_WEB:?pinned}
+              working_dir: /workspace/apps/web
+              command: ["./node_modules/.bin/next", "start"]
+              ports: ["127.0.0.1:13300:3000"]
+          YAML
+          compose=(docker compose -p qrs-no-pull-web -f /tmp/qrs-no-pull-web-base.yml -f "$GITHUB_WORKSPACE/infra/test-mcp/no-pull-web-health.override.yml")
+          trap '"${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true' EXIT
+          "${compose[@]}" config --format json > /tmp/qrs-no-pull-web-model.json
+          jq -e '.services.qrs_web.image == env.OLD_WEB and .services.qrs_web.healthcheck.test[0:3] == ["CMD","bash","-ec"] and .services.qrs_web.healthcheck.interval == "15s"' /tmp/qrs-no-pull-web-model.json
+          docker run --rm --entrypoint bash "$OLD_WEB" -c 'test -n "$BASH_VERSION"; test -f /workspace/apps/web/.next/BUILD_ID'
+          "${compose[@]}" up -d --no-build --pull never qrs_web
+          for attempt in $(seq 1 30); do
+            cid=$("${compose[@]}" ps -q qrs_web)
+            if test -n "$cid" && test "$(docker inspect -f '{{.State.Health.Status}}' "$cid")" = healthy; then break; fi
+            sleep 2
+          done
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$cid")" = healthy
+          test "$(docker inspect -f '{{.Image}}' "$cid")" = "$(docker image inspect -f '{{.Id}}' "$OLD_WEB")"
+          curl -fsS -o /dev/null http://127.0.0.1:13300/auth
+          curl -fsS -o /dev/null http://127.0.0.1:13300/mcp/approve
+          curl -fsS -o /dev/null http://127.0.0.1:13300/connect/claude
+          probe=$(jq -r '.services.qrs_web.healthcheck.test[3]' /tmp/qrs-no-pull-web-model.json)
+          docker exec "$cid" bash -ec "$probe"
+          "${compose[@]}" down --remove-orphans
+          for mode in 404 503 timeout; do
+            python3 scripts/ops/no_pull_http_fixture.py "$mode" >/tmp/no-pull-fixture.log 2>&1 &
+            fixture_pid=$!
+            sleep 0.4
+            if timeout 7s docker run --rm --network host --entrypoint bash "$OLD_WEB" -ec "$probe"; then
+              echo "Probe accepted $mode" >&2; exit 1
+            fi
+            kill "$fixture_pid" 2>/dev/null || true
+            wait "$fixture_pid" 2>/dev/null || true
+          done
+          if timeout 7s docker run --rm --network host --entrypoint bash "$OLD_WEB" -ec "$probe"; then
+            echo 'Probe accepted unavailable endpoint' >&2; exit 1
+          fi
+      - name: Prove runtime dependencies and Prisma contracts unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$OLD_API_SOURCE" "$BATCH1_SOURCE" -- pnpm-lock.yaml pnpm-workspace.yaml apps/api/package.json packages/config/package.json packages/contracts/package.json packages/database/package.json packages/observability/package.json packages/site-audit/package.json packages/database/prisma packages/database/prisma.config.ts
+          docker run --rm --entrypoint node "$OLD_API" -p 'JSON.stringify({node:process.version,modules:process.versions.modules,arch:process.arch,platform:process.platform})' > /tmp/old-runtime.json
+          docker run --rm --entrypoint node "$BATCH1_API" -p 'JSON.stringify({node:process.version,modules:process.versions.modules,arch:process.arch,platform:process.platform})' > /tmp/new-runtime.json
+          jq -e --slurp '.[0].modules == .[1].modules and .[0].arch == .[1].arch and .[0].platform == .[1].platform and (.[0].node | startswith("v24.")) and (.[1].node | startswith("v24."))' /tmp/old-runtime.json /tmp/new-runtime.json
+          docker run --rm --entrypoint sh "$OLD_API" -ec 'find /workspace/node_modules/.pnpm -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort' > /tmp/old-deps.txt
+          docker run --rm --entrypoint sh "$BATCH1_API" -ec 'find /workspace/node_modules/.pnpm -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort' > /tmp/new-deps.txt
+          test -z "$(comm -23 /tmp/new-deps.txt /tmp/old-deps.txt)"
+          docker run --rm --entrypoint sh "$OLD_API" -ec 'test -f /workspace/packages/database/dist/generated/prisma/client.js; test -x /workspace/packages/database/node_modules/.bin/prisma'
+          cat /tmp/old-runtime.json /tmp/new-runtime.json
+      - name: Extract compiled trees and package only changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/qrs-old /tmp/qrs-new
+          roots=(apps/api/dist packages/config/dist packages/contracts/dist packages/database/dist packages/observability/dist packages/site-audit/dist)
+          for pair in "old:$OLD_API" "new:$BATCH1_API"; do
+            name=${pair%%:*}; ref=${pair#*:}
+            cid=$(docker create "$ref" true)
+            for root in "${roots[@]}"; do
+              mkdir -p "/tmp/qrs-$name/$(dirname "$root")"
+              docker cp "$cid:/workspace/$root" "/tmp/qrs-$name/$root"
+            done
+            docker rm "$cid" >/dev/null
+          done
+          python3 scripts/ops/no_pull_api_bundle.py build /tmp/qrs-old /tmp/qrs-new /tmp/qrs-api-release "$OLD_API" "$BATCH1_API" "$BATCH1_SOURCE"
+          python3 scripts/ops/no_pull_api_bundle.py verify /tmp/qrs-api-release
+          python3 scripts/ops/no_pull_api_bundle.py compose /tmp/qrs-api-release /tmp/qrs-api-mounts.json --service api
+          jq -e --arg old "$OLD_API" --arg new "$BATCH1_API" '.old_image == $old and .candidate_image == $new and (.files | length > 0)' /tmp/qrs-api-release/manifest.json
+          find /tmp/qrs-api-release -type f -printf '%P %s bytes\n' | sort
+      - name: Disposable old API image with read-only Batch 1 file mounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          export V2_IMAGE="$OLD_API" V2_API_IMAGE="$OLD_API"
+          compose=(docker compose -p qrs-no-pull-api -f infra/docker-compose.v2.yml -f infra/docker-compose.v2.image-smoke.yml -f infra/docker-compose.v2.api-release.yml -f /tmp/qrs-api-mounts.json)
+          trap 'status=$?; if [ "$status" -ne 0 ]; then "${compose[@]}" ps; "${compose[@]}" logs --no-color --tail 80 api postgres redis; fi; "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true' EXIT
+          "${compose[@]}" config --format json | jq -e --arg old "$OLD_API" '.services.api.image == $old and (.services.api.volumes | length > 0)'
+          "${compose[@]}" up -d --no-build --pull never postgres redis api
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:4000/health && curl -fsS -o /dev/null http://127.0.0.1:4000/ready; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:4000/ready | grep -q '"status":"ok"'
+          cid=$("${compose[@]}" ps -q api)
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$cid")" = healthy
+          test "$(docker inspect -f '{{.Image}}' "$cid")" = "$(docker image inspect -f '{{.Id}}' "$OLD_API")"
+          docker inspect "$cid" --format '{{json .Mounts}}' | jq -e 'all(.[]; .RW == false)'
+          python3 - /tmp/qrs-api-release/manifest.json "$cid" <<'PY'
+          import json, subprocess, sys
+          for item in json.load(open(sys.argv[1]))['files']:
+              actual = subprocess.check_output(['docker','exec',sys.argv[2],'sha256sum','/workspace/'+item['path']], text=True).split()[0]
+              assert actual == item['sha256'], item['path']
+          PY
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/mcp)" = 401
+          "${compose[@]}" exec -T api pnpm --dir packages/database run prisma:status
+          docker cp scripts/v2-api-image-smoke.mjs "$cid:/tmp/v2-api-image-smoke.mjs"
+          "${compose[@]}" exec -T api node /tmp/v2-api-image-smoke.mjs
+          for route in /.well-known/oauth-authorization-server /api/v1/auth/csrf; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:4000$route")
+            test "$code" = 200 || test "$code" = 401
+          done
+      - name: Package exact-source code-only artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C /tmp/qrs-api-release -czf release/qrs-test-api-delta.tar.gz .
+          sha256sum release/qrs-test-api-delta.tar.gz | tee release/qrs-test-api-delta.tar.gz.sha256
+          echo "Code-only bundle bytes: $(stat -c %s release/qrs-test-api-delta.tar.gz)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Old Web/API images stay unchanged; no VPS deployment." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qrs-test-no-pull-${{ github.sha }}
+          path: release/
+          retention-days: 14
+          if-no-files-found: error
