@@ -1,5 +1,7 @@
 # Batch 2: phase-aware TEST maintenance retry
 
+**Execution result:** [ROLLED BACK on strict new swap-out during first Web image pull](BATCH2_PHASE_GUARD_RETRY_RESULT_20261017.md). The complete maintenance-state guard passed; the full-stack post-start guard did not begin. Do not rerun this one-use procedure.
+
 **Scope:** one newly authorized TEST Web/API maintenance attempt. The previous
 [as-run scripts and protected rollback](BATCH2_TEST_ONLY_MAINTENANCE_RESULT_20261017.md)
 remain in commit `fb2cd777f2fadd3ea142e8d688d036870b16a0fe` and on the VPS.
