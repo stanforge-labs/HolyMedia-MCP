@@ -1,6 +1,6 @@
 # HolyPilot — завершение доступной offline части исходного Google Ads ТЗ
 
-**Срез:** 18.10.2026. База ветки `codex/qrs-test-auth-recovery` до этого пакета — `0187008405904522e4a077ed2af42c5723b22653`. Финальный exact SHA и CI заполняются после push, чтобы не выдавать запланированный run за выполненный. Ни VPS, ни Google accounts, ни main не изменялись.
+**Срез:** 18.10.2026. База ветки `codex/qrs-test-auth-recovery` до этого пакета — `0187008405904522e4a077ed2af42c5723b22653`. Exact code/test source SHA — `5bbb8b6f13cbe1a29d6e84415ff9618366d181cf`; следующий docs-only commit фиксирует эти проверенные результаты без изменения runtime code. Ни VPS, ни Google accounts, ни main не изменялись.
 
 ## Что завершено программно
 
@@ -18,7 +18,9 @@
 | `pnpm migrate:validate` / Prisma generate | PASS | Отдельный PostgreSQL 18 migration/restore job оценивается по Linux CI. |
 | `pnpm test` | PASS; API 1496 passed, 22 skipped; 100 test files passed, 8 skipped | Windows skipped integration требуются из Linux PostgreSQL/Redis CI; mock не равен LIVE. |
 | `pnpm security:secrets`, `pnpm security:deps` | PASS; dependency audit high: no known vulnerabilities | Scanner исправлен для untracked directories. |
-| Linux foundation / Stage 2–4 / API image | **PENDING exact-source current commit CI** | Предыдущий baseline `0187008`: runs [39066240800](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/39066240800), [39066240758](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/39066240758), [39066240768](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/39066240768) PASS. Новую проверку нельзя приписывать старому SHA. |
+| Linux foundation (PostgreSQL 18, Redis, migrations/restore, full tests, OAuth, approval, security) | **PASS** [39067531460](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/39067531460) на `5bbb8b6` | 108/108 API test files, 1518/1518 tests, без Windows skips; mock не LIVE. |
+| API-only immutable image и disposable smoke | **PASS** [39067531568](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/39067531568) на `5bbb8b6` | Digest `sha256:531c8a0b53708dedc2f88394603e3eb4c6190d912bc101682ba2cf63ed014d70`. На VPS не развёрнут. |
+| Stage 2–4 isolated image regression | **PASS** [39067531535](https://github.com/stanforge-labs/HolyMedia-MCP/actions/runs/39067531535) на `5bbb8b6` | Digest `sha256:7c574c359072e27b3bef8b8b28106764d65534185b8737c4ebe38181cbb5ccb8`. Provider LIVE не выполнялся. |
 
 ## Официальные контракты Google без credentials
 

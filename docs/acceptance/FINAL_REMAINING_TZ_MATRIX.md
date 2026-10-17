@@ -2,7 +2,7 @@
 
 Срез 18.10.2026. Источник: [336 абзацев исходного ТЗ](../../artifacts/google-full-scope/original-tz-source-20261009.json); номера § означают абзацы. Это 39 нормализованных обязательных групп, а не 39 одинаковых по объёму задач. Исторические 20/20 именованных сценариев и Search Clone не пересчитываются и не повторяются.
 
-Текущий offline baseline: `0187008405904522e4a077ed2af42c5723b22653` плюс исправление сканера в текущем пакете; финальный commit и CI указаны в `FINAL_OFFLINE_TZ_COMPLETION.md`. Предыдущий [Batch 1](BATCH1_OFFLINE_EXECUTION_PACKAGE_20261017.md) остаётся source evidence для typed PMax gate. Google/TEST/production не изменялись.
+Текущий проверенный code/test source: `5bbb8b6f13cbe1a29d6e84415ff9618366d181cf`; три exact-source CI PASS указаны в [итоге offline](FINAL_OFFLINE_TZ_COMPLETION.md). Предыдущий [Batch 1](BATCH1_OFFLINE_EXECUTION_PACKAGE_20261017.md) остаётся source evidence для typed PMax gate. Google/TEST/production не изменялись.
 
 **Обозначения:** A — инфраструктура TEST; B — Google-ресурс/данные; C — разрешение владельца и approval; D — внешние клиенты; E — недостающая реальная доставка `sign_up`; G — реальный Google API/аккаунт. Эти категории описаны в [реестре препятствий](../operations/VPS_AND_EXTERNAL_BLOCKERS.md). `VALIDATE ONLY` не равен LIVE commit. `LIVE PASS` применим только к указанному ограниченному профилю.
 
