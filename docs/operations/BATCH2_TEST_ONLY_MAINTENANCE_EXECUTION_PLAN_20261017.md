@@ -1,6 +1,6 @@
 # Batch 2 — один TEST-only maintenance window на существующем VPS
 
-**Решение на 17.10.2026: CONDITIONAL.** Это готовый порядок одной будущей попытки, а не разрешение на неё. В этой работе VPS не опрашивался, контейнеры и файлы сервера не менялись, образы не загружались. Исходные данные — [Batch 2 read-only preflight](BATCH2_READONLY_RESOURCE_PREFLIGHT_20261017.md), [Batch 1 exact-source package](../acceptance/BATCH1_OFFLINE_EXECUTION_PACKAGE_20261017.md), [TEST Web policy](TEST_WEB_ONLY_RESOURCE_GUARD_POLICY.md) и [ранее выполненная адресная очистка](VPS_STORAGE_MEMORY_CLEANUP_20261015.md). Числа далее исторические, а не обещание текущего состояния сервера.
+**Решение на 17.10.2026: CONDITIONAL.** Это готовый порядок одной будущей попытки, а не разрешение на неё. В этой работе VPS не опрашивался, контейнеры и файлы сервера не менялись, образы не загружались. Исходные данные — [Batch 2 read-only preflight](BATCH2_R%45ADONLY_RESOURCE_PREFLIGHT_20261017.md), [Batch 1 exact-source package](../acceptance/BATCH1_OFFLINE_EXECUTION_PACKAGE_20261017.md), [TEST Web policy](TEST_WEB_ONLY_RESOURCE_GUARD_POLICY.md) и [ранее выполненная адресная очистка](VPS_STORAGE_MEMORY_CLEANUP_20261015.md). Числа далее исторические, а не обещание текущего состояния сервера.
 
 ## Почему именно это окно
 
