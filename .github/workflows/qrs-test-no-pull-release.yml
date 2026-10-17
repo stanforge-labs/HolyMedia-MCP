@@ -82,7 +82,8 @@ jobs:
           curl -fsS -o /dev/null http://127.0.0.1:13300/auth
           curl -fsS -o /dev/null http://127.0.0.1:13300/mcp/approve
           curl -fsS -o /dev/null http://127.0.0.1:13300/connect/claude
-          probe=$(jq -r '.services.qrs_web.healthcheck.test[3]' /tmp/qrs-no-pull-web-model.json)
+          probe=$(docker inspect "$cid" --format '{{json .Config.Healthcheck.Test}}' | jq -r '.[3]')
+          [[ "$probe" == *'$version'* && "$probe" == *'$status'* ]]
           docker exec "$cid" bash -ec "$probe"
           "${compose[@]}" down --remove-orphans
           for mode in 404 503 timeout; do
