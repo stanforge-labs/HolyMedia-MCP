@@ -77,11 +77,11 @@ def safe_extract(archive: Path, target: Path) -> None:
 
 
 def source_gate() -> None:
-    if not STAGE.is_dir() or STAGE.is_symlink():
+    if not STAGE.is_dir() or STAGE.is_symlink() or STAGE.stat().st_mode & 0o077:
         raise RuntimeError("protected_staging_missing")
     for name, want in SOURCE_HASHES.items():
         path = STAGE / name
-        if not path.is_file() or path.is_symlink() or prior.digest(path) != want:
+        if not path.is_file() or path.is_symlink() or path.stat().st_mode & 0o077 or prior.digest(path) != want:
             raise RuntimeError("staged_source_sha_mismatch_" + name)
 
 
@@ -128,6 +128,15 @@ def model_gate() -> None:
             env.get("QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED") != "false" or
             env.get("V2_CONFIRMED_WRITE_ENABLED") != "false"):
         raise RuntimeError("test_write_gate_drift")
+
+
+def runtime_shape(name: str) -> dict:
+    mounts = json.loads(prior.output(["docker", "inspect", name,
+                                     "--format", "{{json .Mounts}}"] ))
+    probe = json.loads(prior.output(["docker", "inspect", name,
+                                    "--format", "{{json .Config.Healthcheck.Test}}"] ))
+    return {"mounts": sorted([item["Source"], item["Destination"], item["RW"]]
+                             for item in mounts), "healthcheck": probe}
 
 
 def preflight() -> dict:
@@ -201,6 +210,7 @@ def prepare(archive: Path) -> None:
         "backups": {"db": {"sha256": prior.digest(db), "bytes": db.stat().st_size},
                     "redis": {"sha256": prior.digest(redis), "bytes": redis.stat().st_size}},
         "production": {name: prior.docker(name) for name in prior.PROD_NAMES},
+        "test_runtime": {name: runtime_shape(name) for name in (prior.API_NAME, prior.WEB_NAME)},
     }
     (RUN / "manifest.json").write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
     (RUN / "manifest.json").chmod(0o600)
@@ -306,7 +316,17 @@ def execute() -> None:
         reason = str(error) if isinstance(error, RuntimeError) else type(error).__name__
         prior.event("attempt_failed", reason=reason)
         if stopped:
-            prior.rollback(reason)
+            restored = prior.rollback(reason)
+            if restored:
+                try:
+                    for name, original in manifest["test_runtime"].items():
+                        if runtime_shape(name) != original:
+                            raise RuntimeError("rollback_test_runtime_shape_drift")
+                except Exception as rollback_error:
+                    (RUN / "ROLLED_BACK").unlink(missing_ok=True)
+                    (RUN / "ROLLBACK_UNVERIFIED").write_text(
+                        type(rollback_error).__name__ + "\n", encoding="utf-8")
+                    prior.event("rollback_shape_unverified", reason=type(rollback_error).__name__)
         else:
             (RUN / "BLOCKED_BEFORE_STOP").write_text(reason + "\n", encoding="utf-8")
         raise
