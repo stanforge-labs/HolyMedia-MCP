@@ -164,6 +164,10 @@ jobs:
           done
           curl -fsS http://127.0.0.1:4000/ready | grep -q '"status":"ok"'
           cid=$("${compose[@]}" ps -q api)
+          for attempt in $(seq 1 30); do
+            if test "$(docker inspect -f '{{.State.Health.Status}}' "$cid")" = healthy; then break; fi
+            sleep 2
+          done
           test "$(docker inspect -f '{{.State.Health.Status}}' "$cid")" = healthy
           test "$(docker inspect -f '{{.Image}}' "$cid")" = "$(docker image inspect -f '{{.Id}}' "$OLD_API")"
           docker inspect "$cid" --format '{{json .Mounts}}' | jq -e 'all(.[]; .RW == false)'
