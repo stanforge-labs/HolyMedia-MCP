@@ -143,7 +143,9 @@ jobs:
       - name: API readiness integration smoke
         shell: bash
         run: |
-          node apps/api/dist/main.js > /tmp/holymedia-v2-api.log 2>&1 &
+          # Earlier integration suites exercise the loopback signup rate limit.
+          # Keep this disposable HTTP smoke in its own Redis logical database.
+          REDIS_URL=redis://127.0.0.1:6379/15 node apps/api/dist/main.js > /tmp/holymedia-v2-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
