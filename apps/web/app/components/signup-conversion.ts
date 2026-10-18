@@ -43,7 +43,15 @@ export async function measureSuccessfulSignup(
   | "queued"
   | "failed"
 > {
-  if (!config) return "disabled";
+  if (
+    !config ||
+    !signupConversionConfig({
+      enabled: "true",
+      conversionId: config.conversionId,
+      label: config.label,
+    })
+  )
+    return "disabled";
   if (!consent) return "no-consent";
   if (!userId || !workspaceId) return "invalid-success";
   const marker = `holypilot:signup-conversion:v1:${config.conversionId}:${userId}`;

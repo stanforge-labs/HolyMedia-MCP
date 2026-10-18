@@ -14,3 +14,5 @@ docker compose -f infra/local-test/docker-compose.yml down
 ```
 
 The smoke checks readiness, unauthorized session and REST/OpenAPI access, and the development OpenAPI document. Signup may be exercised only with disposable dummy identities. `down` preserves the isolated local DB volume; delete it only after verifying it contains no needed local evidence. This stack does not provide HTTPS OAuth callbacks or owner browser approval; those require a separately approved secure ingress and TEST-only credentials. Do not open public ports or switch `mcp-test.holymedia.kz` as part of local smoke.
+
+An exact-source API-only CI image can be preloaded locally and selected with `HOLYPILOT_LOCAL_API_IMAGE`. After building the Web target for localhost, both existing images may be started with `--no-build --pull never`. The existing QRS TEST Web image is compiled against `https://mcp-test.holymedia.kz` and restricted signup; it is **not** a valid local HTTP Web image. This Compose file builds Web for `127.0.0.1` instead. Never relabel the QRS image as a local build or copy live credentials into a CI artifact.

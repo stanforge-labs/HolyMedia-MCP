@@ -80,6 +80,15 @@ describe("success-only Google Ads signup conversion boundary", () => {
       "disabled",
     );
     expect(
+      await measureSuccessfulSignup(
+        { conversionId: "AW-123456789/evil", label: "x" },
+        true,
+        "u",
+        "w",
+        f.browser,
+      ),
+    ).toBe("disabled");
+    expect(
       await measureSuccessfulSignup(config, false, "u", "w", f.browser),
     ).toBe("no-consent");
     expect(
