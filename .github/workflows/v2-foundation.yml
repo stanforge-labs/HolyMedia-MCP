@@ -81,6 +81,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm migrate:validate
+      - name: Disposable localhost TEST Compose contract (no containers started)
+        run: docker compose -f infra/local-test/docker-compose.yml config --quiet
       - run: pnpm --filter @holymedia/database prisma:deploy
       - name: Migration rehearsal contract
         shell: bash
@@ -147,6 +149,7 @@ jobs:
           for attempt in {1..30}; do
             if curl --fail --silent http://127.0.0.1:4000/ready > /tmp/ready.json; then
               curl --fail --silent http://127.0.0.1:4000/health > /tmp/health.json
+              node scripts/non-vps-http-smoke.mjs
               cat /tmp/health.json
               cat /tmp/ready.json
               exit 0

@@ -1544,6 +1544,21 @@ form {
 .auth-card form {
   margin-top: 24px;
 }
+.auth-card .signup-measurement-consent {
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  text-align: left;
+}
+.auth-card .signup-measurement-consent input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  padding: 0;
+}
+.auth-card .signup-measurement-consent a {
+  grid-column: 2;
+}
 .password-input {
   position: relative;
   display: block;

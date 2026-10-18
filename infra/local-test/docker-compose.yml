@@ -1,0 +1,111 @@
+# Disposable localhost-only development stack. No VPS data, tokens or OAuth.
+name: holypilot-local-disposable
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: holypilot_local
+      POSTGRES_USER: holypilot_local
+      POSTGRES_PASSWORD: dummy-local-only-password
+    ports: ["127.0.0.1:15432:5432"]
+    volumes: ["holypilot-local-postgres:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holypilot_local -d holypilot_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    ports: ["127.0.0.1:16379:6379"]
+    volumes: ["holypilot-local-redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/Dockerfile.v2
+      target: api-runtime
+    environment:
+      NODE_ENV: development
+      V2_CONFIG_STRICT: "true"
+      API_PORT: "4000"
+      DATABASE_URL: postgresql://holypilot_local:dummy-local-only-password@postgres:5432/holypilot_local
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://127.0.0.1:13300
+      HOLYMEDIA_PUBLIC_BASE_URL: http://127.0.0.1:13300
+      SESSION_HASH_SECRET: dummy-local-only-session-hash-secret-0123456789
+      PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: "1:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="
+      PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "false"
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: ""
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+      V2_PREVIEW_ONLY: "true"
+      V2_CONFIRMED_WRITE_ENABLED: "false"
+      QRS_TEST_RESTRICTED_AUTH: "false"
+    command:
+      [
+        "sh",
+        "-c",
+        "pnpm --dir packages/database run prisma:deploy && node apps/api/dist/main.js",
+      ]
+    ports: ["127.0.0.1:14404:4000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "/usr/local/bin/holymedia-test-http-health",
+          "4000",
+          "/ready",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/Dockerfile.v2
+      target: test-web-runtime
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:14404
+        NEXT_PUBLIC_PUBLIC_BASE_URL: http://127.0.0.1:13300
+        NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED: "false"
+        NEXT_PUBLIC_TEST_RESTRICTED_AUTH: "false"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NEXT_PUBLIC_SIGNUP_GOOGLE_ADS_ENABLED: "false"
+    working_dir: /workspace/apps/web
+    command: ["./node_modules/.bin/next", "start"]
+    ports: ["127.0.0.1:13300:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "/usr/local/bin/holymedia-test-http-health",
+          "3000",
+          "/auth",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  holypilot-local-postgres:
+  holypilot-local-redis:

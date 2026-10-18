@@ -8,12 +8,22 @@ import {
   LanguageSwitcher,
   useLanguage,
 } from "../../components/language-switcher";
+import {
+  measureSuccessfulSignup,
+  signupConversionConfig,
+} from "../../components/signup-conversion";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const googleLoginEnabled =
   process.env.NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED !== "false";
 const restrictedTestAuth =
   process.env.NEXT_PUBLIC_TEST_RESTRICTED_AUTH === "true";
+const signupConversion = signupConversionConfig({
+  enabled: process.env.NEXT_PUBLIC_SIGNUP_GOOGLE_ADS_ENABLED,
+  conversionId: process.env.NEXT_PUBLIC_SIGNUP_GOOGLE_ADS_CONVERSION_ID,
+  label: process.env.NEXT_PUBLIC_SIGNUP_GOOGLE_ADS_LABEL,
+  restrictedTestAuth: process.env.NEXT_PUBLIC_TEST_RESTRICTED_AUTH,
+});
 type AuthMode = "login" | "signup" | "forgot";
 const copy = {
   ru: {
@@ -60,6 +70,9 @@ const copy = {
       "Этот Google-аккаунт не привязан к разрешённому владельцу TEST workspace.",
     resetSent:
       "Если такой аккаунт есть, мы отправили письмо со ссылкой для сброса пароля.",
+    measurementConsent:
+      "Разрешаю передать Google Ads факт успешной регистрации для оценки рекламы. Это необязательно; email, имя и пароль не передаются.",
+    privacyDetails: "Подробнее в Политике конфиденциальности.",
   },
   en: {
     back: "← Back to home",
@@ -104,6 +117,9 @@ const copy = {
     googleAccess:
       "This Google account is not linked to the authorized TEST workspace owner.",
     resetSent: "If an account exists, we sent an email with a reset link.",
+    measurementConsent:
+      "I allow Google Ads to measure my successful registration. This is optional; email, name and password are not sent.",
+    privacyDetails: "Read the Privacy Policy.",
   },
 };
 
@@ -251,9 +267,10 @@ export default function AuthPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const email = String(form.get("email") ?? "").trim();
-    const emailInput = event.currentTarget.elements.namedItem("email");
+    const emailInput = formElement.elements.namedItem("email");
     if (
       !(emailInput instanceof HTMLInputElement) ||
       !emailInput.checkValidity() ||
@@ -312,6 +329,27 @@ export default function AuthPage() {
       }
       if (mode === "forgot") {
         setMessage(t.resetSent);
+      } else if (mode === "signup") {
+        const result = await response.json().catch(() => null);
+        const measurementConsent =
+          form.get("signupMeasurementConsent") === "on";
+        try {
+          // Remove entered credentials and OAuth/query values before loading a tag.
+          formElement.reset();
+          window.history.replaceState({}, "", currentLocaleHref("/auth"));
+          await measureSuccessfulSignup(
+            signupConversion,
+            measurementConsent,
+            typeof result?.user?.id === "string" ? result.user.id : undefined,
+            typeof result?.workspace?.id === "string"
+              ? result.workspace.id
+              : undefined,
+          );
+        } catch {
+          // Measurement must never turn a completed signup into a failed signup.
+        }
+        navigating = true;
+        window.location.assign(currentLocaleHref("/onboarding"));
       } else if (restrictedTestAuth && mode === "login" && !oauthTransaction) {
         setMessage(
           language === "ru"
@@ -321,11 +359,9 @@ export default function AuthPage() {
       } else {
         navigating = true;
         window.location.assign(
-          mode === "signup"
-            ? currentLocaleHref("/onboarding")
-            : oauthTransaction
-              ? `${API}/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
-              : nextPath,
+          oauthTransaction
+            ? `${API}/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
+            : nextPath,
         );
       }
     } catch {
@@ -482,6 +518,18 @@ export default function AuthPage() {
               >
                 {t.forgot}
               </button>
+            )}
+            {mode === "signup" && signupConversion && (
+              <label className="signup-measurement-consent">
+                <input
+                  type="checkbox"
+                  name="signupMeasurementConsent"
+                  value="on"
+                  defaultChecked={false}
+                />
+                <span>{t.measurementConsent}</span>
+                <Link href="/privacy">{t.privacyDetails}</Link>
+              </label>
             )}
             <button
               className={`primary-button auth-submit ${mode === "signup" ? "auth-submit--signup" : ""}`}
