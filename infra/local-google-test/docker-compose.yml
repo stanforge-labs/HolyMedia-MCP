@@ -1,0 +1,122 @@
+# Separate, fail-closed localhost profile for a future owner-approved Google TEST OAuth grant.
+# Never point this profile at the VPS database, vault, callback, or public ingress.
+name: holypilot-google-test-local
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: holypilot_google_test_local
+      POSTGRES_USER: holypilot_google_test_local
+      POSTGRES_PASSWORD: ${HOLYPILOT_GOOGLE_TEST_DB_PASSWORD:?owner-approved local secret required}
+    ports: ["127.0.0.1:25432:5432"]
+    volumes: ["holypilot-google-test-postgres:/var/lib/postgresql"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U holypilot_google_test_local -d holypilot_google_test_local",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    ports: ["127.0.0.1:26379:6379"]
+    volumes: ["holypilot-google-test-redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: holypilot-google-test-api:source
+    build:
+      context: ../..
+      dockerfile: infra/Dockerfile.v2
+      target: api-runtime
+    env_file: ${HOLYPILOT_GOOGLE_TEST_ENV_FILE:-./provider.env.example}
+    environment:
+      NODE_ENV: development
+      V2_CONFIG_STRICT: "true"
+      API_PORT: "4000"
+      DATABASE_URL: postgresql://holypilot_google_test_local:${HOLYPILOT_GOOGLE_TEST_DB_PASSWORD}@postgres:5432/holypilot_google_test_local
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://127.0.0.1:23300
+      HOLYMEDIA_PUBLIC_BASE_URL: http://127.0.0.1:23300
+      PROVIDER_GOOGLE_REDIRECT_URI: http://127.0.0.1:24404/oauth/google/callback
+      PROVIDER_GOOGLE_API_VERSION: v24
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "false"
+      PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "false"
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: ""
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "false"
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "false"
+      V2_PREVIEW_ONLY: "true"
+      V2_CONFIRMED_WRITE_ENABLED: "false"
+      QRS_TEST_RESTRICTED_AUTH: "false"
+      QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "false"
+      QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: "false"
+      QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "false"
+      QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED: "false"
+    command:
+      [
+        "sh",
+        "-c",
+        "pnpm --dir packages/database run prisma:deploy && node apps/api/dist/main.js",
+      ]
+    ports: ["127.0.0.1:24404:4000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "/usr/local/bin/holymedia-test-http-health",
+          "4000",
+          "/ready",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: holypilot-google-test-web:source
+    build:
+      context: ../..
+      dockerfile: infra/Dockerfile.v2
+      target: test-web-runtime
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:24404
+        NEXT_PUBLIC_PUBLIC_BASE_URL: http://127.0.0.1:23300
+        NEXT_PUBLIC_GOOGLE_LOGIN_ENABLED: "false"
+        NEXT_PUBLIC_TEST_RESTRICTED_AUTH: "false"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NEXT_PUBLIC_SIGNUP_GOOGLE_ADS_ENABLED: "false"
+    working_dir: /workspace/apps/web
+    command: ["./node_modules/.bin/next", "start"]
+    ports: ["127.0.0.1:23300:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "/usr/local/bin/holymedia-test-http-health",
+          "3000",
+          "/auth",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  holypilot-google-test-postgres:
+  holypilot-google-test-redis:

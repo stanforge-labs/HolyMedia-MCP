@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderController } from "./provider.controller.js";
 
 const request = { ip: "127.0.0.1" } as never;
@@ -20,6 +20,11 @@ function setup(
 }
 
 describe("provider OAuth callback UX", () => {
+  beforeEach(() =>
+    vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "http://127.0.0.1:23300"),
+  );
+  afterEach(() => vi.unstubAllEnvs());
+
   it("accepts the validated state/code pair and returns to connections", async () => {
     const { controller, providers, reply } = setup();
 
@@ -38,7 +43,7 @@ describe("provider OAuth callback UX", () => {
       request,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard/connections?oauth=success&provider=google",
+      "http://127.0.0.1:23300/dashboard/connections?oauth=success&provider=google",
     );
     expect(reply.code).toHaveBeenCalledWith(302);
   });
@@ -68,7 +73,7 @@ describe("provider OAuth callback UX", () => {
         request,
       );
       expect(reply.redirect).toHaveBeenCalledWith(
-        `/dashboard/connections?oauth=success&provider=${pathProvider}`,
+        `http://127.0.0.1:23300/dashboard/connections?oauth=success&provider=${pathProvider}`,
       );
     },
   );
@@ -90,7 +95,7 @@ describe("provider OAuth callback UX", () => {
     );
 
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard/connections?oauth=error&provider=google&oauth_reason=oauth_failed",
+      "http://127.0.0.1:23300/dashboard/connections?oauth=error&provider=google&oauth_reason=oauth_failed",
     );
     expect(reply.code).toHaveBeenCalledWith(302);
   });
@@ -106,7 +111,7 @@ describe("provider OAuth callback UX", () => {
       reply as never,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard/connections?oauth=error&provider=google&oauth_reason=invalid_callback",
+      "http://127.0.0.1:23300/dashboard/connections?oauth=error&provider=google&oauth_reason=invalid_callback",
     );
   });
 
@@ -143,7 +148,7 @@ describe("provider OAuth callback UX", () => {
     );
 
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard/connections?oauth=error&provider=meta&oauth_reason=authorization_denied",
+      "http://127.0.0.1:23300/dashboard/connections?oauth=error&provider=meta&oauth_reason=authorization_denied",
     );
   });
 
@@ -165,7 +170,7 @@ describe("provider OAuth callback UX", () => {
       request,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard/connections?oauth=success&provider=tiktok",
+      "http://127.0.0.1:23300/dashboard/connections?oauth=success&provider=tiktok",
     );
   });
 

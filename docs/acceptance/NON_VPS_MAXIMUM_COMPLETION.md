@@ -1,5 +1,7 @@
 # HolyPilot: максимум завершения исходного Google Ads ТЗ без VPS
 
+**Актуализация 19.10.2026:** ниже сохранён исторический срез 18.10, когда WSL/Docker ещё не были готовы. Теперь отдельный localhost TEST с API/Web/PostgreSQL/Redis запущен и прошёл ограниченный HTTP/MCP/REST/UI E2E. Новые факты, source/image SHA и границы доказательства — в [локальной приёмке](LOCAL_TEST_E2E_AND_GOOGLE_PROVIDER_READINESS_20261019.md). Это не Google LIVE и не меняет 7/39 исторических LIVE PASS.
+
 Срез 18.10.2026, ветка `codex/qrs-test-auth-recovery`. База: `4897d23d625496cf29478a2cac3026ccaaaef4c4`. Первичные §: [`original-tz-source-20261009.json`](../../artifacts/google-full-scope/original-tz-source-20261009.json); полная нормализация и исторические provider результаты: [`FINAL_REMAINING_TZ_MATRIX.md`](FINAL_REMAINING_TZ_MATRIX.md). Ни VPS, ни текущие TEST/production, ни Google Ads в этом проходе не использовались. Ни один прежний LIVE результат не повышен за счёт mock или CI.
 
 ## Сделано в этом проходе

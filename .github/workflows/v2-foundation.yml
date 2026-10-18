@@ -86,6 +86,11 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f infra/local-test/docker-compose.yml config --format json | node scripts/non-vps-compose-guard.mjs
+      - name: Separate Google TEST localhost profile contract (no credentials or containers)
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOLYPILOT_GOOGLE_TEST_DB_PASSWORD=ci-only-dummy-local-123456 docker compose -f infra/local-google-test/docker-compose.yml config --format json | node scripts/non-vps-google-provider-profile-guard.mjs
       - run: pnpm --filter @holymedia/database prisma:deploy
       - name: Migration rehearsal contract
         shell: bash
