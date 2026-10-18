@@ -82,7 +82,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm migrate:validate
       - name: Disposable localhost TEST Compose contract (no containers started)
-        run: docker compose -f infra/local-test/docker-compose.yml config --quiet
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f infra/local-test/docker-compose.yml config --format json | node scripts/non-vps-compose-guard.mjs
       - run: pnpm --filter @holymedia/database prisma:deploy
       - name: Migration rehearsal contract
         shell: bash
