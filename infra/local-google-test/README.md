@@ -1,6 +1,6 @@
-# Separate local Google Ads TEST profile (prepared, not activated)
+# Separate local Google Ads TEST profile
 
-This profile is separate from `infra/local-test`: distinct Compose project, PostgreSQL/Redis volumes, localhost ports, API/Web builds and credential vault. It is intended only for Google Ads TEST customer `8590146099` after an explicit owner decision. It has not been started, authorized, or used for a Google provider request. The checked-in `provider.env.example` is intentionally invalid; the API cannot start with it. No VPS data, existing OAuth grant, production account, or public ingress is reused.
+This profile is separate from `infra/local-test`: distinct Compose project, PostgreSQL/Redis volumes, localhost ports, API/Web builds and credential vault. It is intended only for Google Ads TEST customer `8590146099` after an explicit owner decision. On 2026-10-19 the separate four-service localhost stack was started and passed HTTP smoke; it has **not** been Google-authorized or used for a Google provider request. The checked-in `provider.env.example` is intentionally invalid; the API cannot start with it. No VPS data, existing OAuth grant, production account, or public ingress is reused. See [`docs/acceptance/LOCAL_GOOGLE_OAUTH_CLIENT_REUSE_ASSESSMENT_20261019.md`](../../docs/acceptance/LOCAL_GOOGLE_OAUTH_CLIENT_REUSE_ASSESSMENT_20261019.md) before choosing an existing Cloud client.
 
 ## Current safety contract
 
