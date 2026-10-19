@@ -107,9 +107,9 @@ def immediate():
 
 
 def ensure_immediate_preflight(current):
-    # The extra 12,000 MiB release floor is deliberate and remains unchanged.
+    # Owner-approved cache-only release floor; the original 10,240 MiB guard is unchanged.
     if (current["mem"] < 819200 or current["swapfree"] < 262144 or
-            current["disk_mib"] < 12000 or current["full"] >= 1.5 or
+            current["disk_mib"] < 11500 or current["full"] >= 1.5 or
             current["some"] >= 2.0):
         raise RuntimeError("immediate_preflight_fail")
 

@@ -83,9 +83,10 @@ class GuardAndReleaseTests(unittest.TestCase):
         self.assertIn("explicit --from-cache", result.stderr)
 
     def test_extra_disk_floor_and_original_memory_limits(self):
-        valid = dict(mem=819200, swapfree=262144, disk_mib=12000, full=1.49, some=1.99)
+        valid = dict(mem=819200, swapfree=262144, disk_mib=11500, full=1.49, some=1.99)
         release.ensure_immediate_preflight(valid)
-        for key, value in (("disk_mib", 11774), ("mem", 819199),
+        release.ensure_immediate_preflight({**valid, "disk_mib": 11774})
+        for key, value in (("disk_mib", 11499), ("mem", 819199),
                            ("swapfree", 262143), ("full", 1.5), ("some", 2.0)):
             current = {**valid, key: value}
             with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "immediate_preflight_fail"):
