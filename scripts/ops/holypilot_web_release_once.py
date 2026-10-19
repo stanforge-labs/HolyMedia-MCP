@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""One authorized HolyPilot Web-only release attempt on the existing VPS.
+"""One guarded HolyPilot Web-only release from already cached immutable images.
 
-Stages the already reviewed release-one shell script and immutable source image.
-Every resource guard is the original, unmodified production Web guard.
+Stages the previously reviewed release-one shell script. This path never pulls
+or builds images. Every resource guard is the original, unmodified Web guard.
 """
 
 import hashlib
@@ -17,9 +17,13 @@ import time
 
 OLD_PACKAGE = Path("/var/backups/adforge-mcp/holypilot-brand-web-20261016T180408Z")
 OLD_SCRIPT_SHA = "273d1cb348c9eb4dbdaaaf3a60f78c83b691c7a5bf60e5e63b66bb6d699393cd"
+WATCH_SHA = "ba441496935195597a45dc846ef8dc76fcde32a36c32e9710d546f4ee4e64fe2"
 GUARD = Path("/var/backups/adforge-mcp/holypilot-brand-only-20261016T173131Z/resource-guard.py")
 GUARD_SHA = "6f256d9b68bc6c909a6a4754bfda003333fe01ab80027e4c0d5db799374a5fa4"
 OLD_IMAGE = "sha256:09c08234278a6eee22c866bd260d5c6ddc66806a977afc2e6b51077c0677a833"
+OLD_REF = ("ghcr.io/stanforge-labs/holymedia-mcp-v2:"
+           "public-mcp-candidate-a00817b746211a295bcb966f7fd7ef12cd6178fb@" + OLD_IMAGE)
+OLD_SOURCE_SHA = "a00817b746211a295bcb966f7fd7ef12cd6178fb"
 NEW_DIGEST = "sha256:1c39775ffbb095cc7d9037dfbea874be146ad25fe88ce255eaa794b0ccfd9ec0"
 NEW_IMAGE = "ghcr.io/stanforge-labs/holymedia-mcp-v2@" + NEW_DIGEST
 SOURCE_SHA = "fa9805b0adeed1b225e34605b02ad0b67d5ebc33"
@@ -102,6 +106,68 @@ def immediate():
                 full=psi["full"], some=psi["some"], disk_mib=disk_mib)
 
 
+def ensure_immediate_preflight(current):
+    # The extra 12,000 MiB release floor is deliberate and remains unchanged.
+    if (current["mem"] < 819200 or current["swapfree"] < 262144 or
+            current["disk_mib"] < 12000 or current["full"] >= 1.5 or
+            current["some"] >= 2.0):
+        raise RuntimeError("immediate_preflight_fail")
+
+
+def verify_cached_image(reference, expected_digest, expected_revision, expected_id):
+    """Inspect the local Docker cache only; missing or mismatched images fail closed."""
+    document = json.loads(output(["docker", "image", "inspect", reference]))
+    if not isinstance(document, list) or len(document) != 1:
+        raise RuntimeError("cached_image_inspect_incomplete")
+    image = document[0]
+    if image.get("Id") != expected_id:
+        raise RuntimeError("cached_image_id_mismatch")
+    if image.get("Config", {}).get("Labels", {}).get(
+            "org.opencontainers.image.revision") != expected_revision:
+        raise RuntimeError("cached_image_revision_mismatch")
+    expected_ref = "ghcr.io/stanforge-labs/holymedia-mcp-v2@" + expected_digest
+    if expected_ref not in image.get("RepoDigests", []):
+        raise RuntimeError("cached_image_repo_digest_mismatch")
+    return image["Id"]
+
+
+def prepare_startup_watcher(directory):
+    source = OLD_PACKAGE / "startup-watch-unexecuted.py"
+    if sha(source) != WATCH_SHA:
+        raise RuntimeError("startup_watch_source_sha_mismatch")
+    content = source.read_text()
+    anchor = "    current = first\n    while time.monotonic() - start < 180:\n"
+    replacement = ("    current = first\n"
+                   "    trace = (directory / 'startup-watch-trace.jsonl').open('w', buffering=1)\n"
+                   "    while time.monotonic() - start < 180:\n")
+    if content.count(anchor) != 1:
+        raise RuntimeError("startup_trace_anchor_mismatch")
+    content = content.replace(anchor, replacement, 1)
+    anchor = "        current = sample()\n        for key in low:"
+    replacement = ("        current = sample()\n"
+                   "        phase = ('running' if (directory / 'web-start.running').exists() else\n"
+                   "                 'starting' if (directory / 'web-start.begin').exists() else 'before')\n"
+                   "        trace.write(json.dumps(dict(epoch=time.time(), phase=phase, **current), sort_keys=True) + '\\n')\n"
+                   "        for key in low:")
+    if content.count(anchor) != 1:
+        raise RuntimeError("startup_sample_anchor_mismatch")
+    content = content.replace(anchor, replacement, 1)
+    anchor = "    result = dict(status='FAIL' if reason else 'PASS', reason=reason,"
+    replacement = ("    if not reason and (directory / 'web-start.begin').exists() and not "
+                   "(directory / 'web-start.running').exists():\n"
+                   "        reason = 'web_start_exceeded_watch_window'\n"
+                   "        (directory / 'startup-watch.fail').write_text(reason)\n"
+                   + anchor)
+    if content.count(anchor) != 1:
+        raise RuntimeError("startup_window_anchor_mismatch")
+    content = content.replace(anchor, replacement, 1)
+    destination = directory / "startup-watch-unexecuted.py"
+    destination.write_text(content)
+    destination.chmod(0o600)
+    run([sys.executable, "-m", "py_compile", str(destination)])
+    return sha(destination)
+
+
 def run_guard(directory, filename):
     append_event(directory, "guard_start", file=filename)
     with (directory / filename).open("w", encoding="utf-8") as log:
@@ -129,12 +195,30 @@ def prepare_release_script(directory):
     if content.count(before) != 1:
         raise RuntimeError("startup_watch_anchor_mismatch")
     content = content.replace(before, after, 1)
+    replacements = {
+        "image: $newref\nEOF": "image: $newref\n    pull_policy: never\nEOF",
+        "image: $oldref\nEOF": "image: $oldref\n    pull_policy: never\nEOF",
+        "new up -d --no-deps --no-build --force-recreate web":
+            "new up -d --no-deps --no-build --pull never --force-recreate web",
+        "old up -d --no-deps --no-build --force-recreate web":
+            "old up -d --no-deps --no-build --pull never --force-recreate web",
+        "touch \"$backup/cutover-attempted\"\ncutover=1":
+            "[[ ! -e \"$backup/startup-watch.json\" && ! -e \"$backup/startup-watch.fail\" ]]\n"
+            "touch \"$backup/cutover-attempted\"\ncutover=1",
+        "docker stop \"$web\" >/dev/null\n[[ $(docker inspect":
+            "touch \"$backup/web-start.begin\"\n"
+            "docker stop \"$web\" >/dev/null\n[[ $(docker inspect",
+        "new up -d --no-deps --no-build --pull never --force-recreate web\nstatus=''":
+            "new up -d --no-deps --no-build --pull never --force-recreate web\n"
+            "touch \"$backup/web-start.running\"\nstatus=''",
+    }
+    for anchor, replacement in replacements.items():
+        if content.count(anchor) != 1:
+            raise RuntimeError("release_cache_anchor_mismatch:" + anchor)
+        content = content.replace(anchor, replacement, 1)
     destination = directory / "release-one.sh"
     destination.write_text(content)
     destination.chmod(0o700)
-    shutil.copy2(OLD_PACKAGE / "startup-watch-unexecuted.py",
-                 directory / "startup-watch-unexecuted.py")
-    (directory / "startup-watch-unexecuted.py").chmod(0o600)
     run(["bash", "-n", str(destination)])
     return sha(destination)
 
@@ -152,12 +236,10 @@ def main(directory):
         raise RuntimeError("initial_container_health_fail")
     if first["holymedia-v2-web-1"]["image"] != OLD_IMAGE:
         raise RuntimeError("production_web_baseline_changed")
-    run(["docker", "image", "inspect", OLD_IMAGE])
+    verify_cached_image(OLD_REF, OLD_IMAGE, OLD_SOURCE_SHA, OLD_IMAGE)
+    verify_cached_image(NEW_IMAGE, NEW_DIGEST, SOURCE_SHA, NEW_DIGEST)
     current = immediate()
-    if (current["mem"] < 819200 or current["swapfree"] < 262144 or
-            current["disk_mib"] < 12000 or current["full"] >= 1.5 or
-            current["some"] >= 2.0):
-        raise RuntimeError("immediate_preflight_fail")
+    ensure_immediate_preflight(current)
     counts = operations()
     append_event(directory, "preflight_pass", resources=current, operations=counts)
     with (directory / "container-ids.txt").open("w") as file:
@@ -172,7 +254,9 @@ def main(directory):
     (directory / "config-sha256.json").chmod(0o600)
     (directory / "old-web-image-id.txt").write_text(OLD_IMAGE + "\n")
     release_sha = prepare_release_script(directory)
-    append_event(directory, "rollback_ready", release_script_sha256=release_sha)
+    watcher_sha = prepare_startup_watcher(directory)
+    append_event(directory, "rollback_ready", release_script_sha256=release_sha,
+                 startup_watcher_sha256=watcher_sha, cached_digest=NEW_DIGEST)
 
     for name in TEST:
         run(["docker", "stop", "--time", "25", name], timeout=50)
@@ -185,23 +269,8 @@ def main(directory):
         raise RuntimeError("other_service_changed_after_test_stop")
     append_event(directory, "test_stopped")
     time.sleep(15)  # let Docker tear down both TEST application shims
-    run_guard(directory, "prepull-guard.json")
-
-    append_event(directory, "image_pull_start", digest=NEW_DIGEST)
-    with (directory / "pull.log").open("w", encoding="utf-8") as log:
-        pull = subprocess.run(["docker", "pull", NEW_IMAGE], stdout=log,
-                              stderr=subprocess.STDOUT, check=False, timeout=900)
-    if pull.returncode != 0:
-        raise RuntimeError("immutable_image_pull_failed")
-    if output(["docker", "image", "inspect", NEW_IMAGE,
-               "--format", '{{index .Config.Labels "org.opencontainers.image.revision"}}']) != SOURCE_SHA:
-        raise RuntimeError("oci_revision_mismatch")
-    digests = output(["docker", "image", "inspect", NEW_IMAGE,
-                      "--format", "{{join .RepoDigests \"|\"}}"])
-    if NEW_DIGEST not in digests:
-        raise RuntimeError("repo_digest_mismatch")
-    append_event(directory, "image_verified", digest=NEW_DIGEST, resources=immediate())
-    run_guard(directory, "postpull-guard.json")
+    run_guard(directory, "precutover-guard.json")
+    append_event(directory, "cached_image_pre_cutover_pass", digest=NEW_DIGEST)
 
     append_event(directory, "web_cutover_start")
     with (directory / "release-one.log").open("w", encoding="utf-8") as log:
@@ -225,6 +294,6 @@ def main(directory):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("one protected run directory required")
-    main(Path(sys.argv[1]))
+    if len(sys.argv) != 3 or sys.argv[1] != "--from-cache":
+        raise SystemExit("explicit --from-cache and one protected run directory required")
+    main(Path(sys.argv[2]))

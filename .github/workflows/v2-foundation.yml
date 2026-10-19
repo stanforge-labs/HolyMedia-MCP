@@ -143,6 +143,21 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/ops -p 'test_maintenance_guard_policy.py'
           python3 -m py_compile scripts/ops/maintenance_guard_policy.py scripts/ops/batch2_test_maintenance_guard.py scripts/ops/batch2_test_maintenance_once_v2.py
+      - name: HolyPilot production Web cache-only release regression (no deploy)
+        run: |
+          python3 -m unittest discover -s scripts/ops -p 'test_holypilot_web_release_from_cache.py'
+          python3 -m py_compile scripts/ops/holypilot_web_release_once.py
+          bash -n scripts/ops/holypilot_web_release_recover.sh
+          docker compose up --help | grep -F -- '--pull string'
+          temp_dir=$(mktemp -d)
+          trap 'rm -rf "$temp_dir"' EXIT
+          printf 'services:\n  web:\n    image: invalid.local/holypilot/missing:cache-only\n    pull_policy: never\n' > "$temp_dir/compose.yml"
+          if docker compose -p holypilot-cache-only-proof -f "$temp_dir/compose.yml" up -d --no-deps --no-build --pull never --force-recreate web > "$temp_dir/output" 2>&1; then
+            echo 'missing image unexpectedly started' >&2
+            exit 1
+          fi
+          grep -q 'No such image' "$temp_dir/output"
+          test -z "$(docker compose -p holypilot-cache-only-proof -f "$temp_dir/compose.yml" ps -q web)"
       - name: Isolated preview supervisor pure regression and Python compile check
         run: |
           python3 -m unittest discover -s scripts/google-live-acceptance/stage234 -p 'test_*.py'

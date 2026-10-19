@@ -32,7 +32,7 @@ if [[ -f "$run_dir/cutover-attempted" && ! -f "$run_dir/published" ]]; then
       [[ -f "$run_dir/old-web.yml" ]] || { echo 'OLD_WEB_OVERRIDE_MISSING_REQUIRES_MANUAL_RECOVERY' >&2; exit 91; }
       docker stop "$web" >/dev/null 2>&1 || true
       docker compose --env-file "$envfile" -f "$base" -f "$run_dir/old-web.yml" \
-        up -d --no-deps --no-build --force-recreate web >/dev/null
+        up -d --no-deps --no-build --pull never --force-recreate web >/dev/null
     fi
     for ((i=0; i<60; i++)); do
       current_health=$(docker inspect "$web" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)
