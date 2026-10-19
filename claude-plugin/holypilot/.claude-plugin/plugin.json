@@ -1,0 +1,23 @@
+{
+  "name": "holypilot",
+  "displayName": "HolyPilot",
+  "version": "0.1.0",
+  "description": "AI marketing analysis and permission-aware advertising workflows through the HolyPilot MCP connector.",
+  "author": {
+    "name": "HolyMedia",
+    "url": "https://mcp.holymedia.kz/"
+  },
+  "homepage": "https://mcp.holymedia.kz/",
+  "icon": "./assets/holy-pilot-symbol.svg",
+  "documentationUrl": "https://mcp.holymedia.kz/",
+  "supportUrl": "https://mcp.holymedia.kz/support",
+  "privacyPolicyUrl": "https://mcp.holymedia.kz/privacy",
+  "termsOfServiceUrl": "https://mcp.holymedia.kz/terms",
+  "keywords": ["marketing", "advertising", "analytics", "mcp"],
+  "mcpServers": {
+    "holypilot": {
+      "type": "http",
+      "url": "https://mcp.holymedia.kz/mcp/public"
+    }
+  }
+}

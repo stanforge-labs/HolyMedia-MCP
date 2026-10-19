@@ -1,0 +1,50 @@
+# HolyPilot Claude Plugin — release status
+
+Дата: 20 октября 2026 г. Исходная feature-ветка: `codex/qrs-test-auth-recovery`, проверенный baseline `814be229720c08b9a21160c3e4006190796c7726`. Этот документ описывает подготовленный пакет, а не публикацию или одобрение Anthropic.
+
+## Результат и граница готовности
+
+**Plugin Bundle: локальная структура VALID; реальная установка и directory listing пока не подтверждены.** Публикуемая папка `claude-plugin/holypilot/` содержит ровно девять файлов: manifest, официальный неизменённый круглый знак, README, LICENSE и пять двуязычных Agent Skills. Архив вне Git: `C:\Users\geros\Documents\HolyPilot\ClaudePluginRelease\HolyPilot-Claude-Plugin-0.1.0.zip`. ZIP создаётся воспроизводимым скриптом `claude-plugin/package.py`; секреты и исходники API/Web в него не входят. Отдельный публичный GitHub-репозиторий и запись каталога не созданы.
+
+Коннектор направлен только на существующий публичный `https://mcp.holymedia.kz/mcp/public` через HTTPS Streamable HTTP. Никакого нового сервера или локального исполняемого кода в Plugin Bundle нет. OAuth и права проверяет действующий HolyPilot API, а не текст Skill. В bundle нет service keys, токенов и конфигураций VPS. Private TEST Google Ads Write profile в manifest не используется.
+
+## Аудит существующего MCP
+
+| Область              | Проверенное основание                                                                                                                                          | Вывод                                                                                                                                                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public MCP transport | `apps/api/src/mcp/mcp.controller.ts`, `/mcp/public`, JSON-RPC `initialize`, `tools/list`, `tools/call`; `apps/api/src/mcp/mcp-transport-boundary.http.test.ts` | Используется существующий удалённый MCP; анонимный доступ оспаривается, private profile не экспортируется.                                                                                                                                    |
+| OAuth                | `apps/api/src/mcp/oauth-authorization.service.ts`, `apps/api/src/mcp/oauth-endpoints.ts` и профильные тесты                                                    | Есть metadata/authorization/token/PKCE/DCR и проверки access. Реальный grant в Claude Pro ещё требует владельца.                                                                                                                              |
+| Инструменты          | `apps/api/src/mcp/mcp-public-tools.ts` и `mcp-public-tools.test.ts`                                                                                            | В исходном public registry 42 READ-инструмента и 4 условных Meta preview/commit. Это зарегистрированный набор, а не утверждение, что каждый provider подключён у каждого пользователя.                                                        |
+| WRITE                | `packages/config/src/index.ts` (`PUBLIC_MCP_WRITE_SCOPE_ENABLED` default `false`), `mcp-public-approval.http.test.ts`                                          | По умолчанию public WRITE недоступен. Production Google Ads WRITE не открыт этим Plugin Bundle. При отдельно разрешённом WRITE нужны preview, OWNER browser approval и отдельный одноразовый commit; Claude tool prompt не заменяет approval. |
+| Контекст доступа     | MCP service/policy tests и историческое `docs/acceptance/qrs-two-client-closeout-20261015.md`                                                                  | Workspace/user permissions и Q/R/S подтверждены в своих пределах; клиентские permission prompts Claude и установка именно этого bundle ещё не проверены.                                                                                      |
+
+Пять Skills помогают: анализировать кампании, готовить отчёт, находить возможности оптимизации, разбирать безопасный preview и проверять результат. Они указывают использовать только фактически доступные typed tools, не создавать вымышленные метрики и не инициировать commit без отдельного запроса и браузерного OWNER approval. Google Ads исторические TEST writes не повторялись.
+
+## Проверки
+
+| Проверка                                                                                                                  | Результат                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `node --test claude-plugin/validate.test.mjs`                                                                             | 2/2 PASS; положительный и отрицательный manifest/security cases.                                                              |
+| `node claude-plugin/validate.mjs`                                                                                         | PASS: фиксированный public endpoint, официальный знак по SHA-256, минимальный файловый набор, отсутствие credential patterns. |
+| `claude plugin validate ./claude-plugin/holypilot --strict` (официальный Claude Code CLI 2.1.303)                         | PASS; необязательная подсказка CLI касается marketplace-команды Claude Code и не нужна для Claude Pro ZIP upload.             |
+| Targeted MCP/OAuth Vitest: public tools, public controller, approval HTTP, transport boundary HTTP, authorization service | 5 файлов, 43/43 PASS; локальные fixture/mock проверки, не Claude LIVE.                                                        |
+| Prettier                                                                                                                  | PASS для новых файлов и изменённого CI workflow.                                                                              |
+| ZIP                                                                                                                       | Девять файлов, integrity check и SHA-256 при финальной упаковке; путь выше.                                                   |
+| Linux CI                                                                                                                  | Статус и ссылка фиксируются после завершения запуска feature-ветки; CI не является Anthropic review.                          |
+
+На данном Windows host WSL-дистрибутив с прежним disposable TEST не обнаружен (`WSL_E_DISTRO_NOT_FOUND`); localhost MCP/Claude Pro E2E в этом проходе не заявлен. Это не меняет ранее сохранённые acceptance evidence. Продукт, VPS и TEST не изменялись.
+
+## Официальные правила и выбор формата
+
+Anthropic поддерживает Single MCP Connector и Plugin Bundle. Выбран Plugin Bundle: он объединяет уже существующий remote MCP с пользовательскими Skills. Для Claude на платном плане предусмотрена ручная загрузка ZIP через **Customize → Plugins → Add → Upload plugin** и отдельное подключение connector/OAuth. Для каталога Plugin Bundle с GitHub source и remote MCP connector подаются и проверяются как отдельные сущности. Портал выполняет validation/security scan и ручной review; факт отправки не означает approval, а публикация требует решения владельца. Рассмотренные правила не устанавливают отдельную обязательную developer verification для Claude Pro/Max submission.
+
+Официальные источники: [Build plugins](https://claude.com/resources/articles/build-plugins-for-claude), [Use plugins in Claude](https://support.claude.com/en/articles/13837440-use-plugins-in-claude), [Plugin manifest](https://code.claude.com/docs/en/plugins-reference), [Platform support](https://claude.com/docs/plugins/platform-support), [Pre-submission checklist](https://claude.com/docs/plugins/pre-submission-checklist), [Directory submission](https://claude.com/docs/directory/publish), [MCP connector criteria](https://claude.com/docs/connectors/building/review-criteria).
+
+## Публикационные стоп-точки
+
+1. Владелец загружает ZIP в свой Claude Pro, подключает connector и завершает browser OAuth. Нужен реальный READ-вызов с доступным workspace, затем redacted evidence клиентских permission prompts и отказов без OAuth. Эти действия не выполнялись автоматически.
+2. Владелец подтверждает публичные legal/support URLs и data-handling ответы. Privacy и Terms существуют; доступность Support из внешней сети должна быть повторно проверена до подачи.
+3. Только после отдельного разрешения размещается минимальная reviewed папка в отдельном GitHub-репозитории. Текущий большой репозиторий и внутренние evidence не являются материалом для каталога. GitHub visibility не изменялась.
+4. Владелец связывает GitHub в [Claude directory portal](https://claude.ai/directory/manage), отдельно подаёт remote connector и Plugin Bundle, запускает portal Validate, предоставляет reviewer account через защищённый канал Anthropic и отправляет на review. Никакая заявка пока не отправлена.
+
+Сопроводительные материалы: `claude-plugin/QUICK_START_RU_EN.md`, `claude-plugin/DIRECTORY_LISTING_RU_EN.md`, `claude-plugin/DEVELOPER_PORTAL_CHECKLIST.md`. Никакая публичная доступность каждого из 42 инструментов не гарантируется без действующего OAuth, connected provider и соответствующих прав.

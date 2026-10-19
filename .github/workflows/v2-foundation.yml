@@ -76,6 +76,11 @@ jobs:
           cache: pnpm
       - name: Secret gate before dependency execution
         run: node --test scripts/v2-secret-scan.test.mjs && node scripts/v2-secret-scan.mjs
+      - name: HolyPilot Claude plugin bundle contract and archive
+        run: |
+          node --test claude-plugin/validate.test.mjs
+          node claude-plugin/validate.mjs
+          python3 claude-plugin/package.py /tmp/HolyPilot-Claude-Plugin-0.1.0.zip
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
