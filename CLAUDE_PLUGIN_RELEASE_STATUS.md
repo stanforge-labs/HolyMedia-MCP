@@ -22,15 +22,15 @@
 
 ## Проверки
 
-| Проверка                                                                                                                  | Результат                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `node --test claude-plugin/validate.test.mjs`                                                                             | 2/2 PASS; положительный и отрицательный manifest/security cases.                                                              |
-| `node claude-plugin/validate.mjs`                                                                                         | PASS: фиксированный public endpoint, официальный знак по SHA-256, минимальный файловый набор, отсутствие credential patterns. |
-| `claude plugin validate ./claude-plugin/holypilot --strict` (официальный Claude Code CLI 2.1.303)                         | PASS; необязательная подсказка CLI касается marketplace-команды Claude Code и не нужна для Claude Pro ZIP upload.             |
-| Targeted MCP/OAuth Vitest: public tools, public controller, approval HTTP, transport boundary HTTP, authorization service | 5 файлов, 43/43 PASS; локальные fixture/mock проверки, не Claude LIVE.                                                        |
-| Prettier                                                                                                                  | PASS для новых файлов и изменённого CI workflow.                                                                              |
-| ZIP                                                                                                                       | Девять файлов, integrity check и SHA-256 при финальной упаковке; путь выше.                                                   |
-| Linux CI                                                                                                                  | Статус и ссылка фиксируются после завершения запуска feature-ветки; CI не является Anthropic review.                          |
+| Проверка                                                                                                                  | Результат                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node --test claude-plugin/validate.test.mjs`                                                                             | 2/2 PASS; положительный и отрицательный manifest/security cases.                                                                                                  |
+| `node claude-plugin/validate.mjs`                                                                                         | PASS: фиксированный public endpoint, официальный знак по SHA-256, минимальный файловый набор, отсутствие credential patterns.                                     |
+| `claude plugin validate ./claude-plugin/holypilot --strict` (официальный Claude Code CLI 2.1.303)                         | PASS; необязательная подсказка CLI касается marketplace-команды Claude Code и не нужна для Claude Pro ZIP upload.                                                 |
+| Targeted MCP/OAuth Vitest: public tools, public controller, approval HTTP, transport boundary HTTP, authorization service | 5 файлов, 43/43 PASS; локальные fixture/mock проверки, не Claude LIVE.                                                                                            |
+| Prettier                                                                                                                  | PASS для новых файлов и изменённого CI workflow.                                                                                                                  |
+| ZIP                                                                                                                       | Девять файлов, integrity check и SHA-256 при финальной упаковке; путь выше.                                                                                       |
+| Linux CI                                                                                                                  | Самостоятельный `claude_plugin_bundle` job в существующем workflow проверяет contract и ZIP; итоговая ссылка в финальном отчёте. CI не является Anthropic review. |
 
 На данном Windows host WSL-дистрибутив с прежним disposable TEST не обнаружен (`WSL_E_DISTRO_NOT_FOUND`); localhost MCP/Claude Pro E2E в этом проходе не заявлен. Это не меняет ранее сохранённые acceptance evidence. Продукт, VPS и TEST не изменялись.
 
@@ -43,7 +43,7 @@ Anthropic поддерживает Single MCP Connector и Plugin Bundle. Выб
 ## Публикационные стоп-точки
 
 1. Владелец загружает ZIP в свой Claude Pro, подключает connector и завершает browser OAuth. Нужен реальный READ-вызов с доступным workspace, затем redacted evidence клиентских permission prompts и отказов без OAuth. Эти действия не выполнялись автоматически.
-2. Владелец подтверждает публичные legal/support URLs и data-handling ответы. Privacy и Terms существуют; доступность Support из внешней сети должна быть повторно проверена до подачи.
+2. Владелец подтверждает legal/support content и data-handling ответы. На 20 октября 2026 г. публичные Support, Privacy и Terms ответили HTTP 200; содержание и retention-вопросы остаются предметом проверки владельца перед подачей.
 3. Только после отдельного разрешения размещается минимальная reviewed папка в отдельном GitHub-репозитории. Текущий большой репозиторий и внутренние evidence не являются материалом для каталога. GitHub visibility не изменялась.
 4. Владелец связывает GitHub в [Claude directory portal](https://claude.ai/directory/manage), отдельно подаёт remote connector и Plugin Bundle, запускает portal Validate, предоставляет reviewer account через защищённый канал Anthropic и отправляет на review. Никакая заявка пока не отправлена.
 

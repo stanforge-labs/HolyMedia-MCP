@@ -7,7 +7,7 @@ Official references: [build plugins](https://claude.com/resources/articles/build
 - [x] Minimal `holypilot` bundle with manifest, one fixed HTTPS Streamable HTTP MCP endpoint, five bilingual Skills, README, license notice and official unaltered circular symbol.
 - [x] Product and safety claims bounded by the actual public MCP tool list. No secret, local executable, unsupported Google WRITE instruction or test-account credential in the ZIP.
 - [x] Local contract test, ZIP integrity, official Claude Code manifest validation.
-- [x] Public Privacy Policy and Terms pages observed; Support page exists in source, but external availability should be checked again before submission.
+- [x] Public Support, Privacy Policy and Terms pages returned HTTP 200 on 20 October 2026; owner must review their current content and data-handling wording before submission.
 
 ## Manual Claude Pro installation and evidence
 

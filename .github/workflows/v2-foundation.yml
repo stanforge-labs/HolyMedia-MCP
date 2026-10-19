@@ -21,6 +21,20 @@ permissions:
   contents: read
 
 jobs:
+  claude_plugin_bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate HolyPilot Claude plugin and deterministic ZIP
+        run: |
+          node --test claude-plugin/validate.test.mjs
+          node claude-plugin/validate.mjs
+          python3 claude-plugin/package.py /tmp/HolyPilot-Claude-Plugin-0.1.0.zip
+          sha256sum /tmp/HolyPilot-Claude-Plugin-0.1.0.zip
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -76,11 +90,6 @@ jobs:
           cache: pnpm
       - name: Secret gate before dependency execution
         run: node --test scripts/v2-secret-scan.test.mjs && node scripts/v2-secret-scan.mjs
-      - name: HolyPilot Claude plugin bundle contract and archive
-        run: |
-          node --test claude-plugin/validate.test.mjs
-          node claude-plugin/validate.mjs
-          python3 claude-plugin/package.py /tmp/HolyPilot-Claude-Plugin-0.1.0.zip
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
