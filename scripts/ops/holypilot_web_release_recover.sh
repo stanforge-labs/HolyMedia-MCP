@@ -22,7 +22,7 @@ if [[ -f "$run_dir/cutover-attempted" && ! -f "$run_dir/published" ]]; then
   current_health=$(docker inspect "$web" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)
   if [[ "$current_image" != "$oldid" || "$current_health" != healthy ]]; then
     if [[ -f "$run_dir/rollback-attempted" ]]; then
-      echo 'ROLLBACK_ALREADY_ATTEMPTED_REQUIRES_MANUAL_RECOVERY' >&2
+      echo 'ROLLBACK_REPEAT_BLOCKED; manual recovery required' >&2
       exit 90
     fi
     touch "$run_dir/rollback-attempted"
