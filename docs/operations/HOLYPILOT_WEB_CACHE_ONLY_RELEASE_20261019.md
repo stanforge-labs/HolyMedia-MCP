@@ -1,6 +1,6 @@
 # HolyPilot: Web release из локального Docker cache
 
-Статус: **код подготовлен; production cutover не разрешён и не выполнялся**. Это продолжение неудавшейся попытки, записанной в `HOLYPILOT_WEB_RELEASE_ATTEMPT_20261016.md`. Повторная загрузка image исключена из нового пути; прежний release/recovery механизм сохранён.
+Статус: **одна cache-only попытка выполнена и откатилась на startup guard; новый бренд не опубликован**. Точный результат и protected evidence приведены в `HOLYPILOT_WEB_RELEASE_ATTEMPT_20261016.md`. Повторная загрузка image была исключена; прежний release/recovery механизм сохранён.
 
 ## Проверенные исходные данные
 
@@ -23,10 +23,10 @@
 
 Read-only Docker accounting: BuildKit cache **0 Б**, APT archives **16 КиБ**, `/tmp` **7,7 МиБ**. Docker показывает 4,518 ГБ reclaimable images, но это не список разрешённых к удалению объектов. В сохранённом storage audit крупные незадействованные images помечены как возможные rollback/evidence; предыдущие очищаемые TEST-кандидаты уже удалены. **Ни один объект на ≥226 МиБ сейчас не доказан безопасно удаляемым.** Никакая очистка не проводилась. Более глубокий `du` или широкая инвентаризация могут сами вызвать memory pressure и не требуются для данного решения.
 
-## Решение перед owner approval
+## Решение и исход попытки
 
 Владелец утвердил 11 500 МиБ исключительно для дополнительного cache-only preflight. Исходный 10 240-МиБ guard, все RAM/swap/PSI/OOM/health пороги и запрет pull остаются неизменными. Снижение дополнительного порога не является разрешением на остановку TEST или production cutover.
 
-После exact-source CI и свежей read-only проверки диска требуется **новое явное разрешение** на одну временную остановку только TEST API/Web и один guarded production Web cutover. Непосредственно перед ним вновь проверяются cache, source/digests, исходные конфигурации, zero pending operations, health и все immediate guards. После остановки TEST — полный исходный 600-секундный pre-cutover guard без дополнительных SSH/diagnostics. Затем один Web-only cutover, 180-секундный startup watchdog, полный post-Web guard, восстановление TEST, полный 600-секундный guard всех девяти контейнеров и проверка RU/EN, логотипа, слоганов, Astana Hub, auth/OAuth/MCP маршрутов. Любой FAIL — защищённый rollback и STOP без повторов.
+Отдельное разрешение на одну остановку TEST API/Web и один guarded production Web cutover было получено и использовано. Exact-source Linux CI для `a25570e92135b5667cf4f85459f23b5114cce1ad` прошёл. Полный pre-cutover guard PASS; startup watchdog обнаружил swap-in +631 страниц за 1 секунду до запуска нового Web и вызвал один защищённый rollback. TEST восстановлен, все девять контейнеров healthy, production Web работает на исходном image. Post-Web и full-stack guards не запускались, поскольку startup guard остановил операцию. Разрешение исчерпано, автоматических повторов не будет.
 
-Production, TEST, VPS-конфигурации и guard в рамках подготовки этого пакета не изменялись.
+Production API/Worker/DB, TEST DB/Redis, Compose/env/Nginx и исходный guard не менялись. Production Web был пересоздан при rollback из прежнего image; TEST API/Web восстановлены с прежними container IDs и images. Кандидатный Web не был запущен.
