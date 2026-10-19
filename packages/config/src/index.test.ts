@@ -78,6 +78,52 @@ describe("v2 configuration", () => {
         }),
       ).toThrow(/Restricted TEST MCP/);
   });
+  it("permits a loopback-only migrated TEST identity with every write surface OFF", () => {
+    const local = {
+      NODE_ENV: "development",
+      HOLYMEDIA_PUBLIC_BASE_URL: "http://127.0.0.1:23300",
+      CORS_ORIGINS: "http://127.0.0.1:23300",
+      PROVIDER_GOOGLE_REDIRECT_URI:
+        "http://127.0.0.1:24404/oauth/google/callback",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_LOCAL_READONLY_AUTH: "true",
+      V2_PREVIEW_ONLY: "true",
+    };
+    expect(loadConfig(local)).toMatchObject({
+      qrsTestRestrictedAuth: true,
+      qrsTestLocalReadonlyAuth: true,
+      providerGoogleAdsWriteEnabled: false,
+      confirmedWriteEnabled: false,
+      googleAdsWriteAccountAllowlist: ["8590146099"],
+    });
+    expect(
+      loadConfig({
+        ...local,
+        QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: "owner@example.test",
+        QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID:
+          "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toMatchObject({
+      qrsTestGoogleOwnerBindingEmail: "owner@example.test",
+    });
+    for (const unsafe of [
+      { NODE_ENV: "production" },
+      { HOLYMEDIA_PUBLIC_BASE_URL: "http://localhost:23300" },
+      { CORS_ORIGINS: "http://0.0.0.0:23300" },
+      {
+        PROVIDER_GOOGLE_REDIRECT_URI:
+          "http://127.0.0.1:24405/oauth/google/callback",
+      },
+      { GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "4378327049" },
+      { QRS_TEST_RESTRICTED_AUTH: "false" },
+      { PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true" },
+      { QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true" },
+      { V2_CONFIRMED_WRITE_ENABLED: "true" },
+      { PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true" },
+    ])
+      expect(() => loadConfig({ ...local, ...unsafe })).toThrow();
+  });
   it("enables a dedicated Q/R/S Google commit gate only with exact TEST isolation and generic writes OFF", () => {
     const isolated = {
       NODE_ENV: "test",

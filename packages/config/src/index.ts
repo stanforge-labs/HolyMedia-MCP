@@ -67,6 +67,7 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
   QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
+  QRS_TEST_LOCAL_READONLY_AUTH: booleanFromEnv.default(false),
   QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: z
@@ -275,6 +276,7 @@ export type AppConfig = {
   providerGoogleLoginRedirectUri: string | undefined;
   providerGoogleLoginScopes: string;
   qrsTestRestrictedAuth: boolean;
+  qrsTestLocalReadonlyAuth: boolean;
   qrsTestGoogleConfirmedWriteEnabled: boolean;
   qrsTestCloneConfirmedWriteEnabled: boolean;
   qrsTestCloneSourceCampaignId: string | undefined;
@@ -568,9 +570,36 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
 
   // Q/R/S is a single-account TEST environment. Its write allowlist alone is
   // not a read boundary; reject unsafe startup configuration before MCP runs.
+  const localRestrictedReadOnly = value.QRS_TEST_LOCAL_READONLY_AUTH;
+  if (
+    localRestrictedReadOnly &&
+    (value.NODE_ENV !== "development" ||
+      !value.QRS_TEST_RESTRICTED_AUTH ||
+      publicBaseUrl !== "http://127.0.0.1:23300" ||
+      corsOrigins.length !== 1 ||
+      corsOrigins[0] !== "http://127.0.0.1:23300" ||
+      value.PROVIDER_GOOGLE_REDIRECT_URI !==
+        "http://127.0.0.1:24404/oauth/google/callback" ||
+      value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED)
+  )
+    throw new Error(
+      "Local restricted TEST requires loopback and all writes OFF.",
+    );
   if (
     value.QRS_TEST_RESTRICTED_AUTH &&
-    (publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+    ((!localRestrictedReadOnly &&
+      publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
       googleAdsWriteAccountAllowlist.length !== 1 ||
       googleAdsWriteAccountAllowlist[0] !== "8590146099")
   )
@@ -773,7 +802,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (bindingEmail) {
     if (
       !value.QRS_TEST_RESTRICTED_AUTH ||
-      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      (!localRestrictedReadOnly &&
+        publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
       googleAdsWriteAccountAllowlist.length !== 1 ||
       googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
       bindingEmail !== bindingEmail.toLowerCase() ||
@@ -831,6 +861,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,
     providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
     qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
+    qrsTestLocalReadonlyAuth: localRestrictedReadOnly,
     qrsTestGoogleConfirmedWriteEnabled:
       value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED,
     qrsTestCloneConfirmedWriteEnabled:

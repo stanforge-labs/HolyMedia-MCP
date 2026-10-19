@@ -7,10 +7,24 @@ function setup(
   user: Record<string, unknown> | null,
   membership: Record<string, unknown> | null,
   binding?: { email: string; userId: string },
+  localReadonly = false,
 ) {
-  vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
-  vi.stubEnv("CORS_ORIGINS", "https://mcp-test.holymedia.kz");
+  vi.stubEnv("NODE_ENV", localReadonly ? "development" : "test");
+  vi.stubEnv(
+    "HOLYMEDIA_PUBLIC_BASE_URL",
+    localReadonly ? "http://127.0.0.1:23300" : "https://mcp-test.holymedia.kz",
+  );
+  vi.stubEnv(
+    "CORS_ORIGINS",
+    localReadonly ? "http://127.0.0.1:23300" : "https://mcp-test.holymedia.kz",
+  );
+  if (localReadonly) {
+    vi.stubEnv("QRS_TEST_LOCAL_READONLY_AUTH", "true");
+    vi.stubEnv(
+      "PROVIDER_GOOGLE_REDIRECT_URI",
+      "http://127.0.0.1:24404/oauth/google/callback",
+    );
+  }
   vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
   vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
   if (binding) {
@@ -58,6 +72,38 @@ function setup(
 afterEach(() => vi.unstubAllEnvs());
 
 describe("restricted TEST identity", () => {
+  it("admits only an existing active owner in loopback read-only TEST", async () => {
+    const user = {
+      id: "user-id",
+      email: "owner@example.test",
+      name: "Owner",
+      status: "active",
+      emailVerifiedAt: new Date(),
+    };
+    const workspace = {
+      id: "workspace-id",
+      name: "TEST",
+      slug: "test",
+      accessStatus: "ACTIVE",
+      onboardingCompletedAt: new Date(),
+    };
+    const { service, sessions } = setup(user, { workspace }, undefined, true);
+    await expect(
+      service.loginWithGoogle({ email: user.email, name: user.name }, request),
+    ).resolves.toMatchObject({ workspace: { id: "workspace-id" } });
+    expect(sessions.create).toHaveBeenCalledOnce();
+    await expect(
+      service.signup(
+        {
+          email: "new@example.test",
+          name: "New",
+          password: "long-password",
+          confirmPassword: "long-password",
+        },
+        request,
+      ),
+    ).rejects.toThrow("Registration is closed in TEST");
+  });
   it("rejects unknown Google users without creating a user, workspace or session", async () => {
     const { service, database, sessions, audit } = setup(null, null);
     await expect(

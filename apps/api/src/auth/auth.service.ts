@@ -579,7 +579,8 @@ export class AuthService {
 
   private async testOwnerMembership(userId: string) {
     if (
-      this.config.publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      (!this.config.qrsTestLocalReadonlyAuth &&
+        this.config.publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
       this.config.googleAdsWriteAccountAllowlist.length !== 1 ||
       this.config.googleAdsWriteAccountAllowlist[0] !== "8590146099"
     ) {
