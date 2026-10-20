@@ -85,6 +85,8 @@ check_routes() {
     grep -Fq 'Ваш персональный AI-маркетолог' "$run_dir/ru.html"
     grep -Fq 'Your personal AI marketer' "$run_dir/en.html"
     grep -Fq 'holy-pilot-symbol.svg' "$run_dir/ru.html"
+    curl --fail --silent --show-error --max-time 8 https://mcp.holymedia.kz/icon.svg > "$run_dir/icon.svg"
+    grep -Fq 'aria-label="HolyPilot"' "$run_dir/icon.svg"
     curl --fail --silent --show-error --max-time 8 https://mcp.holymedia.kz/auth >/dev/null
     curl --fail --silent --show-error --max-time 8 https://mcp.holymedia.kz/mcp/approve >/dev/null
   fi
