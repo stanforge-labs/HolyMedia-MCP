@@ -26,6 +26,29 @@ FROM manifests AS build-deps
 RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store
 
+# Independent production Web image. GitHub Actions builds it; the VPS only pulls.
+FROM build-deps AS production-web-build
+COPY . .
+ARG NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+ARG NEXT_PUBLIC_PUBLIC_BASE_URL=https://mcp.holymedia.kz
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_PUBLIC_BASE_URL=$NEXT_PUBLIC_PUBLIC_BASE_URL
+RUN pnpm exec turbo run build --filter=@holymedia/web... \
+    && rm -rf apps/web/.next/cache
+
+FROM manifests AS production-web-prod-deps
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm --filter "@holymedia/web..." install --prod --frozen-lockfile \
+    --store-dir=/pnpm/store
+
+FROM base AS production-web-runtime
+ENV NODE_ENV=production
+COPY --from=production-web-prod-deps --chown=node:node /workspace /workspace
+COPY --from=production-web-build --chown=node:node /workspace/apps/web/.next ./apps/web/.next
+COPY --from=production-web-build --chown=node:node /workspace/apps/web/public ./apps/web/public
+COPY --from=production-web-build --chown=node:node /workspace/apps/web/next.config.ts ./apps/web/next.config.ts
+USER node
+
 FROM build-deps AS build
 COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
@@ -81,6 +104,35 @@ COPY --from=api-build --chown=node:node /workspace/packages/database/prisma.conf
 COPY --from=api-build --chown=node:node /workspace/packages/observability/dist ./packages/observability/dist
 COPY --from=api-build --chown=node:node /workspace/packages/site-audit/dist ./packages/site-audit/dist
 
+USER node
+
+# Worker remains a separate deployment unit, including its own Chromium shell.
+FROM build-deps AS production-worker-build
+COPY . .
+RUN pnpm --dir packages/database run prisma:generate \
+    && pnpm exec turbo run build --filter=@holymedia/worker... \
+    && find apps/worker/dist packages/config/dist packages/contracts/dist \
+      packages/database/dist packages/observability/dist packages/site-audit/dist \
+      -type f \( -name '*.test.*' -o -name '*.spec.*' \) -delete
+
+FROM manifests AS production-worker-prod-deps
+RUN --mount=type=cache,id=holymedia-pnpm,target=/pnpm/store \
+    pnpm --filter "@holymedia/worker..." install --prod --frozen-lockfile \
+    --store-dir=/pnpm/store
+
+FROM base AS production-worker-runtime
+ENV NODE_ENV=production
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+COPY --from=production-worker-prod-deps --chown=node:node /workspace /workspace
+COPY --chown=node:node infra/worker-runtime.pnpm-workspace.yaml ./pnpm-workspace.yaml
+RUN pnpm --filter @holymedia/worker exec playwright install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/* /root/.cache
+COPY --from=production-worker-build --chown=node:node /workspace/apps/worker/dist ./apps/worker/dist
+COPY --from=production-worker-build --chown=node:node /workspace/packages/config/dist ./packages/config/dist
+COPY --from=production-worker-build --chown=node:node /workspace/packages/contracts/dist ./packages/contracts/dist
+COPY --from=production-worker-build --chown=node:node /workspace/packages/database/dist ./packages/database/dist
+COPY --from=production-worker-build --chown=node:node /workspace/packages/observability/dist ./packages/observability/dist
+COPY --from=production-worker-build --chown=node:node /workspace/packages/site-audit/dist ./packages/site-audit/dist
 USER node
 
 FROM base AS runtime

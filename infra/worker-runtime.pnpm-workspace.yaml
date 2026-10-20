@@ -1,0 +1,9 @@
+packages:
+  - apps/worker
+  - packages/config
+  - packages/contracts
+  - packages/database
+  - packages/observability
+  - packages/site-audit
+
+verifyDepsBeforeRun: false

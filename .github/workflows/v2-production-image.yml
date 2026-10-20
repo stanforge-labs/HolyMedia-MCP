@@ -1,12 +1,6 @@
 name: HolyMedia MCP v2 production image
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/install-memora"
-      - "codex/production-image-optimization"
-      - "codex/google-ads-image-optimization"
   workflow_dispatch:
 
 permissions:

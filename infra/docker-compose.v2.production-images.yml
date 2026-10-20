@@ -1,0 +1,9 @@
+# Persistent production-only override. Set each immutable image reference in
+# /etc/holymedia-v2/deploy-images.env; the base Compose file is unchanged.
+services:
+  api:
+    image: ${V2_API_IMAGE:?V2_API_IMAGE is required}
+  web:
+    image: ${V2_WEB_IMAGE:?V2_WEB_IMAGE is required}
+  worker:
+    image: ${V2_WORKER_IMAGE:?V2_WORKER_IMAGE is required}

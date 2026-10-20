@@ -2,7 +2,7 @@
 
 import Link from "./locale-link";
 import { useEffect, useState } from "react";
-import { BrandLockup } from "./brand-lockup";
+import { LandingBrandLockup } from "./landing-brand-lockup";
 import { LanguageSwitcher } from "./language-switcher";
 
 export function LandingHeader() {
@@ -17,8 +17,8 @@ export function LandingHeader() {
 
   return (
     <header className={scrolled ? "site-header is-scrolled" : "site-header"}>
-      <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
-        <BrandLockup />
+      <Link className="site-brand" href="/" aria-label="HolyPilot">
+        <LandingBrandLockup />
       </Link>
       <nav className="site-nav" aria-label="Навигация">
         <a href="#steps">Как это работает</a>
