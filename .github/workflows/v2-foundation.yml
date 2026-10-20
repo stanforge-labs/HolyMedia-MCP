@@ -156,7 +156,7 @@ jobs:
       - name: HolyPilot production-only guard and release regression (no deploy)
         run: |
           python3 -m unittest discover -s scripts/ops -p 'test_production_only_*.py'
-          python3 -m py_compile scripts/ops/production_only_guard_policy.py scripts/ops/production_only_resource_guard.py scripts/ops/production_only_release_once.py
+          python3 -m py_compile scripts/ops/production_only_guard_policy.py scripts/ops/production_only_resource_guard.py scripts/ops/production_only_release_once.py scripts/ops/production_only_guard_policy_v2.py scripts/ops/production_only_resource_guard_v2.py scripts/ops/startup_watch_policy_v2.py scripts/ops/startup_watch_v2.py
       - name: HolyPilot old-Web stop diagnostic regression (no deploy)
         run: |
           python3 -m unittest discover -s scripts/ops -p 'test_production_web_*.py'

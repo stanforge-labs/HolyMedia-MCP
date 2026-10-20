@@ -17,6 +17,7 @@ import sys
 import time
 
 from production_only_guard_policy import PROD, TEST, container_reasons
+from production_only_guard_policy_v2 import PROFILE as V2_PROFILE
 from production_only_resource_guard import docker_state, load_checkpoint
 import holypilot_web_release_once as legacy
 
@@ -36,6 +37,10 @@ CANDIDATES = {
 }
 BASELINE_ID = "sha256:09c08234278a6eee22c866bd260d5c6ddc66806a977afc2e6b51077c0677a833"
 BASELINE_REVISION = "a00817b746211a295bcb966f7fd7ef12cd6178fb"
+V1_PROFILE = "PRODUCTION_ONLY_V1"
+V2_SOURCES = ("production_only_guard_policy_v2.py",
+              "production_only_resource_guard_v2.py",
+              "startup_watch_policy_v2.py", "startup_watch_v2.py")
 
 
 def sha(path):
@@ -102,7 +107,9 @@ def write_secure(path, content):
         out.write(content)
 
 
-def prepare(service, run_dir):
+def prepare(service, run_dir, *, profile=V1_PROFILE):
+    if profile not in (V1_PROFILE, V2_PROFILE):
+        raise RuntimeError("unsupported_release_guard_profile")
     if run_dir.exists():
         raise RuntimeError("run_directory_already_exists")
     test_checkpoint = load_checkpoint(CHECKPOINT)
@@ -123,6 +130,8 @@ def prepare(service, run_dir):
                HERE / "production_only_resource_guard.py",
                HERE / "production_only_release_once.py",
                HERE / "holypilot_web_release_once.py", RECOVER)
+    if profile == V2_PROFILE:
+        sources += tuple(HERE / name for name in V2_SOURCES)
     if any(not path.is_file() for path in sources):
         raise RuntimeError("production_guard_source_missing")
     run_dir.mkdir(mode=0o700, parents=True)
@@ -137,7 +146,8 @@ def prepare(service, run_dir):
     new_override = f"services:\n  {service}:\n    image: {new_ref}\n    pull_policy: never\n"
     write_secure(run_dir / f"old-{service}.yml", old_override)
     write_secure(run_dir / f"new-{service}.yml", new_override)
-    plan = dict(service=service, old_image_id=old_id, old_ref=old_ref,
+    plan = dict(service=service, guard_profile=profile,
+                old_image_id=old_id, old_ref=old_ref,
                 new_ref=new_ref, new_image_id=new_id,
                 candidate_digest=CANDIDATES[service][0],
                 candidate_revision=CANDIDATES[service][1],
@@ -152,6 +162,11 @@ def prepare(service, run_dir):
 
 def verify_plan(plan, run_dir, *, after_cutover=False):
     service = plan["service"]
+    profile = plan.get("guard_profile", V1_PROFILE)
+    if profile not in (V1_PROFILE, V2_PROFILE):
+        raise RuntimeError("unsupported_release_guard_profile")
+    if profile == V2_PROFILE and not set(V2_SOURCES) <= set(plan["source_sha256"]):
+        raise RuntimeError("v2_release_sources_missing")
     if service not in CANDIDATES or (plan["candidate_digest"], plan["candidate_revision"]) != CANDIDATES[service]:
         raise RuntimeError("candidate_plan_changed")
     if any(sha(path) != plan["config_sha256"][name] for name, path in CONFIGS.items()):
@@ -181,18 +196,24 @@ def verify_plan(plan, run_dir, *, after_cutover=False):
     return rows
 
 
-def guard(run_dir, checkpoint_path, name):
+def guard(run_dir, checkpoint_path, name, *, profile=V1_PROFILE):
     trace = run_dir / (name + "-trace.jsonl")
     result_path = run_dir / (name + "-result.json")
     with result_path.open("x", encoding="utf-8") as out:
         os.chmod(result_path, 0o600)
-        completed = subprocess.run([sys.executable, str(run_dir / "production_only_resource_guard.py"),
-            "--checkpoint", str(checkpoint_path), "--trace-output", str(trace)],
+        script = ("production_only_resource_guard_v2.py" if profile == V2_PROFILE
+                  else "production_only_resource_guard.py")
+        args = [sys.executable, str(run_dir / script),
+                "--checkpoint", str(checkpoint_path), "--trace-output", str(trace)]
+        if profile == V2_PROFILE:
+            args += ["--phase", "precutover" if name == "precutover" else "poststart"]
+        completed = subprocess.run(args,
             stdout=out, stderr=subprocess.STDOUT, check=False, timeout=690)
     if completed.returncode:
         raise RuntimeError(name + "_guard_fail")
     result = json.loads(result_path.read_text())
-    if result.get("status") != "PASS" or result.get("duration_exact_s", 0) < 600:
+    if result.get("status") != "PASS" or result.get("duration_exact_s", 0) < 600 or \
+            (profile == V2_PROFILE and result.get("profile") != profile):
         raise RuntimeError(name + "_guard_incomplete")
     return result
 
@@ -222,14 +243,26 @@ def require_watcher_alive(watcher, fail_path):
         raise RuntimeError("startup_watchdog_unavailable")
 
 
-def require_complete_watcher_result(run_dir):
+def require_complete_watcher_result(run_dir, *, profile=V1_PROFILE):
     result_path = run_dir / "startup-watch.json"
     if not result_path.is_file():
         raise RuntimeError("startup_watchdog_result_missing")
     result = json.loads(result_path.read_text())
     if result.get("status") != "PASS" or result.get("duration_exact_s", 0) < 180:
         raise RuntimeError("startup_watchdog_observation_incomplete")
+    if profile == V2_PROFILE and result.get("profile") != "STARTUP_PRESSURE_AWARE_V2":
+        raise RuntimeError("startup_watchdog_profile_mismatch")
     return result
+
+
+def wait_v2_handshake(watcher, run_dir, marker, *, timeout_s=12):
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        require_watcher_alive(watcher, run_dir / "startup-watch.fail")
+        if (run_dir / marker).is_file():
+            return
+        time.sleep(0.2)
+    raise RuntimeError("startup_v2_handshake_timeout:" + marker)
 
 
 def wait_healthy(name, watcher=None, fail_path=None):
@@ -280,6 +313,9 @@ def verify_web_functionality():
 def execute(run_dir):
     plan = json.loads((run_dir / "production-only-plan.json").read_text())
     service = plan["service"]
+    profile = plan.get("guard_profile", V1_PROFILE)
+    if profile not in (V1_PROFILE, V2_PROFILE):
+        raise RuntimeError("unsupported_release_guard_profile")
     target = "holymedia-v2-" + service + "-1"
     if (run_dir / "cutover-attempted").exists() or (run_dir / "published").exists():
         raise RuntimeError("release_attempt_already_consumed")
@@ -290,21 +326,27 @@ def execute(run_dir):
     checkpoint_path = run_dir / "test-checkpoint.json"
     write_secure(checkpoint_path, json.dumps(plan["test_checkpoint"], sort_keys=True))
     verify_plan(plan, run_dir)
-    guard(run_dir, checkpoint_path, "precutover")
+    guard(run_dir, checkpoint_path, "precutover", profile=profile)
     verify_plan(plan, run_dir)
     if service == "web":
         # Preserve the separately approved 11,500 MiB cache-only preflight.
         legacy.ensure_immediate_preflight(legacy.immediate())
-    # Reuse the exact-SHA existing 180-second startup watchdog. It is staged
-    # only after the pre-cutover guard, with no TEST restoration code.
-    legacy.prepare_startup_watcher(run_dir)
-    watch_path = run_dir / "startup-watch-unexecuted.py"
-    if service == "api":
-        watch_path.write_text(watch_path.read_text().replace("web-phase", "api-phase"))
-        watch_path.chmod(0o600)
+    # V1 retains its exact-SHA watcher. V2 uses only its explicitly staged
+    # 180-second phase watcher. Neither path restores retired TEST services.
+    if profile == V2_PROFILE:
+        watch_path = run_dir / "startup_watch_v2.py"
+        watch_args = [sys.executable, str(watch_path), str(run_dir),
+                      "--service", service]
+    else:
+        legacy.prepare_startup_watcher(run_dir)
+        watch_path = run_dir / "startup-watch-unexecuted.py"
+        if service == "api":
+            watch_path.write_text(watch_path.read_text().replace("web-phase", "api-phase"))
+            watch_path.chmod(0o600)
+        watch_args = [sys.executable, str(watch_path), str(run_dir)]
     with (run_dir / "startup-watch.log").open("x") as out:
         os.chmod(run_dir / "startup-watch.log", 0o600)
-        watcher = subprocess.Popen([sys.executable, str(watch_path), str(run_dir)],
+        watcher = subprocess.Popen(watch_args,
                                    stdout=out, stderr=subprocess.STDOUT)
     cutover = False
     try:
@@ -325,11 +367,15 @@ def execute(run_dir):
         if docker_state()[target]["status"] != "exited":
             raise RuntimeError("old_container_not_stopped")
         record_phase(run_dir, service, "old-stopped")
+        if profile == V2_PROFILE:
+            wait_v2_handshake(watcher, run_dir, "startup-watch.old-stop-cleared")
         if (run_dir / "startup-watch.fail").exists():
             raise RuntimeError("startup_resource_fail_before_start")
         require_watcher_alive(watcher, run_dir / "startup-watch.fail")
         record_phase(run_dir, service, "starting-candidate")
         (run_dir / f"{service}-start.begin").touch(mode=0o600)
+        if profile == V2_PROFILE:
+            wait_v2_handshake(watcher, run_dir, "startup-watch.candidate-armed")
         if (run_dir / "startup-watch.fail").exists():
             raise RuntimeError("startup_resource_fail_before_candidate_compose")
         require_watcher_alive(watcher, run_dir / "startup-watch.fail")
@@ -344,8 +390,8 @@ def execute(run_dir):
             verify_web_functionality()
         if watcher.wait(timeout=190):
             raise RuntimeError("startup_watchdog_fail")
-        require_complete_watcher_result(run_dir)
-        guard(run_dir, checkpoint_path, "poststart")
+        require_complete_watcher_result(run_dir, profile=profile)
+        guard(run_dir, checkpoint_path, "poststart", profile=profile)
         verify_plan(plan, run_dir, after_cutover=True)
         if service == "web":
             verify_web_functionality()
@@ -369,12 +415,16 @@ def main():
     actions.add_argument("--prepare", choices=tuple(CANDIDATES))
     actions.add_argument("--execute", action="store_true")
     parser.add_argument("--run-dir", required=True, type=Path)
+    parser.add_argument("--profile", choices=(V1_PROFILE, V2_PROFILE), default=V1_PROFILE,
+                        help="Prepare only; V1 is the default. V2 requires explicit opt-in.")
     args = parser.parse_args()
     if os.geteuid() != 0 or not args.run_dir.is_absolute():
         parser.error("root_and_absolute_run_directory_required")
     if args.prepare:
-        prepare(args.prepare, args.run_dir)
+        prepare(args.prepare, args.run_dir, profile=args.profile)
     else:
+        if args.profile != V1_PROFILE:
+            parser.error("execute_uses_the_protected_plan_profile")
         execute(args.run_dir)
 
 
