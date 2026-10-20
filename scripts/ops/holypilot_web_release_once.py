@@ -145,17 +145,20 @@ def prepare_startup_watcher(directory):
     content = content.replace(anchor, replacement, 1)
     anchor = "        current = sample()\n        for key in low:"
     replacement = ("        current = sample()\n"
-                   "        phase = ('running' if (directory / 'web-start.running').exists() else\n"
-                   "                 'starting' if (directory / 'web-start.begin').exists() else 'before')\n"
+                   "        phase = ('candidate-running' if (directory / 'web-phase.candidate-running').exists() else\n"
+                   "                 'starting-candidate' if (directory / 'web-phase.starting-candidate').exists() else\n"
+                   "                 'old-stopped' if (directory / 'web-phase.old-stopped').exists() else\n"
+                   "                 'stopping-old' if (directory / 'web-phase.stopping-old').exists() else\n"
+                   "                 'before-stop')\n"
                    "        trace.write(json.dumps(dict(epoch=time.time(), phase=phase, **current), sort_keys=True) + '\\n')\n"
                    "        for key in low:")
     if content.count(anchor) != 1:
         raise RuntimeError("startup_sample_anchor_mismatch")
     content = content.replace(anchor, replacement, 1)
     anchor = "    result = dict(status='FAIL' if reason else 'PASS', reason=reason,"
-    replacement = ("    if not reason and (directory / 'web-start.begin').exists() and not "
-                   "(directory / 'web-start.running').exists():\n"
-                   "        reason = 'web_start_exceeded_watch_window'\n"
+    replacement = ("    if not reason and (directory / 'cutover-attempted').exists() and not "
+                   "(directory / 'web-phase.candidate-running').exists():\n"
+                   "        reason = 'candidate_not_running_in_watch_window'\n"
                    "        (directory / 'startup-watch.fail').write_text(reason)\n"
                    + anchor)
     if content.count(anchor) != 1:
@@ -204,12 +207,17 @@ def prepare_release_script(directory):
             "old up -d --no-deps --no-build --pull never --force-recreate web",
         "touch \"$backup/cutover-attempted\"\ncutover=1":
             "[[ ! -e \"$backup/startup-watch.json\" && ! -e \"$backup/startup-watch.fail\" ]]\n"
+            "touch \"$backup/web-phase.before-stop\"\n"
             "touch \"$backup/cutover-attempted\"\ncutover=1",
         "docker stop \"$web\" >/dev/null\n[[ $(docker inspect":
-            "touch \"$backup/web-start.begin\"\n"
+            "touch \"$backup/web-phase.stopping-old\"\n"
             "docker stop \"$web\" >/dev/null\n[[ $(docker inspect",
         "new up -d --no-deps --no-build --pull never --force-recreate web\nstatus=''":
+            "touch \"$backup/web-phase.old-stopped\"\n"
+            "touch \"$backup/web-phase.starting-candidate\"\n"
+            "touch \"$backup/web-start.begin\"\n"
             "new up -d --no-deps --no-build --pull never --force-recreate web\n"
+            "touch \"$backup/web-phase.candidate-running\"\n"
             "touch \"$backup/web-start.running\"\nstatus=''",
     }
     for anchor, replacement in replacements.items():

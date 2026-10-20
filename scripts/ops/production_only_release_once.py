@@ -204,6 +204,17 @@ def compose_replace(run_dir, service, variant):
             timeout=180)
 
 
+def record_phase(run_dir, service, phase):
+    """Persist the cutover boundary before the operation it describes."""
+    marker = run_dir / f"{service}-phase.{phase}"
+    write_secure(marker, "")
+    event = json.dumps(dict(epoch=time.time(), monotonic=time.monotonic(),
+                            service=service, phase=phase), sort_keys=True) + "\n"
+    fd = os.open(run_dir / "release-phases.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        out.write(event)
+
+
 def wait_healthy(name, watcher=None, fail_path=None):
     for _ in range(60):
         if fail_path and fail_path.exists():
@@ -272,7 +283,7 @@ def execute(run_dir):
     legacy.prepare_startup_watcher(run_dir)
     watch_path = run_dir / "startup-watch-unexecuted.py"
     if service == "api":
-        watch_path.write_text(watch_path.read_text().replace("web-start", "api-start"))
+        watch_path.write_text(watch_path.read_text().replace("web-phase", "api-phase"))
         watch_path.chmod(0o600)
     with (run_dir / "startup-watch.log").open("x") as out:
         os.chmod(run_dir / "startup-watch.log", 0o600)
@@ -290,15 +301,20 @@ def execute(run_dir):
             raise RuntimeError("startup_watcher_not_ready")
         if (run_dir / "startup-watch.fail").exists():
             raise RuntimeError("startup_resource_fail_before_cutover")
+        record_phase(run_dir, service, "before-stop")
         (run_dir / "cutover-attempted").touch(mode=0o600)
         cutover = True
-        (run_dir / f"{service}-start.begin").touch(mode=0o600)
+        record_phase(run_dir, service, "stopping-old")
         command(["docker", "stop", target], timeout=60)
         if docker_state()[target]["status"] != "exited":
             raise RuntimeError("old_container_not_stopped")
+        record_phase(run_dir, service, "old-stopped")
         if (run_dir / "startup-watch.fail").exists():
             raise RuntimeError("startup_resource_fail_before_start")
+        record_phase(run_dir, service, "starting-candidate")
+        (run_dir / f"{service}-start.begin").touch(mode=0o600)
         compose_replace(run_dir, service, "new")
+        record_phase(run_dir, service, "candidate-running")
         (run_dir / f"{service}-start.running").touch(mode=0o600)
         wait_healthy(target, watcher, run_dir / "startup-watch.fail")
         rows = verify_plan(plan, run_dir, after_cutover=True)

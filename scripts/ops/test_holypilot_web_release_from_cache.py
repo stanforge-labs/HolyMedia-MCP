@@ -178,8 +178,15 @@ status=''
             self.assertEqual(result, digest(transformed))
             self.assertEqual(transformed.count("pull_policy: never"), 2)
             self.assertEqual(transformed.count("--pull never"), 2)
-            self.assertIn('touch "$backup/web-start.begin"\ndocker stop', transformed)
-            self.assertIn('touch "$backup/web-start.running"\nstatus=', transformed)
+            self.assertIn('touch "$backup/web-phase.stopping-old"\ndocker stop', transformed)
+            self.assertLess(transformed.index('touch "$backup/web-phase.stopping-old"'),
+                            transformed.index('docker stop "$web"'))
+            self.assertLess(transformed.index('touch "$backup/web-phase.old-stopped"'),
+                            transformed.index('touch "$backup/web-phase.starting-candidate"'))
+            self.assertIn('touch "$backup/web-phase.starting-candidate"\n'
+                          'touch "$backup/web-start.begin"\nnew up', transformed)
+            self.assertIn('touch "$backup/web-phase.candidate-running"\n'
+                          'touch "$backup/web-start.running"\nstatus=', transformed)
             self.assertIn('[[ ! -e "$backup/startup-watch.json" && ! -e "$backup/startup-watch.fail" ]]', transformed)
             self.assertNotIn("docker pull", transformed)
 
@@ -205,9 +212,12 @@ def main():
                 release.prepare_startup_watcher(destination)
             transformed = (destination / "startup-watch-unexecuted.py").read_text()
             self.assertIn("startup-watch-trace.jsonl", transformed)
-            self.assertIn("web-start.begin", transformed)
-            self.assertIn("web-start.running", transformed)
-            self.assertIn("web_start_exceeded_watch_window", transformed)
+            for phase in ("before-stop", "stopping-old", "old-stopped",
+                          "starting-candidate", "candidate-running"):
+                self.assertIn(phase, transformed)
+            self.assertIn("candidate_not_running_in_watch_window", transformed)
+            self.assertIn("cutover-attempted", transformed)
+            self.assertNotIn("web-start.begin", transformed)
             self.assertEqual(transformed.count("while time.monotonic() - start < 180:"), 1)
 
 

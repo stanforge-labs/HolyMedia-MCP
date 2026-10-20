@@ -175,6 +175,164 @@ class ReleaseTests(unittest.TestCase):
                         with self.assertRaisesRegex(RuntimeError, "precutover_guard_incomplete"):
                             release.guard(directory, directory / "checkpoint.json", "precutover")
 
+    def test_phase_log_is_ordered_and_private(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for phase in ("before-stop", "stopping-old", "old-stopped",
+                          "starting-candidate", "candidate-running"):
+                release.record_phase(directory, "web", phase)
+            events = [json.loads(line) for line in
+                      (directory / "release-phases.jsonl").read_text().splitlines()]
+            self.assertEqual([event["phase"] for event in events],
+                             ["before-stop", "stopping-old", "old-stopped",
+                              "starting-candidate", "candidate-running"])
+            self.assertEqual((directory / "release-phases.jsonl").stat().st_mode & 0o777, 0o600)
+            self.assertTrue(all("monotonic" in event and "epoch" in event for event in events))
+            with self.assertRaises(FileExistsError):
+                release.record_phase(directory, "web", "stopping-old")
+
+    def test_swap_fail_during_old_stop_blocks_candidate_and_rolls_back_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            plan = {"service": "web", "test_checkpoint": {}}
+            (directory / "production-only-plan.json").write_text(json.dumps(plan))
+
+            class Watcher:
+                returncode = None
+
+                def poll(self):
+                    return None
+
+                def terminate(self):
+                    pass
+
+                def wait(self, timeout=None):
+                    return 0
+
+            def arm(_directory):
+                (directory / "startup-watch-unexecuted.py").write_text("# fake\n")
+                (directory / "startup-watch.ready").touch()
+
+            def stop(args, **_kwargs):
+                self.assertEqual(args[:2], ["docker", "stop"])
+                (directory / "startup-watch.fail").write_text("swap_in")
+
+            with patch.object(release, "verify_plan"), \
+                    patch.object(release, "guard"), \
+                    patch.object(release.legacy, "immediate", return_value={}), \
+                    patch.object(release.legacy, "ensure_immediate_preflight"), \
+                    patch.object(release.legacy, "prepare_startup_watcher", side_effect=arm), \
+                    patch.object(release.subprocess, "Popen", return_value=Watcher()), \
+                    patch.object(release, "command", side_effect=stop), \
+                    patch.object(release, "docker_state", return_value={
+                        "holymedia-v2-web-1": {"status": "exited"}}), \
+                    patch.object(release, "compose_replace") as compose, \
+                    patch.object(release.subprocess, "run", return_value=type(
+                        "Result", (), {"returncode": 0})()) as rollback:
+                with self.assertRaisesRegex(RuntimeError, "startup_resource_fail_before_start"):
+                    release.execute(directory)
+            compose.assert_not_called()
+            rollback.assert_called_once()
+            self.assertTrue((directory / "web-phase.stopping-old").exists())
+            self.assertTrue((directory / "web-phase.old-stopped").exists())
+            self.assertFalse((directory / "web-phase.starting-candidate").exists())
+            self.assertFalse((directory / "web-start.begin").exists())
+
+    def test_phase_record_failure_blocks_stop_and_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "production-only-plan.json").write_text(json.dumps(
+                {"service": "web", "test_checkpoint": {}}))
+
+            class Watcher:
+                returncode = None
+
+                def poll(self):
+                    return None
+
+                def terminate(self):
+                    pass
+
+                def wait(self, timeout=None):
+                    return 0
+
+            def arm(_directory):
+                (directory / "startup-watch-unexecuted.py").write_text("# fake\n")
+                (directory / "startup-watch.ready").touch()
+
+            with patch.object(release, "verify_plan"), \
+                    patch.object(release, "guard"), \
+                    patch.object(release.legacy, "immediate", return_value={}), \
+                    patch.object(release.legacy, "ensure_immediate_preflight"), \
+                    patch.object(release.legacy, "prepare_startup_watcher", side_effect=arm), \
+                    patch.object(release.subprocess, "Popen", return_value=Watcher()), \
+                    patch.object(release, "record_phase", side_effect=OSError("trace_unavailable")), \
+                    patch.object(release, "command") as command, \
+                    patch.object(release, "compose_replace") as compose, \
+                    patch.object(release.subprocess, "run") as rollback:
+                with self.assertRaisesRegex(OSError, "trace_unavailable"):
+                    release.execute(directory)
+            command.assert_not_called()
+            compose.assert_not_called()
+            rollback.assert_not_called()
+
+    def test_candidate_start_is_marked_only_after_old_container_stops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "production-only-plan.json").write_text(json.dumps({
+                "service": "web", "test_checkpoint": {}, "new_image_id": "sha256:new"}))
+            operations = []
+
+            class Watcher:
+                returncode = None
+
+                def poll(self):
+                    return None
+
+                def terminate(self):
+                    pass
+
+                def wait(self, timeout=None):
+                    return 0
+
+            def arm(_directory):
+                (directory / "startup-watch-unexecuted.py").write_text("# fake\n")
+                (directory / "startup-watch.ready").touch()
+
+            def stop(args, **_kwargs):
+                operations.append("stop")
+                self.assertEqual(args[:2], ["docker", "stop"])
+                self.assertTrue((directory / "web-phase.stopping-old").exists())
+                self.assertFalse((directory / "web-start.begin").exists())
+
+            def start(_directory, _service, _variant):
+                operations.append("start")
+                self.assertTrue((directory / "web-phase.old-stopped").exists())
+                self.assertTrue((directory / "web-start.begin").exists())
+
+            with patch.object(release, "verify_plan", return_value={
+                    "holymedia-v2-web-1": {"image": "sha256:new"}}), \
+                    patch.object(release, "guard"), \
+                    patch.object(release.legacy, "immediate", return_value={}), \
+                    patch.object(release.legacy, "ensure_immediate_preflight"), \
+                    patch.object(release.legacy, "prepare_startup_watcher", side_effect=arm), \
+                    patch.object(release.subprocess, "Popen", return_value=Watcher()), \
+                    patch.object(release, "command", side_effect=stop), \
+                    patch.object(release, "docker_state", return_value={
+                        "holymedia-v2-web-1": {"status": "exited"}}), \
+                    patch.object(release, "compose_replace", side_effect=start), \
+                    patch.object(release, "wait_healthy"), \
+                    patch.object(release, "verify_web_functionality"), \
+                    patch.object(release.subprocess, "run") as rollback:
+                release.execute(directory)
+            self.assertEqual(operations, ["stop", "start"])
+            rollback.assert_not_called()
+            phases = [json.loads(line)["phase"] for line in
+                      (directory / "release-phases.jsonl").read_text().splitlines()]
+            self.assertEqual(phases, ["before-stop", "stopping-old", "old-stopped",
+                                      "starting-candidate", "candidate-running"])
+            self.assertTrue((directory / "published").exists())
+
     def test_recovery_rolls_back_once_without_starting_test(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
@@ -247,6 +405,21 @@ elif args[0]=='stop':
             self.assertNotIn("start ", commands)
             self.assertIn("--pull never", commands)
             self.assertTrue((run / "rollback-attempted").exists())
+            self.assertTrue((run / "rolled-back").exists())
+
+            # The observed failure stopped the original Web before a candidate
+            # existed. Current recovery must still restore it exactly once.
+            (run / "rollback-attempted").unlink()
+            (run / "rolled-back").unlink()
+            (run / "web-phase.stopping-old").touch()
+            state.write_text(json.dumps({"web_image": "sha256:old", "web_status": "exited"}))
+            log.write_text("")
+            before_candidate = subprocess.run(["bash", str(script), str(run)], env=env,
+                                              capture_output=True, text=True)
+            self.assertEqual(before_candidate.returncode, 0,
+                             before_candidate.stdout + before_candidate.stderr)
+            self.assertEqual(log.read_text().count("compose --env-file"), 1)
+            self.assertNotIn("start ", log.read_text())
             self.assertTrue((run / "rolled-back").exists())
 
 
