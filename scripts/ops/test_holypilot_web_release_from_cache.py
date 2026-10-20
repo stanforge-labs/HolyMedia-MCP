@@ -86,6 +86,7 @@ class GuardAndReleaseTests(unittest.TestCase):
         snapshot.update({name: {"status": "exited", "health": "none"}
                          for name in release.TEST + release.DATA})
         with tempfile.TemporaryDirectory() as temp, \
+                patch.object(release.os, "geteuid", return_value=0), \
                 patch.object(release, "sha", return_value=release.GUARD_SHA), \
                 patch.object(release, "inventory", return_value=snapshot), \
                 patch.object(release, "run") as command:
