@@ -4,6 +4,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -88,6 +89,10 @@ class DiagnosticTests(unittest.TestCase):
                 (run_dir / "startup-watch.ready").touch()
                 (run_dir / "preflight-result.json").write_text(
                     json.dumps({"status": "PASS", "duration_exact_s": 600.001}))
+                (run_dir / "startup-watch.json").write_text(
+                    json.dumps({"status": "FAIL", "reason": "swap_in", "duration_exact_s": 1.0}))
+                (run_dir / "startup-attribution.jsonl").write_text("{}\n{}\n")
+                (run_dir / "boundary-attribution.jsonl").write_text("{}\n{}\n")
                 def command(args, **_kwargs):
                     if args[0] == "systemctl":
                         return type("Result", (), {"stdout":
@@ -116,6 +121,8 @@ class DiagnosticTests(unittest.TestCase):
                     else:
                         self.assertEqual(diagnostic.observe(run_dir),
                                          "RESTORED_DIAGNOSTIC_COMPLETE")
+                        result = json.loads((run_dir / "diagnostic-result.json").read_text())
+                        self.assertEqual(result["status"], "RECOVERED_WITH_RESOURCE_FAIL")
                     restore.assert_called_once_with(run_dir)
                     stops = [call.args[0] for call in calls.call_args_list
                              if call.args[0][:2] == ["docker", "stop"]]
@@ -247,15 +254,19 @@ class DiagnosticTests(unittest.TestCase):
                 command.assert_not_called()
         rows[diagnostic.WEB]["id"] = plan["web_id"]
         rows[TEST[0]]["status"] = "running"
+        restored_drift = copy.deepcopy(rows)
+        restored_drift[diagnostic.WEB]["status"] = "running"
+        restored_drift[diagnostic.WEB]["health"] = "healthy"
         with tempfile.TemporaryDirectory() as temp:
             run_dir = Path(temp)
             (run_dir / "diagnostic-attempted").touch()
             with patch.object(diagnostic, "load_plan", return_value=plan), \
-                    patch.object(diagnostic, "docker_state", return_value=rows), \
+                    patch.object(diagnostic, "docker_state", side_effect=[rows, restored_drift]), \
+                    patch.object(diagnostic, "wait_web_healthy"), \
                     patch.object(diagnostic.release, "command") as command:
                 with self.assertRaisesRegex(RuntimeError, "retired_test_changed"):
                     diagnostic.recover(run_dir)
-                command.assert_not_called()
+                self.assertEqual(command.call_args.args[0], ["docker", "start", diagnostic.WEB])
 
     def test_launcher_has_backstop_and_no_candidate_or_pull(self):
         plan, _ = plan_and_rows()
@@ -293,6 +304,32 @@ class DiagnosticTests(unittest.TestCase):
                 self.assertEqual(diagnostic.recover(run_dir), "single_compose_rollback")
                 self.assertEqual(commands.call_count, 1)
                 self.assertEqual(commands.call_args.args[0][0:2], ["docker", "compose"])
+
+    def test_parent_timeout_does_not_race_systemd_backstop(self):
+        plan, _ = plan_and_rows()
+        with tempfile.TemporaryDirectory() as temp:
+            run_dir = Path(temp)
+            with patch.object(diagnostic, "load_plan", return_value=plan), \
+                    patch.object(diagnostic.release, "command",
+                        side_effect=subprocess.TimeoutExpired("systemd-run", 540)), \
+                    patch.object(diagnostic, "recover") as recover:
+                with self.assertRaisesRegex(RuntimeError, "external_backstop_owns_recovery"):
+                    diagnostic.launch(run_dir)
+                recover.assert_not_called()
+
+    def test_completed_compose_fallback_is_verified_without_second_rollback(self):
+        plan, rows = plan_and_rows()
+        rows[diagnostic.WEB]["id"] = "compose-recreated-old-image"
+        with tempfile.TemporaryDirectory() as temp:
+            run_dir = Path(temp)
+            for name in ("diagnostic-attempted", "recovery-attempted", "compose-fallback-used"):
+                (run_dir / name).touch()
+            with patch.object(diagnostic, "load_plan", return_value=plan), \
+                    patch.object(diagnostic, "docker_state", return_value=rows), \
+                    patch.object(diagnostic, "verify_routes"), \
+                    patch.object(diagnostic.release, "command") as command:
+                self.assertEqual(diagnostic.recover(run_dir), "ORIGINAL_WEB_HEALTHY")
+                command.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -35,6 +35,11 @@ authorize a stop.
   after it, even if the stop command fails. Timestamps use UTC epoch and
   monotonic clocks. Phases are `before-stop`, `stopping-old`, `old-stopped`,
   `restoring-old`, `restored`.
+- A diagnostic result is written only after the original Web is restored,
+  the startup watchdog has a valid result and both continuous and boundary
+  attribution traces exist. A watchdog swap-in FAIL is retained as evidence,
+  never renamed PASS. Missing trace or an incomplete 180-second PASS is an
+  explicit diagnostic failure.
 - Recovery first runs `docker start` on the **same** old Web container ID and
   image. If this fails, one cached-image Compose rollback is permitted with
   `--pull never --no-build`; it requires unchanged source/config hashes and
@@ -43,8 +48,9 @@ authorize a stop.
   production containers, retired TEST identities and public routes are
   checked after restore. A separate 600-second post-restore guard follows.
 
-Trace and checkpoint files are created in a new root-only run directory with
-0600 files. Existing protected release archives remain untouched.
+Trace and checkpoint files are created in a new root-only (0700) run
+directory; the plan, probe selection and append-only diagnostic records use
+0600 mode. Existing protected release archives remain untouched.
 
 ## Time and operational limit
 

@@ -198,7 +198,6 @@ def recover(run_dir):
     if not (run_dir / "diagnostic-attempted").exists():
         return "NO_STOP_ATTEMPTED"
     rows = docker_state()
-    verify_unrelated(plan, rows)
     web = rows[WEB]
     fallback_used = (run_dir / "compose-fallback-used").exists()
     if web["image"] == plan["web_image"] and web["status"] == "running" and web["health"] == "healthy":
@@ -342,6 +341,24 @@ def observe(run_dir):
                 "result": json.loads((run_dir / "startup-watch.json").read_text())})
     if not (run_dir / "web-phase.restored").exists():
         raise RuntimeError("restoration_not_verified")
+    result_path = run_dir / "startup-watch.json"
+    if not result_path.is_file():
+        raise RuntimeError("startup_watchdog_result_missing")
+    watchdog = json.loads(result_path.read_text())
+    if watchdog.get("status") not in ("PASS", "FAIL") or (
+            watchdog["status"] == "PASS" and watchdog.get("duration_exact_s", 0) < 180):
+        raise RuntimeError("startup_watchdog_result_incomplete")
+    attribution = run_dir / "startup-attribution.jsonl"
+    boundaries = run_dir / "boundary-attribution.jsonl"
+    if (not attribution.is_file() or not boundaries.is_file() or
+            len(attribution.read_text().splitlines()) < 2 or
+            len(boundaries.read_text().splitlines()) < 2):
+        raise RuntimeError("attribution_trace_incomplete")
+    release.write_secure(run_dir / "diagnostic-result.json", json.dumps({
+        "status": "RECOVERED_WITH_RESOURCE_FAIL" if watchdog["status"] == "FAIL" else
+                  "RECOVERED_WITH_WATCHDOG_PASS",
+        "watchdog_reason": watchdog.get("reason"),
+        "web_id": plan["web_id"], "candidate_started": False}, sort_keys=True))
     return "RESTORED_DIAGNOSTIC_COMPLETE"
 
 
@@ -363,10 +380,16 @@ def launch(run_dir):
             "--setenv=HOLYPILOT_DIAG_UNIT=" + unit,
             "/usr/bin/python3", str(script), "--observe", "--run-dir", str(run_dir)]
     try:
-        release.command(args, timeout=DIAGNOSTIC_RUNTIME_S + 180)
-    finally:
-        # The service backstop runs first; this is an idempotent verification.
+        release.command(args, timeout=DIAGNOSTIC_RUNTIME_S + 240)
+    except subprocess.TimeoutExpired as exc:
+        # The transient unit still owns recovery; never race its ExecStopPost.
+        raise RuntimeError("systemd_wait_timeout_external_backstop_owns_recovery") from exc
+    except subprocess.CalledProcessError:
+        # --wait returns only after ExecStopPost has finished.
         recover(run_dir)
+        raise
+    # The service backstop has finished; this is an idempotent verification.
+    recover(run_dir)
     return postcheck(run_dir)
 
 
