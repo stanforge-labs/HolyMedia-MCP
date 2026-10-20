@@ -2,9 +2,8 @@
   display: inline-flex;
   align-items: center;
   flex: none;
-  gap: 6px;
-  width: 128px;
-  height: 36px;
+  gap: 8px;
+  min-height: 36px;
   color: var(--text);
   text-align: left;
 }
@@ -24,7 +23,8 @@
 .copy {
   display: flex;
   min-width: 0;
-  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 .name {
@@ -36,14 +36,14 @@
 
 .tagline {
   color: var(--text-muted);
-  font-size: 7.5px;
+  font-size: 11px;
   font-weight: 500;
-  line-height: 8.5px;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .footerBrand {
-  width: 136px;
-  height: calc(136px * 107 / 379);
+  min-height: 38px;
 }
 
 .footerBrand .symbol {
@@ -56,18 +56,13 @@
 }
 
 .footerBrand .tagline {
-  font-size: 8px;
-  line-height: 9px;
-}
-
-:global(html[data-theme="light"]) .footerBrand {
-  height: calc(136px * 107 / 371);
+  font-size: 11px;
 }
 
 @media (max-width: 620px) {
   .brand {
     gap: 5px;
-    height: 30px;
+    min-height: 30px;
   }
 
   .symbol {
@@ -79,22 +74,23 @@
     line-height: 14px;
   }
 
+  .copy {
+    gap: 8px;
+  }
+
   .tagline {
-    font-size: 7px;
-    line-height: 7.5px;
+    font-size: 8.5px;
+    line-height: 1.15;
+    max-width: 105px;
+    white-space: normal;
   }
 
   .footerBrand {
-    width: 126px;
-    height: calc(126px * 107 / 379);
+    min-height: 32px;
   }
 
   .footerBrand .symbol {
     height: 28px;
-  }
-
-  :global(html[data-theme="light"]) .footerBrand {
-    height: calc(126px * 107 / 371);
   }
 
   .footerBrand .name {
@@ -103,7 +99,6 @@
   }
 
   .footerBrand .tagline {
-    font-size: 7.5px;
-    line-height: 8.5px;
+    font-size: 8.5px;
   }
 }

@@ -5496,77 +5496,18 @@ html[data-theme="light"] .footer__brand-logo--light {
   visibility: hidden;
   opacity: 0;
 }
-.app-loader--hidden .app-loader__caption {
-  display: none;
-}
 .app-loader__mark {
   display: grid;
-  justify-items: center;
-  gap: 18px;
+  place-items: center;
 }
-.app-loader__mark svg {
-  width: 62px;
-  height: 64px;
-  overflow: visible;
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.app-loader__stream,
-.app-loader__channel {
-  stroke-dasharray: 120;
-  stroke-dashoffset: 120;
-  animation: loader-draw 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-.app-loader__stream--center {
-  animation-delay: 40ms;
-}
-.app-loader__stream--right {
-  animation-delay: 80ms;
-}
-.app-loader__channel {
-  animation-delay: 120ms;
-}
-.app-loader__wordmark {
-  position: relative;
+.app-loader__mark img {
   display: block;
-  width: 164px;
-  height: 47px;
-}
-
-.app-loader__wordmark img {
-  position: absolute;
-  inset: 0;
-  width: 164px;
+  width: 112px;
   height: auto;
-  opacity: 0;
-  animation: loader-wordmark 220ms ease-out 350ms forwards;
+  filter: brightness(0) invert(1);
 }
-.app-loader__wordmark--light {
-  display: none;
-}
-html[data-theme="light"] .app-loader__wordmark--dark {
-  display: none;
-}
-html[data-theme="light"] .app-loader__wordmark--light {
-  display: block;
-}
-@keyframes loader-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@keyframes loader-wordmark {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
+html[data-theme="light"] .app-loader__mark img {
+  filter: brightness(0);
 }
 /* Native cursor pack: only desktop fine-pointer devices receive the custom assets. */
 @media (pointer: fine) and (hover: hover) {
@@ -5737,7 +5678,7 @@ html[data-theme="light"] .company-status--suspended {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
-  .app-loader__wordmark img {
+  .app-loader__identity {
     opacity: 1;
     transform: none;
   }
@@ -6265,17 +6206,15 @@ html[data-theme="light"] .company-status--suspended {
   color: var(--ok);
 }
 
-/* Loader: four streams converge into the approved symbol before the wordmark. */
+/* HolyPilot identity appears while the application is loading. */
 .app-loader {
   align-content: center;
   grid-template-columns: 1fr;
   grid-template-rows: auto auto auto;
-  gap: 13px;
+  gap: 18px;
   overflow: hidden;
 }
 .app-loader__mark {
-  position: relative;
-  gap: 16px;
   transform-origin: center;
   transition:
     transform 200ms ease,
@@ -6284,40 +6223,34 @@ html[data-theme="light"] .company-status--suspended {
 .app-loader--hidden .app-loader__mark {
   transform: scale(0.97);
 }
-.app-loader__node {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: loader-node 780ms ease-in-out both;
-}
-.app-loader__node--one {
-  margin: -116px 0 0 -146px;
-  animation-delay: 110ms;
-}
-.app-loader__node--two {
-  margin: 34px 0 0 156px;
-  animation-delay: 210ms;
-}
-.app-loader__node--three {
-  margin: 110px 0 0 -112px;
-  animation-delay: 290ms;
-}
-.app-loader__caption {
-  z-index: 1;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  letter-spacing: 0.02em;
+.app-loader__identity {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
   text-align: center;
-  opacity: 0;
-  animation: loader-wordmark 220ms ease-out 490ms forwards;
+  animation: loader-identity 220ms ease-out both;
 }
-.app-loader__caption {
+.app-loader__name {
   color: var(--text);
-  opacity: 1;
-  animation: none;
+  font-size: 32px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.app-loader__tagline {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+@keyframes loader-identity {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .app-loader__progress {
   width: min(132px, 40vw);
@@ -6332,19 +6265,6 @@ html[data-theme="light"] .company-status--suspended {
   background: var(--accent);
   animation: loader-progress 760ms cubic-bezier(0.22, 1, 0.36, 1) 210ms both;
 }
-@keyframes loader-node {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  35% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(14px, -10px) scale(0.75);
-  }
-}
 @keyframes loader-progress {
   from {
     transform: translateX(-110%);
@@ -6354,13 +6274,10 @@ html[data-theme="light"] .company-status--suspended {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app-loader__node {
-    display: none;
-  }
-  .app-loader__caption,
-  .app-loader__wordmark img {
+  .app-loader__identity {
     opacity: 1;
     transform: none;
+    animation: none;
   }
   .app-loader__progress i {
     width: 100%;
@@ -6713,5 +6630,19 @@ html[data-theme="light"] .provider-mark--tiktok_ads {
   .subscription-info__footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 360px) {
+  .site-header {
+    height: auto;
+    min-height: 64px;
+    flex-wrap: wrap;
+    padding-block: 12px;
+    row-gap: 8px;
+  }
+
+  .site-header .site-nav {
+    margin-left: auto;
   }
 }
