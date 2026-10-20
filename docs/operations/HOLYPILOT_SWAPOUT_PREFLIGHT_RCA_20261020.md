@@ -66,8 +66,8 @@ release PASS criterion.
 
 `production_web_passive_swap_watch.py` reuses
 `production_web_swap_probe.py`. It discovers current process cgroups from
-procfs once, selects at most 64 PIDs while recording omitted-PID coverage,
-captures up to 128 discovered cgroups and their ancestors, and samples host
+procfs once, selects at most 16 PIDs and 16 prioritized cgroups, records
+omitted-PID/cgroup coverage, and samples host
 vmstat/meminfo/PSI plus selected PID/cgroup counters at one-second intervals.
 It uses no Docker CLI, network, process environment, command line or user
 data. The proposed single observation is 120 seconds, bounded at 180 seconds;
@@ -78,14 +78,24 @@ capture-overhead gate before sampling. A missing sample or failed capture is
 and PID `VmSwap`/major-fault changes are **correlations**, not direct proof of
 which process generated each host swap-out page. A newly started process may
 be outside the initial PID shortlist; cgroup coverage and omissions remain
-visible.
+visible. Broad system/user slice counters remain in the selection when present,
+but a source outside the selected leaves may only be localized to a broad
+slice or remain unattributed.
 Parent and child cgroup counters may overlap and must not be summed as
 independent contributors. The trace can narrow a candidate source but cannot
 directly attribute every host swap-out page to a PID.
 
-No passive watch has been run on the VPS. It needs separate owner approval
-and a new root-only output directory. Do not run a 600-second guard, stop Web,
-pull an image or attempt a release as part of this observation.
+The owner separately authorized one passive run. Its first, broader revision
+selected 64 PIDs and 46 cgroups but **stopped before observation** because ten
+probe benchmarks measured median 38.781 ms, p95 50.075 ms and maximum
+52.119 ms, exceeding the 20 ms p95 / 40 ms maximum budget. No trace was
+created; protected overhead, selection and `INCOMPLETE` result are in
+`/var/backups/adforge-mcp/holypilot-passive-swap-20261020T170221Z/`.
+The approved run is consumed. The narrower 16/16 revision above was prepared
+offline only; its VPS overhead and attribution coverage remain unverified.
+Another VPS run needs a new separate approval and output directory. Do not
+run a 600-second guard, stop Web, pull an image or attempt a release as part
+of any passive observation.
 
 ## Release-policy options for a later owner decision
 
@@ -116,8 +126,10 @@ It is not used by current scripts.
 
 **Current decision: NO-GO for Web and API release.** The candidate Web image
 being cached does not overcome the failed preguard. The API image requires a
-separate delivery and guarded startup plan. The minimum no-cost next step is
-one separately approved, bounded, procfs-only passive observation; if it
-shows no event, record `INCONCLUSIVE` and do not infer a source or relax the
-policy. This work does not establish a need for another VPS, nor does it prove
-that the current VPS can safely complete both releases.
+separate delivery and guarded startup plan. The minimum no-cost next step,
+if the owner wants more attribution evidence, is one newly approved run of
+the narrower procfs-only observer after exact-source Linux CI PASS. If it
+shows no event or cannot pass its overhead gate, record `INCONCLUSIVE` and do
+not infer a source or relax the policy. This work does not establish a need
+for another VPS, nor does it prove that the current VPS can safely complete
+both releases.

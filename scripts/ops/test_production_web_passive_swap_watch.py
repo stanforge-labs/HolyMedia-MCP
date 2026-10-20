@@ -45,10 +45,30 @@ class PassiveProbeTests(unittest.TestCase):
                 selected = probe.select_passive()
             self.assertEqual(selected["coverage"], {
                 "attempted_pids": 3, "skipped_pids": 0,
-                "discovered_pids": 3, "selected_pids": 2, "discovered_cgroups": 3})
+                "discovered_pids": 3, "selected_pids": 2,
+                "discovered_cgroups": 3, "selected_cgroups": 3})
             self.assertEqual(set(selected["pids"]), {"12", "13"})
-            self.assertEqual(selected["cgroups"], ["/", "/system.slice",
-                                                   "/system.slice/app.scope"])
+            self.assertEqual(set(selected["cgroups"]), {"/", "/system.slice",
+                                                      "/system.slice/app.scope"})
+
+    def test_bounded_groups_keep_broad_slice_and_report_omissions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for pid in (11, 12, 13, 14):
+                (root / str(pid)).mkdir()
+
+            def info(pid):
+                return {"pid": pid, "start_ticks": pid, "name": "worker",
+                        "vm_swap_kib": 0,
+                        "cgroup": f"/system.slice/app-{pid}.scope"}
+
+            with patch.object(probe, "PROC", root), patch.object(
+                    probe, "process_info", side_effect=info), patch.object(
+                        probe, "MAX_PASSIVE_GROUPS", 2):
+                selected = probe.select_passive()
+            self.assertEqual(selected["coverage"]["discovered_cgroups"], 6)
+            self.assertEqual(selected["coverage"]["selected_cgroups"], 2)
+            self.assertIn("/system.slice", selected["cgroups"])
 
     def test_correlations_do_not_claim_causality_or_reused_pid(self):
         a, b = snapshot(0), snapshot(1, 90)

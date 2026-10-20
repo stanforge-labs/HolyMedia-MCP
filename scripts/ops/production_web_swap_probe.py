@@ -19,8 +19,8 @@ GROUP_KEYS = {"pgmajfault", "workingset_refault_anon", "pgscan", "pgsteal"}
 DAEMONS = ("dockerd", "containerd", "containerd-shim")
 MAX_PIDS = 64
 MAX_GROUPS = 16
-MAX_PASSIVE_PIDS = 64
-MAX_PASSIVE_GROUPS = 128
+MAX_PASSIVE_PIDS = 16
+MAX_PASSIVE_GROUPS = 16
 
 
 def numeric_fields(path, keys):
@@ -85,9 +85,9 @@ def select(web_pid):
 def select_passive():
     """Select current processes and their cgroups without asking Docker.
 
-    The PID list is bounded. Every discovered process cgroup and its ancestors
-    are retained so a later event outside the PID shortlist remains visible at
-    cgroup level. Coverage counts prevent treating an omitted PID as proof.
+    The PID/cgroup lists are bounded. Broad slice parents and the most relevant
+    leaf groups are preferred; omissions are explicit and forbid a complete
+    per-process attribution claim.
     """
     found = []
     groups = {"/"}
@@ -104,21 +104,40 @@ def select_passive():
             continue
         found.append(info)
         path = PurePosixPath(info["cgroup"])
-        while True:
+        while path != PurePosixPath("/"):
             groups.add(str(path))
-            if path == PurePosixPath("/"):
-                break
             path = path.parent
-    if not found or len(groups) > MAX_PASSIVE_GROUPS:
-        raise ValueError("passive_selection_incomplete_or_too_large")
-    found.sort(key=lambda row: (row["vm_swap_kib"],
-                                row["name"].startswith(DAEMONS)), reverse=True)
+    if not found:
+        raise ValueError("passive_selection_incomplete")
+    found.sort(key=lambda row: (row["name"].startswith(DAEMONS),
+                                row["vm_swap_kib"]), reverse=True)
     chosen = found[:MAX_PASSIVE_PIDS]
+    priority = []
+    for name in ("/system.slice", "/user.slice", "/machine.slice"):
+        if name in groups:
+            priority.append(name)
+    for row in chosen:
+        if row["name"].startswith(DAEMONS) and row["cgroup"] not in priority:
+            priority.append(row["cgroup"])
+
+    def score(name):
+        path = CGROUP / name.lstrip("/")
+        try:
+            swap = int((path / "memory.swap.current").read_text())
+            memory = int((path / "memory.current").read_text())
+            return swap, memory
+        except (OSError, ValueError):
+            return 0, 0
+
+    remainder = sorted(groups.difference(priority),
+                       key=lambda name: (score(name), name), reverse=True)
+    selected_groups = (priority + remainder)[:MAX_PASSIVE_GROUPS]
     return {"pids": {str(row["pid"]): row["start_ticks"] for row in chosen},
-            "cgroups": sorted(groups),
+            "cgroups": selected_groups,
             "coverage": {"attempted_pids": attempted, "skipped_pids": skipped,
                          "discovered_pids": len(found), "selected_pids": len(chosen),
-                         "discovered_cgroups": len(groups)}}
+                         "discovered_cgroups": len(groups),
+                         "selected_cgroups": len(selected_groups)}}
 
 
 def correlate(before, after):
