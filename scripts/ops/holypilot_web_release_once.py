@@ -213,7 +213,6 @@ def prepare_release_script(directory):
             "touch \"$backup/web-phase.stopping-old\"\n"
             "docker stop \"$web\" >/dev/null\n[[ $(docker inspect",
         "new up -d --no-deps --no-build --pull never --force-recreate web\nstatus=''":
-            "touch \"$backup/web-phase.old-stopped\"\n"
             "touch \"$backup/web-phase.starting-candidate\"\n"
             "touch \"$backup/web-start.begin\"\n"
             "new up -d --no-deps --no-build --pull never --force-recreate web\n"
@@ -224,6 +223,13 @@ def prepare_release_script(directory):
         if content.count(anchor) != 1:
             raise RuntimeError("release_cache_anchor_mismatch:" + anchor)
         content = content.replace(anchor, replacement, 1)
+    stop_check = 'docker stop "$web" >/dev/null\n[[ $(docker inspect'
+    check_start = content.find(stop_check)
+    check_end = content.find("\n", check_start + len(stop_check)) if check_start >= 0 else -1
+    if check_end < 0 or "== false ]]" not in content[check_start:check_end]:
+        raise RuntimeError("old_web_stopped_check_anchor_mismatch")
+    content = (content[:check_end + 1] + 'touch "$backup/web-phase.old-stopped"\n' +
+               content[check_end + 1:])
     destination = directory / "release-one.sh"
     destination.write_text(content)
     destination.chmod(0o700)

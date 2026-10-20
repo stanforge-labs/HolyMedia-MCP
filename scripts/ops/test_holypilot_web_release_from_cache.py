@@ -181,6 +181,8 @@ status=''
             self.assertIn('touch "$backup/web-phase.stopping-old"\ndocker stop', transformed)
             self.assertLess(transformed.index('touch "$backup/web-phase.stopping-old"'),
                             transformed.index('docker stop "$web"'))
+            self.assertLess(transformed.index("== false ]]"),
+                            transformed.index('touch "$backup/web-phase.old-stopped"'))
             self.assertLess(transformed.index('touch "$backup/web-phase.old-stopped"'),
                             transformed.index('touch "$backup/web-phase.starting-candidate"'))
             self.assertIn('touch "$backup/web-phase.starting-candidate"\n'
