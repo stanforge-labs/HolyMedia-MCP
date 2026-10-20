@@ -926,7 +926,105 @@ describe("MCP V1-compatible policy", () => {
       "get_account_status",
       { provider: "google_ads", account_id: "1234567890" },
     );
-    expect(result).toMatchObject({ account_id: "1234567890" });
+    expect(result).toMatchObject({
+      account_id: "1234567890",
+      source: "v2_database_provider_account",
+    });
+  });
+
+  it("keeps account status DB-only and provider READs scoped to an owned account", async () => {
+    const readCampaigns = vi
+      .fn()
+      .mockResolvedValue({ items: [{ id: "campaign-a", status: "ENABLED" }] });
+    const readHealth = vi.fn().mockResolvedValue({ status: "ok" });
+    const service = serviceWithAccounts([account], {
+      readCampaigns,
+      readHealth,
+    });
+    const owner = principal();
+    await expect(
+      service.call(owner, "get_account_status", {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      }),
+    ).resolves.toMatchObject({
+      source: "v2_database_provider_account",
+      status: "ACTIVE",
+    });
+    expect(readCampaigns).not.toHaveBeenCalled();
+    expect(readHealth).not.toHaveBeenCalled();
+    await expect(
+      service.call(owner, "list_campaigns", {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      }),
+    ).resolves.toMatchObject({ items: [{ id: "campaign-a" }] });
+    await expect(
+      service.call(owner, "get_status_summary", {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      }),
+    ).resolves.toMatchObject({ campaigns: { ENABLED: 1 }, complete: true });
+    await expect(
+      service.call(owner, "run_connection_diagnostics", {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      }),
+    ).resolves.toMatchObject({ status: "ok" });
+    expect(readCampaigns).toHaveBeenCalledTimes(2);
+    expect(readHealth).toHaveBeenCalledOnce();
+    readCampaigns.mockResolvedValueOnce({
+      items: [{ id: "campaign-a", status: "ENABLED" }],
+      nextCursor: "next-page",
+    });
+    await expect(
+      service.call(owner, "get_status_summary", {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      }),
+    ).resolves.toMatchObject({ complete: false, next_cursor: "next-page" });
+    const restrictedOAuth = {
+      kind: "oauth" as const,
+      tokenId: "oauth-access",
+      userId: "owner-a",
+      clientId: "claude-client",
+      grantId: "grant-a",
+      workspaceId: "workspace-a",
+      resource: "https://mcp.holymedia.kz/mcp/public",
+      resourceAccessMode: "ALL_CONNECTED" as const,
+      scopes: ["adforge:mcp:read"],
+      accountIds: ["other-id"],
+    };
+    await expect(
+      service.call(restrictedOAuth, "list_ad_accounts", {}),
+    ).resolves.toEqual([]);
+    for (const denied of [
+      { ...owner, workspaceId: "other-workspace" },
+      { ...owner, accountIds: ["other-id"] },
+      { ...owner, scopes: [] },
+      restrictedOAuth,
+    ])
+      for (const tool of [
+        "get_account_status",
+        "list_campaigns",
+        "get_status_summary",
+        "run_connection_diagnostics",
+      ])
+        await expect(
+          service.call(denied, tool, {
+            provider: "GOOGLE_ADS",
+            account_id: "1234567890",
+          }),
+        ).rejects.toThrow();
+    expect(readCampaigns).toHaveBeenCalledTimes(3);
+    expect(readHealth).toHaveBeenCalledOnce();
+    readCampaigns.mockRejectedValueOnce(new Error("provider failed"));
+    await expect(
+      service.call(owner, "list_campaigns", {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      }),
+    ).rejects.toThrow("provider failed");
   });
 
   it("uses only an enabled GA4 property in the caller workspace for reports", async () => {
