@@ -333,6 +333,54 @@ class ReleaseTests(unittest.TestCase):
                                       "starting-candidate", "candidate-running"])
             self.assertTrue((directory / "published").exists())
 
+    def test_late_watchdog_fail_still_blocks_candidate_compose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "production-only-plan.json").write_text(json.dumps(
+                {"service": "web", "test_checkpoint": {}}))
+
+            class Watcher:
+                returncode = None
+
+                def poll(self):
+                    return None
+
+                def terminate(self):
+                    pass
+
+                def wait(self, timeout=None):
+                    return 0
+
+            def arm(_directory):
+                (directory / "startup-watch-unexecuted.py").write_text("# fake\n")
+                (directory / "startup-watch.ready").touch()
+
+            original_record_phase = release.record_phase
+
+            def phase(run_dir, service, label):
+                original_record_phase(run_dir, service, label)
+                if label == "starting-candidate":
+                    (directory / "startup-watch.fail").write_text("swap_in")
+
+            with patch.object(release, "verify_plan"), \
+                    patch.object(release, "guard"), \
+                    patch.object(release.legacy, "immediate", return_value={}), \
+                    patch.object(release.legacy, "ensure_immediate_preflight"), \
+                    patch.object(release.legacy, "prepare_startup_watcher", side_effect=arm), \
+                    patch.object(release.subprocess, "Popen", return_value=Watcher()), \
+                    patch.object(release, "record_phase", side_effect=phase), \
+                    patch.object(release, "command"), \
+                    patch.object(release, "docker_state", return_value={
+                        "holymedia-v2-web-1": {"status": "exited"}}), \
+                    patch.object(release, "compose_replace") as compose, \
+                    patch.object(release.subprocess, "run", return_value=type(
+                        "Result", (), {"returncode": 0})()) as rollback:
+                with self.assertRaisesRegex(RuntimeError,
+                                            "startup_resource_fail_before_candidate_compose"):
+                    release.execute(directory)
+            compose.assert_not_called()
+            rollback.assert_called_once()
+
     def test_recovery_rolls_back_once_without_starting_test(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)

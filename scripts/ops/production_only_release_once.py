@@ -313,6 +313,8 @@ def execute(run_dir):
             raise RuntimeError("startup_resource_fail_before_start")
         record_phase(run_dir, service, "starting-candidate")
         (run_dir / f"{service}-start.begin").touch(mode=0o600)
+        if (run_dir / "startup-watch.fail").exists():
+            raise RuntimeError("startup_resource_fail_before_candidate_compose")
         compose_replace(run_dir, service, "new")
         record_phase(run_dir, service, "candidate-running")
         (run_dir / f"{service}-start.running").touch(mode=0o600)

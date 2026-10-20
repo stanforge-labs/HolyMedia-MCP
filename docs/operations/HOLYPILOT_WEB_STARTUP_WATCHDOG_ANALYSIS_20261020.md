@@ -57,6 +57,9 @@ at candidate start. The startup trace uses these phase names; an attempted
 cutover that does not reach `candidate-running` within the original 180-second
 window fails closed. The legacy nine-container script transform was aligned,
 although that runner remains disabled for the retired-TEST topology.
+The adapter also rechecks the watchdog failure marker immediately before
+candidate Compose, closing a narrow interval between the old-stop check and
+the start command.
 
 No watchdog numeric threshold, sampling interval, timeout, resource guard,
 TEST state or production service was changed. The current recovery still makes
