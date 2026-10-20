@@ -120,7 +120,9 @@ export class LegacyGoogleLoginController {
       this.cookieOptions(),
     );
     return {
-      url: result.onboardingRequired ? "/onboarding" : stateResult.nextPath,
+      url: this.returnUrl(
+        result.onboardingRequired ? "/onboarding" : stateResult.nextPath,
+      ),
       statusCode: 302,
     };
   }
@@ -148,7 +150,18 @@ export class LegacyGoogleLoginController {
           : reason === "google_oauth"
             ? "google_oauth"
             : "google_provider";
-    return { url: `/auth?error=${userFacingError}`, statusCode: 302 };
+    return {
+      url: this.returnUrl(`/auth?error=${userFacingError}`),
+      statusCode: 302,
+    };
+  }
+
+  private returnUrl(path: string): string {
+    // Local TEST splits Web and API across two loopback ports. Relative
+    // callback redirects would otherwise land on the API's nonexistent /auth.
+    return this.config.qrsTestLocalReadonlyAuth
+      ? new URL(path, this.config.publicBaseUrl).toString()
+      : path;
   }
 
   private cookieOptions() {

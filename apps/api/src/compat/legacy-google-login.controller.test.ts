@@ -3,10 +3,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GoogleLoginFailure } from "../auth/google-login.service.js";
 import { LegacyGoogleLoginController } from "./legacy-google-login.controller.js";
 
-function setup() {
-  vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("HOLYMEDIA_PUBLIC_BASE_URL", "https://mcp-test.holymedia.kz");
-  vi.stubEnv("CORS_ORIGINS", "https://mcp-test.holymedia.kz");
+function setup(localReadonly = false) {
+  vi.stubEnv("NODE_ENV", localReadonly ? "development" : "test");
+  vi.stubEnv(
+    "HOLYMEDIA_PUBLIC_BASE_URL",
+    localReadonly ? "http://127.0.0.1:23300" : "https://mcp-test.holymedia.kz",
+  );
+  vi.stubEnv(
+    "CORS_ORIGINS",
+    localReadonly ? "http://127.0.0.1:23300" : "https://mcp-test.holymedia.kz",
+  );
+  if (localReadonly) {
+    vi.stubEnv("QRS_TEST_LOCAL_READONLY_AUTH", "true");
+    vi.stubEnv(
+      "PROVIDER_GOOGLE_REDIRECT_URI",
+      "http://127.0.0.1:24404/oauth/google/callback",
+    );
+  }
   vi.stubEnv("GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST", "8590146099");
   vi.stubEnv("QRS_TEST_RESTRICTED_AUTH", "true");
   const google = {
@@ -125,5 +138,21 @@ describe("restricted TEST Google callback failure categories", () => {
       statusCode: 302,
     });
     expect(cookies.setSession).toHaveBeenCalledOnce();
+  });
+
+  it("returns to the Web port after local TEST success", async () => {
+    const { callback } = setup(true);
+    expect(await callback()).toEqual({
+      url: "http://127.0.0.1:23300/auth?connected=1",
+      statusCode: 302,
+    });
+  });
+
+  it("returns local TEST errors to the Web port", async () => {
+    const { callback } = setup(true);
+    expect(await callback("access_denied")).toEqual({
+      url: "http://127.0.0.1:23300/auth?error=google_oauth",
+      statusCode: 302,
+    });
   });
 });
