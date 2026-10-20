@@ -8,7 +8,8 @@ run_dir=${1:?protected run directory required}
   echo 'PRODUCTION_ONLY_CHECKPOINT_REQUIRED' >&2; exit 80;
 }
 [[ -f "$run_dir/cutover-attempted" ]] || exit 0
-[[ ! -f "$run_dir/published" ]] || exit 0
+# A critical visual or route failure discovered just after publication must
+# still allow the one protected rollback. rollback-attempted blocks repeats.
 
 python3 - "$run_dir" <<'PY'
 import json
@@ -93,5 +94,6 @@ if (inspect(target, "{{.Image}}") != plan["old_image_id"] or
 test_still_retired()
 other_production_healthy()
 ready()
+(run_dir / "rolled-back").touch(mode=0o600)
 print("ROLLBACK_VERIFIED; TEST_STILL_STOPPED")
 PY

@@ -24,7 +24,8 @@ BASE = Path("/opt/adforge-mcp-v2/infra/docker-compose.v2.production.yml")
 ENV = Path("/etc/holymedia-v2/compose.env")
 CONFIGS = {"base-compose.yml": BASE, "compose.env": ENV,
            "app.env": Path("/etc/holymedia-v2/app.env"),
-           "web.env": Path("/etc/holymedia-v2/web.env")}
+           "web.env": Path("/etc/holymedia-v2/web.env"),
+           "nginx-site": Path("/etc/nginx/sites-enabled/adforge-mcp")}
 CHECKPOINT = Path("/var/backups/adforge-mcp/holypilot-test-retire-20261020T0858Z/checkpoint.json")
 HERE = Path(__file__).resolve().parent
 RECOVER = HERE / "holypilot_web_release_recover.sh"
@@ -214,6 +215,38 @@ def wait_healthy(name, watcher=None, fail_path=None):
     raise RuntimeError("container_health_timeout")
 
 
+def verify_web_functionality():
+    """Check the published brand and existing public/API boundaries before PASS."""
+    origin = "https://mcp.holymedia.kz"
+
+    def fetch(path):
+        raw = command(["curl", "-fsS", "--max-time", "5", "-w", "\n%{http_code}",
+                       origin + path], timeout=10).stdout
+        body, separator, status = raw.rpartition("\n")
+        if not separator or status.strip() != "200":
+            raise RuntimeError("public_route_http_status:" + path)
+        return body
+
+    ru = fetch("/")
+    en = fetch("/en")
+    symbol = "/assets/brand/holy-pilot-symbol.svg"
+    for html, tagline in ((ru, "Ваш персональный AI-маркетолог"),
+                          (en, "Your personal AI marketer")):
+        if (html.count("HolyPilot") < 2 or html.count(symbol) < 2 or
+                tagline not in html):
+            raise RuntimeError("published_brand_content_mismatch")
+    if "<svg" not in fetch(symbol) or "<svg" not in fetch("/icon.svg"):
+        raise RuntimeError("brand_asset_or_favicon_missing")
+    for route in ("/health", "/ready", "/auth", "/mcp/approve",
+                  "/.well-known/oauth-authorization-server",
+                  "/.well-known/oauth-protected-resource/mcp"):
+        fetch(route)
+    status = command(["curl", "-sS", "--max-time", "5", "-o", "/dev/null",
+                      "-w", "%{http_code}", origin + "/mcp"], timeout=10).stdout.strip()
+    if status != "401":
+        raise RuntimeError("mcp_unauthorized_boundary_changed")
+
+
 def execute(run_dir):
     plan = json.loads((run_dir / "production-only-plan.json").read_text())
     service = plan["service"]
@@ -266,13 +299,14 @@ def execute(run_dir):
         rows = verify_plan(plan, run_dir, after_cutover=True)
         if rows[target]["image"] != plan["new_image_id"]:
             raise RuntimeError("started_image_mismatch")
-        for route in ("/health", "/ready", "/", "/en", "/auth", "/mcp/approve"):
-            command(["curl", "-fsS", "--max-time", "5", "-o", "/dev/null",
-                     "https://mcp.holymedia.kz" + route])
+        if service == "web":
+            verify_web_functionality()
         if watcher.wait(timeout=190):
             raise RuntimeError("startup_watchdog_fail")
         guard(run_dir, checkpoint_path, "poststart")
         verify_plan(plan, run_dir, after_cutover=True)
+        if service == "web":
+            verify_web_functionality()
         (run_dir / "published").touch(mode=0o600)
     except BaseException as error:
         if cutover:

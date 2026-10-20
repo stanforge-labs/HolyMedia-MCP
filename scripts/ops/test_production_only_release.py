@@ -18,6 +18,55 @@ from test_production_only_guard import fixture  # noqa: E402
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_web_functionality_checks_brand_routes_and_mcp_boundary(self):
+        def response(args, **_kwargs):
+            path = args[-1]
+            if path == "https://mcp.holymedia.kz/mcp":
+                return type("Result", (), {"stdout": "401"})()
+            if path.endswith("/en"):
+                body = "HolyPilot HolyPilot " + "/assets/brand/holy-pilot-symbol.svg " * 2 + "Your personal AI marketer"
+            elif path == "https://mcp.holymedia.kz/":
+                body = "HolyPilot HolyPilot " + "/assets/brand/holy-pilot-symbol.svg " * 2 + "Ваш персональный AI-маркетолог"
+            elif path.endswith(".svg"):
+                body = "<svg></svg>"
+            else:
+                body = "OK"
+            return type("Result", (), {"stdout": body + "\n200"})()
+
+        with patch.object(release, "command", side_effect=response) as command:
+            release.verify_web_functionality()
+        self.assertEqual(command.call_count, 11)
+
+        def no_brand(args, **kwargs):
+            result = response(args, **kwargs)
+            if args[-1] == "https://mcp.holymedia.kz/en":
+                result = type("Result", (), {"stdout": "old brand\n200"})()
+            return result
+
+        with patch.object(release, "command", side_effect=no_brand):
+            with self.assertRaisesRegex(RuntimeError, "published_brand_content_mismatch"):
+                release.verify_web_functionality()
+
+        def redirected_auth(args, **kwargs):
+            result = response(args, **kwargs)
+            if args[-1] == "https://mcp.holymedia.kz/auth":
+                result = type("Result", (), {"stdout": "\n302"})()
+            return result
+
+        with patch.object(release, "command", side_effect=redirected_auth):
+            with self.assertRaisesRegex(RuntimeError, "public_route_http_status:/auth"):
+                release.verify_web_functionality()
+
+        def open_mcp(args, **kwargs):
+            result = response(args, **kwargs)
+            if args[-1] == "https://mcp.holymedia.kz/mcp":
+                result = type("Result", (), {"stdout": "200"})()
+            return result
+
+        with patch.object(release, "command", side_effect=open_mcp):
+            with self.assertRaisesRegex(RuntimeError, "mcp_unauthorized_boundary_changed"):
+                release.verify_web_functionality()
+
     def test_prepare_stages_protected_checkpoint_without_container_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -116,6 +165,7 @@ class ReleaseTests(unittest.TestCase):
                 config_paths={"safe-config": str(config)},
                 config_sha256={"safe-config": hashlib.sha256(b"snapshot").hexdigest()})))
             (run / "cutover-attempted").touch()
+            (run / "published").touch()  # A late functional failure can still roll back once.
             (run / "old-web.yml").write_text("services: {}\n")
             state = directory / "state.json"
             state.write_text(json.dumps({"web_image": "sha256:new", "web_status": "running"}))
@@ -167,6 +217,7 @@ elif args[0]=='stop':
             self.assertNotIn("start ", commands)
             self.assertIn("--pull never", commands)
             self.assertTrue((run / "rollback-attempted").exists())
+            self.assertTrue((run / "rolled-back").exists())
 
 
 if __name__ == "__main__":
