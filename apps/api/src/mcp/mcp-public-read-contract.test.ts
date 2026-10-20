@@ -49,6 +49,12 @@ describe("public MCP READ contract", () => {
         validatePublicReadArguments(name, { ...account, provider: "google" }),
       ).toThrow(/provider/);
       expect(() =>
+        validatePublicReadArguments(name, { ...account, provider: null }),
+      ).toThrow(/provider/);
+      expect(() =>
+        validatePublicReadArguments(name, { ...account, account_id: null }),
+      ).toThrow(/account_id/);
+      expect(() =>
         validatePublicReadArguments(name, {
           ...account,
           workspace_id: "other",

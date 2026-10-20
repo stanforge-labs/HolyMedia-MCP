@@ -58,6 +58,10 @@ jobs:
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
+          if [[ "${{ matrix.service }}" != web ]]; then
+            pnpm --dir packages/database run prisma:generate
+          fi
+          pnpm exec turbo run build --filter="@holymedia/${{ matrix.service }}..."
           pnpm --filter "@holymedia/${{ matrix.service }}" lint
           pnpm --filter "@holymedia/${{ matrix.service }}" test
       - uses: docker/setup-buildx-action@v3
