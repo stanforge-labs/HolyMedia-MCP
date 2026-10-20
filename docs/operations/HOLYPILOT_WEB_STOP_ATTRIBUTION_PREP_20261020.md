@@ -69,7 +69,7 @@ watchdog FAIL, exact-ID direct start, one cached Compose fallback, unrelated
 production/TEST drift and interrupted recovery. Local WSL systemd transient
 service tests confirmed that `ExecStopPost` runs after a failed main process.
 In a local 40-snapshot overhead sample with 13 selected PIDs and three
-cgroups, p95 was 2.93 ms and max 3.00 ms. Before any VPS stop, the scenario
+cgroups, p95 was 3.40 ms and max 3.88 ms. Before any VPS stop, the scenario
 benchmarks the actual selection and refuses to proceed above 20 ms p95 or
 40 ms max. These local measurements do not predict the VPS result.
 

@@ -93,7 +93,9 @@ def capture(selection, phase):
     for line in (PROC / "pressure" / "memory").read_text().splitlines():
         parts = line.split()
         if parts and parts[0] in ("some", "full"):
-            psi[parts[0]] = float(parts[1].split("=", 1)[1])
+            fields = dict(part.split("=", 1) for part in parts[1:])
+            psi[parts[0]] = {"avg10": float(fields["avg10"]),
+                             "total_us": int(fields["total"])}
     if set(psi) != {"some", "full"}:
         raise ValueError("host_psi_incomplete")
     pids = {}

@@ -36,6 +36,7 @@ class ProbeTests(unittest.TestCase):
             with patch.object(probe, "PROC", proc), patch.object(probe, "CGROUP", group):
                 snap = probe.capture(selection, "before-stop")
                 self.assertEqual(snap["host"]["vm"]["pswpin"], 70)
+                self.assertEqual(snap["host"]["psi"]["full"]["total_us"], 0)
                 self.assertEqual(snap["pids"]["42"]["major_faults"], 17)
                 self.assertEqual(snap["pids"]["42"]["vm_swap_kib"], 64)
                 self.assertEqual(snap["cgroups"]["/system.slice/web.scope"]["swap_bytes"], 4096)
