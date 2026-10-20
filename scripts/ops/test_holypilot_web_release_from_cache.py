@@ -10,6 +10,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+# The existing foundation CI step selects this file by name. Import the new
+# production-only regressions here without changing the workflow or old guard.
+from test_production_only_guard import GuardTests  # noqa: F401
+from test_production_only_release import ReleaseTests  # noqa: F401
+
 
 SCRIPT = Path(__file__).with_name("holypilot_web_release_once.py")
 SPEC = importlib.util.spec_from_file_location("holypilot_web_release_once", SCRIPT)
@@ -76,6 +81,18 @@ class CachedImageTests(unittest.TestCase):
 
 
 class GuardAndReleaseTests(unittest.TestCase):
+    def test_legacy_nine_container_runner_rejects_retired_test_before_mutation(self):
+        snapshot = {name: {"status": "running", "health": "healthy"} for name in release.PROD}
+        snapshot.update({name: {"status": "exited", "health": "none"}
+                         for name in release.TEST + release.DATA})
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(release, "sha", return_value=release.GUARD_SHA), \
+                patch.object(release, "inventory", return_value=snapshot), \
+                patch.object(release, "run") as command:
+            with self.assertRaisesRegex(RuntimeError, "legacy_nine_container_release_disabled"):
+                release.main(Path(temp) / "fresh")
+            command.assert_not_called()
+
     def test_cache_mode_must_be_explicit(self):
         result = subprocess.run([sys.executable, str(SCRIPT), "/tmp/not-a-release"],
                                 capture_output=True, text=True, check=False)

@@ -231,6 +231,8 @@ def main(directory):
     if sha(GUARD) != GUARD_SHA:
         raise RuntimeError("original_guard_sha_mismatch")
     first = inventory()
+    if all(first[name]["status"] == "exited" for name in TEST + DATA):
+        raise RuntimeError("legacy_nine_container_release_disabled_for_production_only_topology")
     if any(first[name]["status"] != "running" or first[name]["health"] != "healthy" or
            first[name]["oom"] != "false" for name in ALL):
         raise RuntimeError("initial_container_health_fail")
