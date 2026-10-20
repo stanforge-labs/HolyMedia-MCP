@@ -108,6 +108,8 @@ def prepare(service, run_dir):
     test_checkpoint = load_checkpoint(CHECKPOINT)
     rows = docker_state()
     verify_topology(rows, test_checkpoint)
+    if service == "web":
+        legacy.ensure_immediate_preflight(legacy.immediate())
     pending_operations()
     target = "holymedia-v2-" + service + "-1"
     old_id = rows[target]["image"]
@@ -262,6 +264,9 @@ def execute(run_dir):
     verify_plan(plan, run_dir)
     guard(run_dir, checkpoint_path, "precutover")
     verify_plan(plan, run_dir)
+    if service == "web":
+        # Preserve the separately approved 11,500 MiB cache-only preflight.
+        legacy.ensure_immediate_preflight(legacy.immediate())
     # Reuse the exact-SHA existing 180-second startup watchdog. It is staged
     # only after the pre-cutover guard, with no TEST restoration code.
     legacy.prepare_startup_watcher(run_dir)

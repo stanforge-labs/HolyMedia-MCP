@@ -84,6 +84,8 @@ class ReleaseTests(unittest.TestCase):
                     patch.object(release, "baseline_image", return_value="ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:old"), \
                     patch.object(release, "candidate_image", return_value="ghcr.io/stanforge-labs/holymedia-mcp-v2@sha256:new"), \
                     patch.object(release, "image_document", return_value={"Id": "sha256:new"}), \
+                    patch.object(release.legacy, "immediate", return_value={"disk_mib": 11704}), \
+                    patch.object(release.legacy, "ensure_immediate_preflight"), \
                     patch.object(release.legacy, "sha", return_value=release.legacy.WATCH_SHA), \
                     patch.object(release, "command") as command:
                 run = base / "run"
