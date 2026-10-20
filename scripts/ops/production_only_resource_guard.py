@@ -47,7 +47,7 @@ def docker_state():
     return rows
 
 
-def host_sample(elapsed):
+def host_sample(start):
     mem = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
         parts = line.split()
@@ -67,7 +67,7 @@ def host_sample(elapsed):
             "pswpout", "pswpin", "pgmajfault", "oom_kill"} or set(psi) != {"some", "full"}:
         raise ValueError("host_metric_unavailable")
     disk = os.statvfs("/")
-    return dict(t=elapsed, mem_available_kib=mem["MemAvailable"],
+    return dict(t=time.monotonic() - start, mem_available_kib=mem["MemAvailable"],
         swap_free_kib=mem["SwapFree"],
         disk_free_mib=disk.f_bavail * disk.f_frsize // 1048576,
         psi_full_avg10=psi["full"], psi_some_avg10=psi["some"], **vm)
@@ -112,16 +112,15 @@ def load_checkpoint(path):
 
 def observe(checkpoint, trace):
     start = time.monotonic()
-    deadline = start + LIMITS["duration_s"]
     opener = urllib.request.build_opener(NoRedirect())
     samples, observations, window = [], [], deque()
     reasons = []
     next_external = start
     baseline = None
     while True:
-        now = time.monotonic()
-        sample = host_sample(now - start)
+        sample = host_sample(start)
         samples.append(sample)
+        full_interval = sample["t"] - samples[0]["t"] >= LIMITS["duration_s"]
         window.append(sample)
         while len(window) > 1 and window[1]["t"] <= sample["t"] - 60:
             window.popleft()
@@ -129,7 +128,7 @@ def observe(checkpoint, trace):
         reasons.extend(metric_reasons(sample, samples[0], window[0]))
         if len(samples) > 1 and sample["t"] - samples[-2]["t"] > LIMITS["max_sample_gap_s"]:
             reasons.append("sample_gap_or_clock_error")
-        if now >= next_external or now >= deadline:
+        if start + sample["t"] >= next_external or full_interval:
             rows = docker_state()
             if baseline is None:
                 baseline = rows
@@ -142,13 +141,18 @@ def observe(checkpoint, trace):
             reasons.extend(http_reasons(probes, event["swap_out_delta"]))
             next_external = time.monotonic() + 30
         trace.flush()
-        if reasons or time.monotonic() >= deadline:
+        if reasons or full_interval:
             break
+        deadline = start + samples[0]["t"] + LIMITS["duration_s"]
         time.sleep(min(1, max(0, deadline - time.monotonic())))
     result = evaluate_trace(samples, observations, checkpoint)
     result["reasons"] = sorted(set(result["reasons"] + reasons))
     if result["reasons"]:
         result["status"] = "FAIL"
+    trace.write(json.dumps({"type": "result", "status": result["status"],
+                            "reasons": result["reasons"],
+                            "duration_exact_s": result["duration_exact_s"]},
+                           sort_keys=True) + "\n")
     return result
 
 

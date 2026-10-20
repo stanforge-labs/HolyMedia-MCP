@@ -192,7 +192,7 @@ def guard(run_dir, checkpoint_path, name):
     if completed.returncode:
         raise RuntimeError(name + "_guard_fail")
     result = json.loads(result_path.read_text())
-    if result.get("status") != "PASS" or result.get("duration_s", 0) < 600:
+    if result.get("status") != "PASS" or result.get("duration_exact_s", 0) < 600:
         raise RuntimeError(name + "_guard_incomplete")
     return result
 

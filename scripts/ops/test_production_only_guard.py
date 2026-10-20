@@ -1,6 +1,8 @@
 """Offline regression of the five-service guard and exact resource ceilings."""
 
 import importlib.util
+import io
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -49,6 +51,91 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(policy.LIMITS["mem_available_kib"], 819200)
         self.assertEqual(policy.LIMITS["disk_free_mib"], 10240)
         self.assertEqual(policy.LIMITS, historical.LIMITS)
+
+    def test_exact_duration_boundary_never_uses_rounded_value(self):
+        for duration, expected in ((599.999737, "FAIL"), (600.0, "PASS"),
+                                   (600.000263, "PASS")):
+            with self.subTest(duration=duration):
+                samples, events, checkpoint = fixture()
+                samples[-1]["t"] = duration
+                events[-1]["t"] = duration
+                result = policy.evaluate_trace(samples, events, checkpoint)
+                self.assertEqual(result["status"], expected)
+                self.assertEqual(result["duration_exact_s"], duration)
+                if expected == "FAIL":
+                    self.assertEqual(result["duration_s"], 600.0)
+                    self.assertIn("observation_incomplete", result["reasons"])
+
+    def run_observe_with_clock(self, *, fail_final_docker=False, fail_final_http=False):
+        class Clock:
+            now = 0.0
+            near_miss = False
+
+            def monotonic(self):
+                return self.now
+
+            def sleep(self, seconds):
+                target = self.now + seconds
+                if not self.near_miss and target >= 600.000857:
+                    self.now = 600.000594
+                    self.near_miss = True
+                else:
+                    self.now = target
+
+        clock = Clock()
+        samples, events, checkpoint = fixture()
+        template = samples[0]
+        rows = events[0]["containers"]
+        probes = events[0]["http"]
+
+        def host_sample(start):
+            if clock.now == 0:
+                clock.now = 0.000857
+            return {**template, "t": clock.now - start}
+
+        def docker_state():
+            if fail_final_docker and clock.now >= 600.000857:
+                changed = {name: value.copy() for name, value in rows.items()}
+                changed[policy.TEST[0]]["status"] = "running"
+                return changed
+            return rows
+
+        def probe_http(_opener):
+            if fail_final_http and clock.now >= 600.000857:
+                changed = {name: value.copy() for name, value in probes.items()}
+                changed["ready"]["status"] = 503
+                return changed
+            return probes
+
+        trace = io.StringIO()
+        with patch.object(guard.time, "monotonic", side_effect=clock.monotonic), \
+                patch.object(guard.time, "sleep", side_effect=clock.sleep), \
+                patch.object(guard, "host_sample", side_effect=host_sample), \
+                patch.object(guard, "docker_state", side_effect=docker_state), \
+                patch.object(guard, "probe_http", side_effect=probe_http), \
+                patch.object(guard.urllib.request, "build_opener", return_value=object()):
+            result = guard.observe(checkpoint, trace)
+        return result, [json.loads(line) for line in trace.getvalue().splitlines()]
+
+    def test_observer_waits_for_full_recorded_interval_and_final_check(self):
+        result, trace = self.run_observe_with_clock()
+        recorded = [event["t"] for event in trace if event["type"] == "sample"]
+        self.assertTrue(any(0 < t - recorded[0] < 600 for t in recorded if t >= 600))
+        self.assertGreaterEqual(recorded[-1] - recorded[0], 600)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["duration_exact_s"], recorded[-1] - recorded[0])
+        self.assertEqual(trace[-2]["type"], "external")
+        self.assertEqual(trace[-2]["t"], recorded[-1])
+        self.assertEqual(trace[-1]["duration_exact_s"], result["duration_exact_s"])
+
+    def test_final_docker_and_http_checks_cannot_be_skipped(self):
+        for failure, reason in (("fail_final_docker", "test_not_stopped:" + policy.TEST[0]),
+                                ("fail_final_http", "ready_http_status")):
+            with self.subTest(failure=failure):
+                result, trace = self.run_observe_with_clock(**{failure: True})
+                self.assertEqual(result["status"], "FAIL")
+                self.assertIn(reason, result["reasons"])
+                self.assertGreaterEqual(trace[-2]["t"], 600)
 
     def test_unexpected_running_test_and_identity_change(self):
         self.assert_fail(lambda s, e, c: e[4]["containers"].__setitem__(

@@ -110,9 +110,10 @@ def http_reasons(probes, swap_out_delta=0):
 def evaluate_trace(samples, observations, checkpoint):
     """A missing sample, Docker check or route measurement can never PASS."""
     reasons = []
+    duration = samples[-1]["t"] - samples[0]["t"] if samples else 0
     if len(samples) < 301 or any(set(row) < set(SAMPLE_KEYS) for row in samples):
-        return {"profile": PROFILE, "status": "FAIL", "reasons": ["observation_incomplete"]}
-    duration = samples[-1]["t"] - samples[0]["t"]
+        return {"profile": PROFILE, "status": "FAIL", "reasons": ["observation_incomplete"],
+                "duration_s": round(duration, 3), "duration_exact_s": duration}
     if duration < LIMITS["duration_s"]:
         reasons.append("observation_incomplete")
     if any(b["t"] <= a["t"] or b["t"] - a["t"] > LIMITS["max_sample_gap_s"]
@@ -149,6 +150,7 @@ def evaluate_trace(samples, observations, checkpoint):
     return {
         "profile": PROFILE, "status": "FAIL" if reasons else "PASS",
         "reasons": sorted(set(reasons)), "duration_s": round(duration, 3),
+        "duration_exact_s": duration,
         "sample_count": len(samples), "external_checks": len(observations),
         "min_mem_available_kib": min(row["mem_available_kib"] for row in samples),
         "min_swap_free_kib": min(row["swap_free_kib"] for row in samples),

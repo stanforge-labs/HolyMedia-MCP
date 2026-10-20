@@ -156,6 +156,25 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("required", result.stderr)
 
+    def test_release_guard_requires_exact_duration_from_result(self):
+        for exact, expected_pass in ((599.999737, False), (600.0, True)):
+            with self.subTest(exact=exact), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+
+                def completed(_args, **kwargs):
+                    kwargs["stdout"].write(json.dumps({"status": "PASS", "duration_s": 600.0,
+                                                       "duration_exact_s": exact}))
+                    kwargs["stdout"].flush()
+                    return type("Result", (), {"returncode": 0})()
+
+                with patch.object(release.subprocess, "run", side_effect=completed):
+                    if expected_pass:
+                        self.assertEqual(release.guard(directory, directory / "checkpoint.json",
+                                                       "precutover")["duration_exact_s"], exact)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "precutover_guard_incomplete"):
+                            release.guard(directory, directory / "checkpoint.json", "precutover")
+
     def test_recovery_rolls_back_once_without_starting_test(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
