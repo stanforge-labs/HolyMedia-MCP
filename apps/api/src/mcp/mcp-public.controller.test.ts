@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { McpService } from "./mcp.service.js";
 import { PUBLIC_READ_TOOLS, PUBLIC_TOOL_NAMES } from "./mcp-public-tools.js";
+import { ProviderError } from "../providers/provider.errors.js";
+import { ForbiddenException } from "@nestjs/common";
 
 function reply() {
   const value = { code: vi.fn(), header: vi.fn(), send: vi.fn() };
@@ -234,5 +236,134 @@ describe("public MCP transport", () => {
     await expect(
       controller.getPublic(request("initialize"), reply() as never),
     ).rejects.toMatchObject({ status: 405 });
+  });
+
+  it("rejects malformed public READ calls before billing or provider dispatch", async () => {
+    const read = vi.fn();
+    const billing = vi.fn();
+    const controller = new McpController(
+      { tools: () => [], call: read } as never,
+      { authenticate: vi.fn() } as never,
+      {
+        authenticate: vi.fn().mockResolvedValue({
+          kind: "oauth",
+          workspaceId: "workspace-a",
+          scopes: ["adforge:mcp:read"],
+          accountIds: [],
+        }),
+      } as never,
+      { consumeMcpRequest: billing } as never,
+      { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
+    );
+    for (const name of [
+      "get_account_status",
+      "list_campaigns",
+      "run_connection_diagnostics",
+      "get_status_summary",
+    ]) {
+      const result = (await controller.postPublic(
+        request("tools/call", name),
+        reply() as never,
+      )) as { result: { content: Array<{ text: string }> } };
+      expect(JSON.parse(result.result.content[0]!.text)).toMatchObject({
+        code: "invalid_arguments",
+        field: "provider",
+      });
+    }
+    expect(read).not.toHaveBeenCalled();
+    expect(billing).not.toHaveBeenCalled();
+  });
+
+  it("returns safe public READ codes for account, provider and internal failures", async () => {
+    const read = vi.fn();
+    const controller = new McpController(
+      { tools: () => [], call: read } as never,
+      { authenticate: vi.fn() } as never,
+      {
+        authenticate: vi.fn().mockResolvedValue({
+          kind: "oauth",
+          workspaceId: "workspace-a",
+          scopes: ["adforge:mcp:read"],
+          accountIds: ["owned-id"],
+        }),
+      } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
+    );
+    for (const [failure, code] of [
+      [
+        new ForbiddenException(
+          "Account is not available to this service token.",
+        ),
+        "account_unavailable",
+      ],
+      [
+        new ProviderError("token_expired", "SECRET access token"),
+        "provider_auth_expired",
+      ],
+      [
+        new ProviderError("rate_limited", "SECRET rate payload"),
+        "rate_limited",
+      ],
+      [new Error("SECRET stack"), "internal_error"],
+    ] as const) {
+      read.mockRejectedValueOnce(failure);
+      const req = request("tools/call", "list_campaigns") as {
+        body: { params: { arguments: unknown } };
+      };
+      req.body.params.arguments = {
+        provider: "GOOGLE_ADS",
+        account_id: "1234567890",
+      };
+      const result = (await controller.postPublic(
+        req as never,
+        reply() as never,
+      )) as { result: { content: Array<{ text: string }> } };
+      const output = result.result.content[0]!.text;
+      expect(JSON.parse(output).code).toBe(code);
+      expect(output).not.toContain("SECRET");
+    }
+    expect(read).toHaveBeenCalledTimes(4);
+  });
+
+  it("reports the billing gate separately from account/provider failures", async () => {
+    const read = vi.fn();
+    const billing = vi
+      .fn()
+      .mockRejectedValue(
+        new ForbiddenException("Feature is not available for this workspace."),
+      );
+    const controller = new McpController(
+      { tools: () => [], call: read } as never,
+      { authenticate: vi.fn() } as never,
+      {
+        authenticate: vi.fn().mockResolvedValue({
+          kind: "oauth",
+          workspaceId: "workspace-a",
+          scopes: ["adforge:mcp:read"],
+          accountIds: [],
+        }),
+      } as never,
+      { consumeMcpRequest: billing } as never,
+      { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
+    );
+    const req = request("tools/call", "get_account_status") as {
+      body: { params: { arguments: unknown } };
+    };
+    req.body.params.arguments = {
+      provider: "GOOGLE_ADS",
+      account_id: "1234567890",
+    };
+    const result = (await controller.postPublic(
+      req as never,
+      reply() as never,
+    )) as { result: { content: Array<{ text: string }> } };
+    expect(JSON.parse(result.result.content[0]!.text)).toMatchObject({
+      code: "billing_unavailable",
+    });
+    expect(read).not.toHaveBeenCalled();
   });
 });

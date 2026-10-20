@@ -36,6 +36,8 @@ import {
   isPublicToolAvailable,
   publicTools,
 } from "./mcp-public-tools.js";
+import { validatePublicReadArguments } from "./mcp-public-read-contract.js";
+import { publicReadFailure } from "./mcp-public-read-errors.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
 type JsonRpcRequest = {
@@ -298,6 +300,8 @@ export class McpController {
           !isPublicToolAvailable(name, this.publicWriteScopeEnabled)
         )
           throw new PreviewError("public_operation_not_available");
+        if (publicRoute && isPublicReadTool(name))
+          validatePublicReadArguments(name, params.arguments ?? {});
         await this.billing.consumeMcpRequest(principal.workspaceId);
         let result: unknown;
         if (publicRoute && !isPublicReadTool(name)) {
@@ -429,7 +433,8 @@ export class McpController {
               error instanceof PreviewError || error instanceof MetaReadError
                 ? error.code
                 : undefined,
-            ...(error instanceof MetaReadError
+            ...(error instanceof MetaReadError &&
+            !(publicRoute && isPublicReadTool(name))
               ? {
                   provider: error.provider,
                   operation: error.operation,
@@ -478,7 +483,11 @@ export class McpController {
           },
           "MCP tool execution failed",
         );
-        const message = mcpFailureMessage(error);
+        const publicFailure =
+          publicRoute && isPublicReadTool(name)
+            ? publicReadFailure(error)
+            : undefined;
+        const message = publicFailure?.message ?? mcpFailureMessage(error);
         return {
           jsonrpc: "2.0",
           id,
@@ -489,22 +498,26 @@ export class McpController {
                 type: "text",
                 text: JSON.stringify({
                   message,
-                  ...(error instanceof MetaReadError
+                  ...(publicFailure ? publicFailure : {}),
+                  ...(!publicFailure && error instanceof MetaReadError
                     ? error.publicResult()
                     : {}),
-                  ...(error instanceof PreviewError
+                  ...(!publicFailure && error instanceof PreviewError
                     ? { code: error.code }
                     : {}),
-                  ...googleAdsMcpErrorFields(error),
-                  ...(error instanceof ProviderError &&
+                  ...(!publicFailure ? googleAdsMcpErrorFields(error) : {}),
+                  ...(!publicFailure &&
+                  error instanceof ProviderError &&
                   error.code === "invalid_request"
                     ? { code: error.code, provider: "GOOGLE_ADS" }
                     : {}),
-                  ...(error instanceof ProviderError &&
+                  ...(!publicFailure &&
+                  error instanceof ProviderError &&
                   error.code === "not_supported_for_google_ads"
                     ? { code: error.code, provider: "GOOGLE_ADS" }
                     : {}),
-                  ...(error instanceof ProviderError &&
+                  ...(!publicFailure &&
+                  error instanceof ProviderError &&
                   error.code === "google_ads_manager_metrics_unsupported"
                     ? {
                         code: error.code,
@@ -515,7 +528,7 @@ export class McpController {
                         upstream_code: error.providerCode,
                       }
                     : {}),
-                  ...(error instanceof GoogleAdsWriteError
+                  ...(!publicFailure && error instanceof GoogleAdsWriteError
                     ? {
                         code: error.writeCode,
                         source: error.failures.length

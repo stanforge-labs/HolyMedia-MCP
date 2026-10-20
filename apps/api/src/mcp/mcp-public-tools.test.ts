@@ -45,6 +45,14 @@ describe("public MCP tool registry", () => {
     }
   });
 
+  it("does not advertise unconstrained public READ argument objects", () => {
+    expect(
+      publicTools(descriptors)
+        .filter((tool) => tool.inputSchema.additionalProperties === true)
+        .map((tool) => tool.name),
+    ).toEqual([]);
+  });
+
   it("hides every controlled-write tool from listing and invocation when scope is disabled", () => {
     const names = publicTools(descriptors, false).map((tool) => tool.name);
     expect(names).toEqual([...PUBLIC_READ_TOOLS]);

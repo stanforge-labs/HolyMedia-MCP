@@ -1107,6 +1107,9 @@ export class McpService {
           name: account.displayName,
           status: account.status,
           enabled: account.enabled,
+          // This is stored provider-account metadata, not a live OAuth check.
+          source: "v2_database_provider_account",
+          live_connection_checked: false,
         };
       }
       case "get_account_summary": {
@@ -1647,7 +1650,17 @@ export class McpService {
           },
           {},
         );
-        return { account_id: account.externalAccountId, campaigns: counts };
+        return {
+          account_id: account.externalAccountId,
+          campaigns: counts,
+          complete: !campaigns.nextCursor,
+          ...(campaigns.nextCursor
+            ? { next_cursor: campaigns.nextCursor }
+            : {}),
+          ...(campaigns.items[0]?.provenance
+            ? { provenance: campaigns.items[0].provenance }
+            : {}),
+        };
       }
       case "get_top_performers":
       case "rank_top_entities": {

@@ -1,4 +1,5 @@
 /** Explicit public surface. Never derive this from the legacy MCP registry. */
+import { publicReadInputSchema } from "./mcp-public-read-contract.js";
 export const PUBLIC_READ_TOOLS = [
   "list_connected_resources",
   "list_ad_accounts",
@@ -160,7 +161,9 @@ export function publicTools(
       name,
       title: title(name),
       description: read ? legacy!.description : publicWriteDescriptions[name]!,
-      inputSchema: read ? legacy!.inputSchema : publicWriteSchema(name),
+      inputSchema: read
+        ? (publicReadInputSchema(name) ?? legacy!.inputSchema)
+        : publicWriteSchema(name),
       annotations: {
         title: title(name),
         readOnlyHint: read && !diagnostics,
