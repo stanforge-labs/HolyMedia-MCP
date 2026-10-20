@@ -30,9 +30,11 @@ jobs:
           if [[ $BEFORE =~ ^0+$ ]]; then BEFORE=$(git rev-parse HEAD^); fi
           git diff --name-only "$BEFORE" "$GITHUB_SHA" > /tmp/changed-paths
           services=()
-          if grep -Eq '^(apps/web/|packages/contracts/|infra/Dockerfile.v2$|package.json$|pnpm-lock.yaml$|pnpm-workspace.yaml$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(web); fi
-          if grep -Eq '^(apps/api/|packages/(config|contracts|database|observability|site-audit)/|infra/(Dockerfile.v2|api-runtime.pnpm-workspace.yaml)$|package.json$|pnpm-lock.yaml$|pnpm-workspace.yaml$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(api); fi
-          if grep -Eq '^(apps/worker/|packages/(config|contracts|database|observability|site-audit)/|infra/(Dockerfile.v2|worker-runtime.pnpm-workspace.yaml)$|package.json$|pnpm-lock.yaml$|pnpm-workspace.yaml$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(worker); fi
+          if grep -Eq '^(apps/web/|packages/contracts/|infra/Dockerfile.v2$|package.json$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(web); fi
+          if grep -Eq '^(apps/api/|packages/(config|contracts|database|observability|site-audit)/|infra/(Dockerfile.v2|api-runtime.pnpm-workspace.yaml)$|package.json$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(api); fi
+          if grep -Eq '^(apps/worker/|packages/(config|contracts|database|observability|site-audit)/|infra/(Dockerfile.v2|worker-runtime.pnpm-workspace.yaml)$|package.json$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(worker); fi
+          # A shared lockfile/override change alone can affect any service; rebuild all unless a scoped source/manifest change identifies the target.
+          if grep -Eq '^(pnpm-lock.yaml|pnpm-workspace.yaml)$' /tmp/changed-paths && [[ ${#services[@]} -eq 0 ]]; then services=(web api worker); fi
           printf 'services=%s\n' "$(printf '%s\n' "${services[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')" >> "$GITHUB_OUTPUT"
 
   build-and-deploy:
