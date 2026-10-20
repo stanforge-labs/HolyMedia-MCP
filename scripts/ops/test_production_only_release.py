@@ -100,7 +100,16 @@ class ReleaseTests(unittest.TestCase):
 
     def test_stopped_test_passes_and_running_test_blocks(self):
         _, observations, checkpoint = fixture()
-        release.verify_topology(observations[0]["containers"], checkpoint)
+        rows = observations[0]["containers"]
+        release.verify_topology(rows, checkpoint)
+        production_baseline = {name: rows[name].copy() for name in PROD}
+        release.verify_topology(rows, checkpoint, production_baseline)
+        incomplete_baseline = {name: rows[name].copy() for name in PROD[1:]}
+        with self.assertRaisesRegex(RuntimeError, "container_baseline_incomplete"):
+            release.verify_topology(rows, checkpoint, incomplete_baseline)
+        production_baseline[PROD[0]]["image"] = "sha256:unexpected"
+        with self.assertRaisesRegex(RuntimeError, "container_changed"):
+            release.verify_topology(rows, checkpoint, production_baseline)
         observations[0]["containers"][TEST[0]]["status"] = "running"
         with self.assertRaisesRegex(RuntimeError, "test_not_stopped"):
             release.verify_topology(observations[0]["containers"], checkpoint)

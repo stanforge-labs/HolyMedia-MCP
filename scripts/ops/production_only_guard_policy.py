@@ -40,7 +40,10 @@ def container_reasons(rows, checkpoint, baseline=None):
     reasons = []
     if set(rows) != set(PROD + TEST) or set(checkpoint) != set(TEST):
         return ["container_inventory_incomplete"]
-    if baseline is not None and set(baseline) != set(PROD + TEST):
+    # Release plans snapshot the five production identities; the four retired
+    # TEST identities are checked independently against the protected checkpoint.
+    # Guard traces may instead supply all nine rows as their first observation.
+    if baseline is not None and set(baseline) not in (set(PROD), set(PROD + TEST)):
         return ["container_baseline_incomplete"]
     for name in PROD:
         row = rows[name]
