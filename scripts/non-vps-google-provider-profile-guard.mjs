@@ -28,8 +28,10 @@ assert.equal(
 );
 assert.match(api.DATABASE_URL, /@postgres:5432\/holypilot_google_test_local$/);
 assert.equal(api.REDIS_URL, "redis://redis:6379");
-assert.equal(api.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST, "");
+assert.equal(api.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST, "8590146099");
 assert.equal(api.V2_PREVIEW_ONLY, "true");
+assert.equal(api.QRS_TEST_RESTRICTED_AUTH, "true");
+assert.equal(api.QRS_TEST_LOCAL_READONLY_AUTH, "true");
 for (const key of [
   "PROVIDER_GOOGLE_ADS_WRITE_ENABLED",
   "PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED",
@@ -38,7 +40,6 @@ for (const key of [
   "PUBLIC_MCP_WRITE_SCOPE_ENABLED",
   "PUBLIC_MCP_CONTROLLED_WRITE_ENABLED",
   "V2_CONFIRMED_WRITE_ENABLED",
-  "QRS_TEST_RESTRICTED_AUTH",
   "QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED",
   "QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED",
   "QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED",
