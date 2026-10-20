@@ -131,7 +131,7 @@ def verify_cached_image(reference, expected_digest, expected_revision, expected_
     return image["Id"]
 
 
-def prepare_startup_watcher(directory):
+def prepare_startup_watcher(directory, diagnostic=False):
     source = OLD_PACKAGE / "startup-watch-unexecuted.py"
     if sha(source) != WATCH_SHA:
         raise RuntimeError("startup_watch_source_sha_mismatch")
@@ -140,11 +140,22 @@ def prepare_startup_watcher(directory):
     if content.count(ready) != 1:
         raise RuntimeError("startup_ready_anchor_mismatch")
     content = content.replace(ready, "", 1)
+    if diagnostic:
+        anchor = "import time\n"
+        if content.count(anchor) != 1:
+            raise RuntimeError("startup_probe_import_anchor_mismatch")
+        content = content.replace(anchor, anchor +
+            "from production_web_swap_probe import capture, read_selection\n", 1)
     anchor = "    current = first\n    while time.monotonic() - start < 180:\n"
     replacement = ("    current = first\n"
                    "    trace = (directory / 'startup-watch-trace.jsonl').open('w', buffering=1)\n"
                    "    trace.write(json.dumps(dict(epoch=time.time(), phase='before-stop', **first), sort_keys=True) + '\\n')\n"
-                   "    (directory / 'startup-watch.ready').write_text(str(os.getpid()))\n"
+                   + ("    selection = read_selection(directory / 'probe-selection.json')\n"
+                      "    attribution = (directory / 'startup-attribution.jsonl').open('x', buffering=1)\n"
+                      "    os.chmod(directory / 'startup-attribution.jsonl', 0o600)\n"
+                      "    attribution.write(json.dumps(capture(selection, 'before-stop'), sort_keys=True) + '\\n')\n"
+                      if diagnostic else "")
+                   + "    (directory / 'startup-watch.ready').write_text(str(os.getpid()))\n"
                    "    while True:\n")
     if content.count(anchor) != 1:
         raise RuntimeError("startup_trace_anchor_mismatch")
@@ -157,27 +168,33 @@ def prepare_startup_watcher(directory):
     content = content.replace(anchor, replacement, 1)
     anchor = "        current = sample()\n        for key in low:"
     replacement = ("        current = sample()\n"
-                   "        phase = ('candidate-running' if (directory / 'web-phase.candidate-running').exists() else\n"
+                   "        phase = ('restored' if (directory / 'web-phase.restored').exists() else\n"
+                   "                 'restoring-old' if (directory / 'web-phase.restoring-old').exists() else\n"
+                   "                 'candidate-running' if (directory / 'web-phase.candidate-running').exists() else\n"
                    "                 'starting-candidate' if (directory / 'web-phase.starting-candidate').exists() else\n"
                    "                 'old-stopped' if (directory / 'web-phase.old-stopped').exists() else\n"
                    "                 'stopping-old' if (directory / 'web-phase.stopping-old').exists() else\n"
                    "                 'before-stop')\n"
                    "        trace.write(json.dumps(dict(epoch=time.time(), phase=phase, **current), sort_keys=True) + '\\n')\n"
-                   "        for key in low:")
+                   + ("        attribution.write(json.dumps(capture(selection, phase), sort_keys=True) + '\\n')\n"
+                      if diagnostic else "")
+                   + "        for key in low:")
     if content.count(anchor) != 1:
         raise RuntimeError("startup_sample_anchor_mismatch")
     content = content.replace(anchor, replacement, 1)
     anchor = "        time.sleep(1)\n"
-    replacement = "        if now - start >= 180:\n            break\n        time.sleep(1)\n"
+    replacement = ("        if now - start >= 180:\n            break\n"
+                   + ("        time.sleep(0.5 if phase in ('stopping-old', 'old-stopped', 'restoring-old') else 1)\n"
+                      if diagnostic else "        time.sleep(1)\n"))
     if content.count(anchor) != 1:
         raise RuntimeError("startup_final_sample_anchor_mismatch")
     content = content.replace(anchor, replacement, 1)
     anchor = "    result = dict(status='FAIL' if reason else 'PASS', reason=reason,"
-    replacement = ("    if not reason and (directory / 'cutover-attempted').exists() and not "
-                   "(directory / 'web-phase.candidate-running').exists():\n"
-                   "        reason = 'candidate_not_running_in_watch_window'\n"
-                   "        (directory / 'startup-watch.fail').write_text(reason)\n"
-                   + anchor)
+    replacement = (("    if not reason and (directory / 'cutover-attempted').exists() and not "
+                    "(directory / 'web-phase.candidate-running').exists():\n"
+                    "        reason = 'candidate_not_running_in_watch_window'\n"
+                    "        (directory / 'startup-watch.fail').write_text(reason)\n")
+                   if not diagnostic else "") + anchor
     if content.count(anchor) != 1:
         raise RuntimeError("startup_window_anchor_mismatch")
     content = content.replace(anchor, replacement, 1)
