@@ -136,12 +136,24 @@ def prepare_startup_watcher(directory):
     if sha(source) != WATCH_SHA:
         raise RuntimeError("startup_watch_source_sha_mismatch")
     content = source.read_text()
+    ready = "    (directory / 'startup-watch.ready').write_text(str(os.getpid()))\n"
+    if content.count(ready) != 1:
+        raise RuntimeError("startup_ready_anchor_mismatch")
+    content = content.replace(ready, "", 1)
     anchor = "    current = first\n    while time.monotonic() - start < 180:\n"
     replacement = ("    current = first\n"
                    "    trace = (directory / 'startup-watch-trace.jsonl').open('w', buffering=1)\n"
-                   "    while time.monotonic() - start < 180:\n")
+                   "    trace.write(json.dumps(dict(epoch=time.time(), phase='before-stop', **first), sort_keys=True) + '\\n')\n"
+                   "    (directory / 'startup-watch.ready').write_text(str(os.getpid()))\n"
+                   "    while True:\n")
     if content.count(anchor) != 1:
         raise RuntimeError("startup_trace_anchor_mismatch")
+    content = content.replace(anchor, replacement, 1)
+    anchor = "                  duration_s=round(time.monotonic() - start, 1), minimum=low,"
+    replacement = ("                  duration_exact_s=time.monotonic() - start,\n"
+                   "                  duration_s=round(time.monotonic() - start, 1), minimum=low,")
+    if content.count(anchor) != 1:
+        raise RuntimeError("startup_exact_duration_anchor_mismatch")
     content = content.replace(anchor, replacement, 1)
     anchor = "        current = sample()\n        for key in low:"
     replacement = ("        current = sample()\n"
@@ -154,6 +166,11 @@ def prepare_startup_watcher(directory):
                    "        for key in low:")
     if content.count(anchor) != 1:
         raise RuntimeError("startup_sample_anchor_mismatch")
+    content = content.replace(anchor, replacement, 1)
+    anchor = "        time.sleep(1)\n"
+    replacement = "        if now - start >= 180:\n            break\n        time.sleep(1)\n"
+    if content.count(anchor) != 1:
+        raise RuntimeError("startup_final_sample_anchor_mismatch")
     content = content.replace(anchor, replacement, 1)
     anchor = "    result = dict(status='FAIL' if reason else 'PASS', reason=reason,"
     replacement = ("    if not reason and (directory / 'cutover-attempted').exists() and not "

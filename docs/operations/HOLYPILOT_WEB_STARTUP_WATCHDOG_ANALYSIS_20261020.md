@@ -60,6 +60,12 @@ although that runner remains disabled for the retired-TEST topology.
 The adapter also rechecks the watchdog failure marker immediately before
 candidate Compose, closing a narrow interval between the old-stop check and
 the start command.
+The watchdog now writes its initial trace sample before publishing `ready`.
+The adapter rejects a dead observer and requires a `PASS` result with at least
+180 exact monotonic seconds. Missing output or rounded duration cannot produce
+a successful cutover. The final resource sample is taken and evaluated after
+the full 180-second interval, rather than ending after a sleep following the
+previous sample.
 
 No watchdog numeric threshold, sampling interval, timeout, resource guard,
 TEST state or production service was changed. The current recovery still makes

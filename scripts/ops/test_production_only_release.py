@@ -191,6 +191,31 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 release.record_phase(directory, "web", "stopping-old")
 
+    def test_incomplete_or_missing_watchdog_evidence_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            with self.assertRaisesRegex(RuntimeError, "startup_watchdog_result_missing"):
+                release.require_complete_watcher_result(directory)
+            result = directory / "startup-watch.json"
+            for payload in ({"status": "PASS", "duration_exact_s": 179.999737},
+                            {"status": "FAIL", "duration_exact_s": 180.0},
+                            {"status": "PASS", "duration_s": 180.0}):
+                with self.subTest(payload=payload):
+                    result.write_text(json.dumps(payload))
+                    with self.assertRaisesRegex(RuntimeError,
+                                                "startup_watchdog_observation_incomplete"):
+                        release.require_complete_watcher_result(directory)
+            result.write_text(json.dumps({"status": "PASS", "duration_exact_s": 180.0}))
+            self.assertEqual(release.require_complete_watcher_result(directory)["status"],
+                             "PASS")
+
+            class DeadWatcher:
+                def poll(self):
+                    return 1
+
+            with self.assertRaisesRegex(RuntimeError, "startup_watchdog_unavailable"):
+                release.require_watcher_alive(DeadWatcher(), directory / "startup-watch.fail")
+
     def test_swap_fail_during_old_stop_blocks_candidate_and_rolls_back_once(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
@@ -293,6 +318,8 @@ class ReleaseTests(unittest.TestCase):
                     pass
 
                 def wait(self, timeout=None):
+                    (directory / "startup-watch.json").write_text(json.dumps(
+                        {"status": "PASS", "duration_exact_s": 180.0}))
                     return 0
 
             def arm(_directory):

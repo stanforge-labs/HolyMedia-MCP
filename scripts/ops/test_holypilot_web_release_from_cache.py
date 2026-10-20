@@ -200,13 +200,15 @@ status=''
             destination.mkdir()
             source = '''import time
 def main():
+    (directory / 'startup-watch.ready').write_text(str(os.getpid()))
     current = first
     while time.monotonic() - start < 180:
         now = time.monotonic()
         current = sample()
         for key in low: pass
+        time.sleep(1)
     result = dict(status='FAIL' if reason else 'PASS', reason=reason,
-                  duration_s=180)
+                  duration_s=round(time.monotonic() - start, 1), minimum=low,)
 '''
             (old / "startup-watch-unexecuted.py").write_text(source)
             with patch.object(release, "OLD_PACKAGE", old), \
@@ -220,7 +222,11 @@ def main():
             self.assertIn("candidate_not_running_in_watch_window", transformed)
             self.assertIn("cutover-attempted", transformed)
             self.assertNotIn("web-start.begin", transformed)
-            self.assertEqual(transformed.count("while time.monotonic() - start < 180:"), 1)
+            self.assertLess(transformed.index("startup-watch-trace.jsonl"),
+                            transformed.index("startup-watch.ready"))
+            self.assertIn("duration_exact_s=time.monotonic() - start", transformed)
+            self.assertEqual(transformed.count("while True:"), 1)
+            self.assertIn("if now - start >= 180:\n            break", transformed)
 
 
 if __name__ == "__main__":

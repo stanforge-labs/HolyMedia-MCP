@@ -215,6 +215,23 @@ def record_phase(run_dir, service, phase):
         out.write(event)
 
 
+def require_watcher_alive(watcher, fail_path):
+    if fail_path.exists():
+        raise RuntimeError("startup_resource_fail")
+    if watcher.poll() is not None:
+        raise RuntimeError("startup_watchdog_unavailable")
+
+
+def require_complete_watcher_result(run_dir):
+    result_path = run_dir / "startup-watch.json"
+    if not result_path.is_file():
+        raise RuntimeError("startup_watchdog_result_missing")
+    result = json.loads(result_path.read_text())
+    if result.get("status") != "PASS" or result.get("duration_exact_s", 0) < 180:
+        raise RuntimeError("startup_watchdog_observation_incomplete")
+    return result
+
+
 def wait_healthy(name, watcher=None, fail_path=None):
     for _ in range(60):
         if fail_path and fail_path.exists():
@@ -299,8 +316,7 @@ def execute(run_dir):
             time.sleep(0.25)
         else:
             raise RuntimeError("startup_watcher_not_ready")
-        if (run_dir / "startup-watch.fail").exists():
-            raise RuntimeError("startup_resource_fail_before_cutover")
+        require_watcher_alive(watcher, run_dir / "startup-watch.fail")
         record_phase(run_dir, service, "before-stop")
         (run_dir / "cutover-attempted").touch(mode=0o600)
         cutover = True
@@ -311,10 +327,12 @@ def execute(run_dir):
         record_phase(run_dir, service, "old-stopped")
         if (run_dir / "startup-watch.fail").exists():
             raise RuntimeError("startup_resource_fail_before_start")
+        require_watcher_alive(watcher, run_dir / "startup-watch.fail")
         record_phase(run_dir, service, "starting-candidate")
         (run_dir / f"{service}-start.begin").touch(mode=0o600)
         if (run_dir / "startup-watch.fail").exists():
             raise RuntimeError("startup_resource_fail_before_candidate_compose")
+        require_watcher_alive(watcher, run_dir / "startup-watch.fail")
         compose_replace(run_dir, service, "new")
         record_phase(run_dir, service, "candidate-running")
         (run_dir / f"{service}-start.running").touch(mode=0o600)
@@ -326,6 +344,7 @@ def execute(run_dir):
             verify_web_functionality()
         if watcher.wait(timeout=190):
             raise RuntimeError("startup_watchdog_fail")
+        require_complete_watcher_result(run_dir)
         guard(run_dir, checkpoint_path, "poststart")
         verify_plan(plan, run_dir, after_cutover=True)
         if service == "web":
