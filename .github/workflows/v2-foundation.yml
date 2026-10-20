@@ -160,7 +160,8 @@ jobs:
       - name: HolyPilot old-Web stop diagnostic regression (no deploy)
         run: |
           python3 -m unittest discover -s scripts/ops -p 'test_production_web_*.py'
-          python3 -m py_compile scripts/ops/production_web_swap_probe.py scripts/ops/production_web_stop_diagnostic_once.py
+          python3 -m py_compile scripts/ops/production_web_swap_probe.py scripts/ops/production_web_stop_diagnostic_once.py scripts/ops/production_web_passive_swap_watch.py
+          python3 -c "import sys; sys.path.insert(0, 'scripts/ops'); import production_web_swap_probe as p; s=p.select_passive(); print('CI procfs selection:', s['coverage']); print('CI procfs overhead:', p.benchmark(s, count=10))"
       - name: Batch 2 maintenance-state phase guard regression
         run: |
           python3 -m unittest discover -s scripts/ops -p 'test_maintenance_guard_policy.py'

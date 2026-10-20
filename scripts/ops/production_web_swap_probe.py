@@ -7,7 +7,7 @@ Missing PIDs/cgroups are explicit because the old Web can exit between samples.
 
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import statistics
 import time
 
@@ -19,6 +19,8 @@ GROUP_KEYS = {"pgmajfault", "workingset_refault_anon", "pgscan", "pgsteal"}
 DAEMONS = ("dockerd", "containerd", "containerd-shim")
 MAX_PIDS = 64
 MAX_GROUPS = 16
+MAX_PASSIVE_PIDS = 64
+MAX_PASSIVE_GROUPS = 128
 
 
 def numeric_fields(path, keys):
@@ -78,6 +80,78 @@ def select(web_pid):
     return {"web_pid": web_pid,
             "pids": {str(pid): item["start_ticks"] for pid, item in chosen.items()},
             "cgroups": groups}
+
+
+def select_passive():
+    """Select current processes and their cgroups without asking Docker.
+
+    The PID list is bounded. Every discovered process cgroup and its ancestors
+    are retained so a later event outside the PID shortlist remains visible at
+    cgroup level. Coverage counts prevent treating an omitted PID as proof.
+    """
+    found = []
+    groups = {"/"}
+    attempted = 0
+    skipped = 0
+    for entry in PROC.iterdir():
+        if not entry.name.isdigit():
+            continue
+        attempted += 1
+        try:
+            info = process_info(int(entry.name))
+        except (OSError, ValueError, IndexError):
+            skipped += 1
+            continue
+        found.append(info)
+        path = PurePosixPath(info["cgroup"])
+        while True:
+            groups.add(str(path))
+            if path == PurePosixPath("/"):
+                break
+            path = path.parent
+    if not found or len(groups) > MAX_PASSIVE_GROUPS:
+        raise ValueError("passive_selection_incomplete_or_too_large")
+    found.sort(key=lambda row: (row["vm_swap_kib"],
+                                row["name"].startswith(DAEMONS)), reverse=True)
+    chosen = found[:MAX_PASSIVE_PIDS]
+    return {"pids": {str(row["pid"]): row["start_ticks"] for row in chosen},
+            "cgroups": sorted(groups),
+            "coverage": {"attempted_pids": attempted, "skipped_pids": skipped,
+                         "discovered_pids": len(found), "selected_pids": len(chosen),
+                         "discovered_cgroups": len(groups)}}
+
+
+def correlate(before, after):
+    """Return contemporaneous counter deltas, never a causal attribution."""
+    host_before = before["host"]["vm"]
+    host_after = after["host"]["vm"]
+    host = {key: host_after[key] - host_before[key]
+            for key in HOST_KEYS if key in host_before and key in host_after}
+    groups = {}
+    missing = []
+    for name in before["cgroups"].keys() | after["cgroups"].keys():
+        a = before["cgroups"].get(name, {"gone": True})
+        b = after["cgroups"].get(name, {"gone": True})
+        if a.get("gone") or b.get("gone"):
+            missing.append("cgroup:" + name)
+            continue
+        delta = {key: b[key] - a[key] for key in a.keys() & b.keys()
+                 if isinstance(a[key], int) and isinstance(b[key], int)}
+        if any(value != 0 for value in delta.values()):
+            groups[name] = delta
+    pids = {}
+    for pid in before["pids"].keys() | after["pids"].keys():
+        a = before["pids"].get(pid, {"gone": True})
+        b = after["pids"].get(pid, {"gone": True})
+        if a.get("gone") or b.get("gone") or a["start_ticks"] != b["start_ticks"]:
+            missing.append("pid:" + pid)
+            continue
+        delta = {"major_faults": b["major_faults"] - a["major_faults"],
+                 "vm_swap_kib": b["vm_swap_kib"] - a["vm_swap_kib"]}
+        if any(value != 0 for value in delta.values()):
+            pids[pid] = {"cgroup": b["cgroup"], **delta}
+    return {"host": host, "cgroups": groups, "pids": pids,
+            "missing": sorted(missing), "attribution": "correlation_only"}
 
 
 def capture(selection, phase):
