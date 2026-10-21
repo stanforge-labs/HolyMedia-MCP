@@ -62,7 +62,11 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
   });
 }
 
-function fixture(commitEnabled = false, initialStatus = "ACTIVE") {
+function fixture(
+  commitEnabled = false,
+  initialStatus = "ACTIVE",
+  demo = false,
+) {
   process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = "true";
   process.env.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED = String(commitEnabled);
   let row: Row | null = null;
@@ -86,6 +90,21 @@ function fixture(commitEnabled = false, initialStatus = "ACTIVE") {
   const auditEvents: Array<Record<string, unknown>> = [];
   const db = {
     client: {
+      workspace: {
+        findUnique: vi.fn(async () => ({
+          slug: demo ? "holypilot-anthropic-reviewer-demo" : "ordinary",
+          accessStatus: "ACTIVE",
+          entitlements: demo
+            ? [
+                {
+                  value: true,
+                  source: "reviewer_demo_bootstrap",
+                  expiresAt: null,
+                },
+              ]
+            : [],
+        })),
+      },
       providerAccount: {
         findFirst: vi.fn(
           async ({ where }: { where: Record<string, unknown> }) => {
@@ -618,5 +637,14 @@ describe("public Meta controlled writes (mock provider only)", () => {
       code: "verification_mismatch",
     });
     expect(test.row.commitStatus).toBe("NOT_VERIFIED");
+  });
+
+  it("denies all preview and commit operations in a reviewer demo workspace", async () => {
+    const test = fixture(true, "ACTIVE", true);
+    await expect(preview(test)).rejects.toMatchObject({
+      code: "public_operation_not_available",
+    });
+    expect(test.providers.mutateCampaign).not.toHaveBeenCalled();
+    expect(test.auditEvents).toHaveLength(0);
   });
 });

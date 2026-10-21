@@ -25,6 +25,7 @@ import type {
 import { validateDateRange } from "../providers/provider-normalization.js";
 import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 import { BillingService } from "../billing/billing.service.js";
+import { isReviewerDemoWorkspace, reviewerDemoCall } from "./reviewer-demo.js";
 
 const providerAliases: Record<string, ProviderId> = {
   google_ads: "GOOGLE_ADS",
@@ -472,6 +473,31 @@ export class McpService {
       throw new ForbiddenException("Service token does not have read access.");
     }
     const args = objectValue(rawArguments);
+    if (await isReviewerDemoWorkspace(this.database, principal.workspaceId)) {
+      if (principal.kind !== "oauth")
+        throw new ForbiddenException("Demo access requires OAuth.");
+      // Virtual fixture IDs are not provider-account UUIDs. A restricted grant
+      // must never silently become a workspace-wide synthetic grant.
+      if (principal.accountIds.length)
+        throw new ForbiddenException(
+          "Demo access is unavailable to account-restricted grants.",
+        );
+      const membership =
+        await this.database.client.workspaceMembership.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId: principal.workspaceId,
+              userId: principal.userId,
+            },
+          },
+          select: { id: true },
+        });
+      if (!membership)
+        throw new ForbiddenException("Demo workspace access denied.");
+      if (name === "generate_monthly_ads_report")
+        await this.billing.requireFeature(principal.workspaceId, "reports");
+      return reviewerDemoCall(name, args);
+    }
     // No Google write-preview exists before stages 6–8. Reject before the
     // shared preview store, without changing Meta's preview/commit path.
     if (

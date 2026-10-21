@@ -54,6 +54,7 @@ import {
   isProviderReadAdapter,
   isMetaControlledCampaignReadAdapter,
 } from "./provider.types.js";
+import { isReviewerDemoWorkspace } from "../mcp/reviewer-demo.js";
 
 @Injectable()
 export class ProviderService {
@@ -111,6 +112,7 @@ export class ProviderService {
     principal: HumanPrincipal,
     request: RequestWithAuth,
   ): Promise<{ authorizationUrl: string; provider: ProviderId }> {
+    await this.rejectReviewerDemoWorkspace(workspaceId);
     const entry = this.registry.get(provider);
     if (!entry.adapter)
       throw toSafeProviderException(
@@ -229,6 +231,7 @@ export class ProviderService {
         },
       });
       callbackWorkspaceId = state.workspaceId;
+      await this.rejectReviewerDemoWorkspace(state.workspaceId);
       if (!callbackPrincipal) {
         const session = await this.sessions.validateById(
           state.sessionId,
@@ -453,6 +456,7 @@ export class ProviderService {
     principal: HumanPrincipal,
     request: RequestWithAuth,
   ): Promise<ProviderConnectionView> {
+    await this.rejectReviewerDemoWorkspace(workspaceId);
     return this.refreshCoordinator.withLock(connectionId, async () => {
       const connection = await this.connectionWithCredential(
         workspaceId,
@@ -1398,10 +1402,6 @@ export class ProviderService {
         "Google Search Console read is not configured.",
       );
 
-    const fresh = await this.refreshCoordinator.withLock(
-      context.connection.id,
-      () => this.refreshForRead(context),
-    );
     const accounts = await this.database.client.providerAccount.findMany({
       where: {
         workspaceId,
@@ -1439,10 +1439,14 @@ export class ProviderService {
       return {
         status: "property_not_found",
         provider: "google_search_console",
-        properties,
         message: "Выбранная property не найдена в подключении Search Console.",
       };
     }
+
+    const fresh = await this.refreshCoordinator.withLock(
+      context.connection.id,
+      () => this.refreshForRead(context),
+    );
 
     const cleanDays = Math.max(7, Math.min(Math.trunc(days) || 28, 90));
     const endDate = new Date();
@@ -1618,6 +1622,7 @@ export class ProviderService {
     connectionId: string,
     provider?: ProviderId,
   ) {
+    await this.rejectReviewerDemoWorkspace(workspaceId);
     const connection = connectionId
       ? await this.connectionWithCredential(workspaceId, connectionId)
       : await this.database.client.providerConnection.findFirst({
@@ -1638,6 +1643,15 @@ export class ProviderService {
     );
     const adapter = this.registry.adapter(connection.provider as ProviderId);
     return { connection, credentials, adapter };
+  }
+
+  private async rejectReviewerDemoWorkspace(
+    workspaceId: string,
+  ): Promise<void> {
+    if (await isReviewerDemoWorkspace(this.database, workspaceId))
+      throw new ForbiddenException(
+        "Provider connections are unavailable in the reviewer demo workspace.",
+      );
   }
 
   private async refreshForRead<
