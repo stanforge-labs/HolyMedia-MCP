@@ -9,7 +9,11 @@ describe("isolated synthetic reviewer fixtures", () => {
       slug: "holypilot-anthropic-reviewer-demo",
       accessStatus: "ACTIVE",
       entitlements: [
-        { value: true, source: "reviewer_demo_bootstrap", expiresAt: null },
+        {
+          value: true,
+          source: "reviewer_demo_bootstrap",
+          expiresAt: null as Date | null,
+        },
       ],
     };
     const database = {
@@ -42,6 +46,17 @@ describe("isolated synthetic reviewer fixtures", () => {
     await expect(
       isReviewerDemoWorkspace(database as never, "demo"),
     ).rejects.toThrow();
+    workspace.accessStatus = "ACTIVE";
+    workspace.entitlements = [
+      {
+        value: true,
+        source: "reviewer_demo_bootstrap",
+        expiresAt: new Date(0),
+      },
+    ];
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
+    ).rejects.toThrow("Demo workspace is not available");
   });
 
   it("labels inventory, metrics, report and Search Console as synthetic", () => {
