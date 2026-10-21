@@ -2,6 +2,7 @@ import { ForbiddenException } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 import { PreviewError } from "./mcp-preview.error.js";
+import { ProviderError } from "../providers/provider.errors.js";
 
 function controller(authenticate = vi.fn().mockResolvedValue(null)) {
   return new McpController(
@@ -79,6 +80,67 @@ describe("MCP bearer authentication", () => {
     expect(text).not.toContain("рекламной платформе");
     expect(text).not.toContain("private diagnostic");
     expect(text).not.toContain("opaque-do-not-log");
+  });
+  it("explains a Google Ads manager metrics failure on the public READ route", async () => {
+    const instance = new McpController(
+      {
+        call: vi
+          .fn()
+          .mockRejectedValue(
+            new ProviderError(
+              "google_ads_manager_metrics_unsupported",
+              "SECRET upstream account details",
+              false,
+              "400",
+              "REQUESTED_METRICS_FOR_MANAGER",
+            ),
+          ),
+      } as never,
+      { authenticate: vi.fn() } as never,
+      {
+        authenticate: vi.fn().mockResolvedValue({
+          kind: "oauth",
+          workspaceId: "workspace",
+          clientId: "client",
+          grantId: "grant",
+          userId: "user",
+          scopes: ["adforge:mcp:read"],
+          accountIds: [],
+        }),
+      } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      { call: vi.fn() } as never,
+    );
+    const result = await instance.postPublic(
+      {
+        id: "request",
+        headers: { authorization: "Bearer test-opaque" },
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "list_campaigns",
+            arguments: {
+              provider: "GOOGLE_ADS",
+              account_id: "1234567890",
+              start_date: "2026-10-14",
+              end_date: "2026-10-20",
+              limit: 5,
+            },
+          },
+        },
+      } as never,
+      reply() as never,
+    );
+    const text = JSON.stringify(result);
+    expect(text).toContain("google_ads_manager_metrics_unsupported");
+    expect(text).toContain("select_client_account");
+    expect(text).not.toContain("provider_unavailable");
+    expect(text).not.toContain("SECRET");
+    expect(text).not.toContain("1234567890");
+    expect(text).not.toContain("REQUESTED_METRICS_FOR_MANAGER");
   });
   it("accepts a case-insensitive Bearer scheme", async () => {
     const authenticate = vi

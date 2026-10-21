@@ -8,6 +8,7 @@ type PublicFailure = {
   message: string;
   retryable: boolean;
   field?: string;
+  user_action?: "select_client_account";
 };
 
 /** Public READ responses contain no upstream payload, identifiers or stack traces. */
@@ -36,6 +37,8 @@ export function publicReadFailure(error: unknown): PublicFailure {
     return known(code);
   }
   if (error instanceof ProviderError) {
+    if (error.code === "google_ads_manager_metrics_unsupported")
+      return known(error.code);
     const code = [
       "token_expired",
       "refresh_failed",
@@ -104,6 +107,8 @@ function known(code: string): PublicFailure {
     provider_auth_expired:
       "Подключение провайдера требует повторной авторизации.",
     provider_unavailable: "Провайдер не ответил или временно недоступен.",
+    google_ads_manager_metrics_unsupported:
+      "Метрики кампаний недоступны для управляющего аккаунта Google Ads. Выберите доступный клиентский рекламный аккаунт внутри этого MCC.",
     rate_limited: "Достигнут лимит запросов; повторите чтение позже.",
     internal_error:
       "Внутренняя ошибка HolyPilot. Передайте поддержке время запроса.",
@@ -116,5 +121,8 @@ function known(code: string): PublicFailure {
       "rate_limited",
       "internal_error",
     ].includes(code),
+    ...(code === "google_ads_manager_metrics_unsupported"
+      ? { user_action: "select_client_account" as const }
+      : {}),
   };
 }

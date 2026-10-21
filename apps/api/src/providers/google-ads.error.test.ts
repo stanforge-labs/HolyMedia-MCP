@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { providerJson } from "./provider-http.js";
 import { GoogleAdsApiError, googleAdsApiError } from "./google-ads.error.js";
 import { ProviderError } from "./provider.errors.js";
+import { publicReadFailure } from "../mcp/mcp-public-read-errors.js";
 import {
   googleAdsMcpErrorFields,
   mcpFailureMessage,
@@ -116,7 +117,15 @@ describe("Google Ads structured REST errors", () => {
     ).catch((value: unknown) => value);
     expect(error).toMatchObject({
       code: "google_ads_manager_metrics_unsupported",
+      providerCode: "REQUESTED_METRICS_FOR_MANAGER",
+      providerStatus: "400",
+      retryable: false,
       requestId: "header-123",
+    });
+    expect(publicReadFailure(error)).toMatchObject({
+      code: "google_ads_manager_metrics_unsupported",
+      retryable: false,
+      user_action: "select_client_account",
     });
   });
 

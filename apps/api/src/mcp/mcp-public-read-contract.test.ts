@@ -153,6 +153,24 @@ describe("public MCP READ contract", () => {
       expect(failure.code).toBe(publicCode);
       expect(JSON.stringify(failure)).not.toContain("SECRET");
     }
+    const managerMetrics = publicReadFailure(
+      new ProviderError(
+        "google_ads_manager_metrics_unsupported",
+        "SECRET upstream payload account_id=other-workspace",
+        false,
+        "400",
+        "REQUESTED_METRICS_FOR_MANAGER",
+      ),
+    );
+    expect(managerMetrics).toEqual({
+      code: "google_ads_manager_metrics_unsupported",
+      message:
+        "Метрики кампаний недоступны для управляющего аккаунта Google Ads. Выберите доступный клиентский рекламный аккаунт внутри этого MCC.",
+      retryable: false,
+      user_action: "select_client_account",
+    });
+    expect(JSON.stringify(managerMetrics)).not.toContain("SECRET");
+    expect(JSON.stringify(managerMetrics)).not.toContain("other-workspace");
     expect(publicReadFailure(new Error("SECRET internal stack"))).toMatchObject(
       { code: "internal_error" },
     );
