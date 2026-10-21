@@ -180,6 +180,13 @@ function availableDayRange(): Range {
 
 function daysInFixture(range: Range): Array<{ day: string; factor: number }> {
   const available = availableDayRange();
+  if (
+    range.startDate < available.startDate ||
+    range.endDate > available.endDate
+  )
+    throw new ForbiddenException(
+      "Requested demo period is outside the available synthetic fixture.",
+    );
   const first = Math.max(
     Date.parse(range.startDate),
     Date.parse(available.startDate),
@@ -465,6 +472,13 @@ export function reviewerDemoCall(name: string, args: Args): unknown {
     ].includes(name)
   ) {
     const account = selectAccount(args, ["GOOGLE_ADS", "META_ADS"]);
+    if (
+      (name === "get_meta_ads_detailed_report" &&
+        account.provider !== "META_ADS") ||
+      (name === "get_google_ads_detailed_report" &&
+        account.provider !== "GOOGLE_ADS")
+    )
+      throw new ForbiddenException("Demo account is unavailable.");
     const campaignProvider = account.provider as "GOOGLE_ADS" | "META_ADS";
     const range =
       args.start_date === undefined && args.end_date === undefined

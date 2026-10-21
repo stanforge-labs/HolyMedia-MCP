@@ -72,4 +72,29 @@ describe("isolated synthetic reviewer fixtures", () => {
       }),
     ).toThrow("valid YYYY-MM-DD");
   });
+
+  it("rejects periods outside the fixture and cross-provider reports", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-21T12:00:00Z"));
+    try {
+      expect(() =>
+        reviewerDemoCall("list_campaigns", {
+          ...account,
+          start_date: "2026-09-22",
+          end_date: "2026-10-20",
+        }),
+      ).toThrow("outside the available synthetic fixture");
+      expect(() =>
+        reviewerDemoCall("get_meta_ads_detailed_report", account),
+      ).toThrow("Demo account is unavailable");
+      expect(() =>
+        reviewerDemoCall("get_google_ads_detailed_report", {
+          provider: "META_ADS",
+          account_id: "9990000002",
+        }),
+      ).toThrow("Demo account is unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
