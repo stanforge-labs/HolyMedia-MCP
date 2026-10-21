@@ -68,6 +68,7 @@ function fixture() {
   }));
   const database = {
     client: {
+      workspace: { findUnique: vi.fn(async () => ({ reviewerDemo: false })) },
       serviceToken: { findFirst: tokenLookup },
       providerAccount: {
         findFirst: vi.fn(async ({ where }) =>

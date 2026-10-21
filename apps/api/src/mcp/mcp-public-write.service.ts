@@ -10,6 +10,7 @@ import { PreviewError } from "./mcp-preview.error.js";
 import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { oauthEndpoints } from "./oauth-endpoints.js";
+import { isReviewerDemoWorkspace } from "./reviewer-demo.js";
 
 export const PUBLIC_PREVIEW_TTL_MS = 10 * 60_000;
 
@@ -90,6 +91,8 @@ export class McpPublicWriteService {
   ) {}
 
   public async call(principal: OAuthMcpPrincipal, name: string, raw: unknown) {
+    if (await isReviewerDemoWorkspace(this.database, principal.workspaceId))
+      throw new PreviewError("public_operation_not_available");
     this.requireWrite(principal);
     const args = record(raw);
     if (Object.prototype.hasOwnProperty.call(operations, name))

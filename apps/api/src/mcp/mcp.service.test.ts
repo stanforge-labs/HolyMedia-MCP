@@ -5,9 +5,19 @@ function serviceWithAccounts(
   accounts: Array<Record<string, unknown>>,
   providerOverrides: Record<string, unknown> = {},
   previewOverrides: Record<string, unknown> = {},
+  demo = false,
 ) {
   const database = {
     client: {
+      workspace: {
+        findUnique: async () => ({
+          reviewerDemo: demo,
+          accessStatus: "ACTIVE",
+        }),
+      },
+      workspaceMembership: {
+        findUnique: async () => (demo ? { id: "demo-member" } : null),
+      },
       providerAccount: {
         findMany: async ({
           where,
@@ -1172,5 +1182,79 @@ describe("MCP V1-compatible policy", () => {
     };
     expect(result.input.previousStartDate).toBe("2026-01-01");
     expect(result.input.previousEndDate).toBe("2026-01-07");
+  });
+});
+
+describe("isolated public reviewer demo", () => {
+  const oauth = {
+    kind: "oauth" as const,
+    tokenId: "demo-token",
+    workspaceId: "demo-workspace",
+    userId: "demo-user",
+    clientId: "claude-client",
+    grantId: "demo-grant",
+    resource: "https://mcp.holymedia.kz/mcp/public",
+    scopes: ["adforge:mcp:read"],
+    accountIds: [],
+    resourceAccessMode: "ALL_CONNECTED" as const,
+  };
+
+  it("serves five synthetic campaigns without calling a real adapter", async () => {
+    const readCampaigns = vi.fn();
+    const service = serviceWithAccounts([], { readCampaigns }, {}, true);
+    const accounts = await service.call(oauth, "list_ad_accounts", {});
+    expect(accounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          account_id: "9990000001",
+          realData: false,
+          dataStatus: "demo",
+        }),
+      ]),
+    );
+    const end = new Date();
+    end.setUTCDate(end.getUTCDate() - 1);
+    const date = end.toISOString().slice(0, 10);
+    const result = await service.call(oauth, "list_campaigns", {
+      provider: "GOOGLE_ADS",
+      account_id: "9990000001",
+      start_date: date,
+      end_date: date,
+      limit: 5,
+    });
+    expect(result).toMatchObject({ realData: false, dataStatus: "demo" });
+    expect((result as { items: unknown[] }).items).toHaveLength(5);
+    expect(readCampaigns).not.toHaveBeenCalled();
+  });
+
+  it("denies foreign account IDs and service principals", async () => {
+    const service = serviceWithAccounts([], {}, {}, true);
+    await expect(
+      service.call(oauth, "get_account_status", {
+        provider: "GOOGLE_ADS",
+        account_id: "5113594991",
+      }),
+    ).rejects.toThrow("Demo account is unavailable");
+    await expect(
+      service.call(
+        {
+          kind: "service",
+          tokenId: "x",
+          serviceIdentityId: "x",
+          workspaceId: oauth.workspaceId,
+          scopes: ["adforge:mcp:read"],
+          accountIds: [],
+        },
+        "list_ad_accounts",
+        {},
+      ),
+    ).rejects.toThrow("Demo access requires OAuth");
+    await expect(
+      service.call(
+        { ...oauth, accountIds: ["foreign-internal-id"] },
+        "list_ad_accounts",
+        {},
+      ),
+    ).rejects.toThrow("account-restricted grants");
   });
 });

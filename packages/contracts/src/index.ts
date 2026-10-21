@@ -100,7 +100,8 @@ export type ProviderProvenance = {
   provider: ProviderId;
   sourceApi: string;
   realData: boolean;
-  dataStatus: "live" | "empty" | "partial" | "additional_permission_required";
+  dataStatus:
+    "live" | "empty" | "partial" | "additional_permission_required" | "demo";
   fetchedAt: string;
   cacheAgeSeconds?: number;
 };

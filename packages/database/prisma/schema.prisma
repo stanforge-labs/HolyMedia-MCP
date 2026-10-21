@@ -197,6 +197,7 @@ model Workspace {
   id                       String                          @id @default(uuid()) @db.Uuid
   name                     String                          @db.VarChar(160)
   slug                     String                          @unique @db.VarChar(120)
+  reviewerDemo             Boolean                         @default(false) @map("reviewer_demo")
   accessStatus             WorkspaceAccessStatus           @default(PENDING) @map("access_status")
   legalName                String?                         @map("legal_name") @db.VarChar(255)
   registrationNumber       String?                         @map("registration_number") @db.VarChar(64)
