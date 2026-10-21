@@ -1,9 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
-import { reviewerDemoCall } from "./reviewer-demo.js";
+import { isReviewerDemoWorkspace, reviewerDemoCall } from "./reviewer-demo.js";
 
 const account = { provider: "GOOGLE_ADS", account_id: "9990000001" };
 
 describe("isolated synthetic reviewer fixtures", () => {
+  it("requires the owner-created marker, fixed slug and active workspace", async () => {
+    const workspace = {
+      slug: "holypilot-anthropic-reviewer-demo",
+      accessStatus: "ACTIVE",
+      entitlements: [
+        { value: true, source: "reviewer_demo_bootstrap", expiresAt: null },
+      ],
+    };
+    const database = {
+      client: { workspace: { findUnique: vi.fn(async () => workspace) } },
+    };
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
+    ).resolves.toBe(true);
+    workspace.entitlements[0]!.source = "admin_manual";
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
+    ).rejects.toThrow();
+    workspace.entitlements = [];
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
+    ).resolves.toBe(false);
+    workspace.entitlements = [
+      { value: true, source: "reviewer_demo_bootstrap", expiresAt: null },
+    ];
+    workspace.slug = "client-workspace";
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
+    ).rejects.toThrow();
+    workspace.slug = "holypilot-anthropic-reviewer-demo";
+    workspace.accessStatus = "SUSPENDED";
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
+    ).rejects.toThrow();
+  });
+
   it("labels inventory, metrics, report and Search Console as synthetic", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-21T12:00:00Z"));

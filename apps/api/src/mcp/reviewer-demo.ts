@@ -2,7 +2,7 @@ import { ForbiddenException } from "@nestjs/common";
 import type { ProviderId, ProviderMetricSummary } from "@holymedia/contracts";
 import type { DatabaseService } from "../infrastructure/database.service.js";
 
-/** Static fiction, reachable only after the server-side Workspace.reviewerDemo check. */
+/** Static fiction, reachable only after the trusted server-side entitlement check. */
 const accounts = [
   {
     provider: "GOOGLE_ADS",
@@ -657,9 +657,24 @@ export async function isReviewerDemoWorkspace(
 ): Promise<boolean> {
   const workspace = await database.client.workspace.findUnique({
     where: { id: workspaceId },
-    select: { reviewerDemo: true, accessStatus: true },
+    select: {
+      slug: true,
+      accessStatus: true,
+      entitlements: {
+        where: { featureKey: "reviewer_demo" },
+        select: { value: true, source: true, expiresAt: true },
+      },
+    },
   });
-  if (workspace?.reviewerDemo && workspace.accessStatus !== "ACTIVE")
-    throw new ForbiddenException("Demo workspace is not active.");
-  return workspace?.reviewerDemo === true;
+  const marker = workspace?.entitlements[0];
+  if (!marker) return false;
+  if (
+    workspace.slug !== "holypilot-anthropic-reviewer-demo" ||
+    workspace.accessStatus !== "ACTIVE" ||
+    marker.value !== true ||
+    marker.source !== "reviewer_demo_bootstrap" ||
+    (marker.expiresAt !== null && marker.expiresAt <= new Date())
+  )
+    throw new ForbiddenException("Demo workspace is not available.");
+  return true;
 }

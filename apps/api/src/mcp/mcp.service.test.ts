@@ -11,8 +11,17 @@ function serviceWithAccounts(
     client: {
       workspace: {
         findUnique: async () => ({
-          reviewerDemo: demo,
+          slug: demo ? "holypilot-anthropic-reviewer-demo" : "ordinary",
           accessStatus: "ACTIVE",
+          entitlements: demo
+            ? [
+                {
+                  value: true,
+                  source: "reviewer_demo_bootstrap",
+                  expiresAt: null,
+                },
+              ]
+            : [],
         }),
       },
       workspaceMembership: {

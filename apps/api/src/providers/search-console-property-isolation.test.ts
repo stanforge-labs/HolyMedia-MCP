@@ -7,8 +7,15 @@ describe("Search Console property isolation", () => {
       client: {
         workspace: {
           findUnique: vi.fn(async () => ({
-            reviewerDemo: true,
+            slug: "holypilot-anthropic-reviewer-demo",
             accessStatus: "ACTIVE",
+            entitlements: [
+              {
+                value: true,
+                source: "reviewer_demo_bootstrap",
+                expiresAt: null,
+              },
+            ],
           })),
         },
       },
@@ -56,7 +63,7 @@ describe("Search Console property isolation", () => {
     const refresh = vi.fn();
     const database = {
       client: {
-        workspace: { findUnique: vi.fn(async () => ({ reviewerDemo: false })) },
+        workspace: { findUnique: vi.fn(async () => ({ entitlements: [] })) },
         providerAccount: { findMany },
       },
     };

@@ -4,6 +4,8 @@ import argon2 from "argon2";
 import { closeDatabase, createDatabase, Prisma } from "@holymedia/database";
 
 const slug = "holypilot-anthropic-reviewer-demo";
+const markerKey = "reviewer_demo";
+const markerSource = "reviewer_demo_bootstrap";
 const approval = "OWNER_APPROVED_REVIEWER_DEMO";
 
 function required(name: string): string {
@@ -29,19 +31,31 @@ async function main() {
       include: {
         memberships: { include: { user: true } },
         entitlements: {
-          select: { featureKey: true, value: true, source: true },
+          select: {
+            featureKey: true,
+            value: true,
+            source: true,
+            expiresAt: true,
+          },
         },
       },
     });
+    const isolated = existing?.entitlements.some(
+      (item) =>
+        item.featureKey === markerKey &&
+        item.value === true &&
+        item.source === markerSource &&
+        (item.expiresAt === null || item.expiresAt > new Date()),
+    );
     if (action === "inspect") {
       // Only the dedicated demo identity is printed, never credentials or client data.
       process.stdout.write(
         JSON.stringify({
           present: Boolean(existing),
-          isolated: existing?.reviewerDemo === true,
+          isolated: isolated === true,
           members: existing?.memberships.length ?? 0,
-          reviewerUserId: existing?.reviewerDemo
-            ? existing.memberships[0]?.userId
+          reviewerUserId: isolated
+            ? existing?.memberships[0]?.userId
             : undefined,
         }) + "\n",
       );
@@ -52,7 +66,7 @@ async function main() {
       throw new Error("Invalid reviewer email");
     if (
       existing &&
-      (!existing.reviewerDemo ||
+      (!isolated ||
         existing.memberships.length !== 1 ||
         existing.memberships[0]?.user.email !== email ||
         existing.memberships[0].user.status !== "active" ||
@@ -122,7 +136,6 @@ async function main() {
             data: {
               name: "HolyPilot reviewer demo · synthetic data",
               slug,
-              reviewerDemo: true,
               accessStatus: "ACTIVE",
               onboardingCompletedAt: new Date(),
             },
@@ -136,6 +149,12 @@ async function main() {
           });
           await tx.entitlement.createMany({
             data: [
+              {
+                workspaceId: workspace.id,
+                featureKey: markerKey,
+                value: true,
+                source: markerSource,
+              },
               {
                 workspaceId: workspace.id,
                 featureKey: "mcp",
@@ -181,10 +200,24 @@ async function main() {
         ]);
         if (connections || accounts || memberships !== 1)
           throw new Error("Reviewer cleanup blocked by non-demo relationships");
+        const marker = await tx.entitlement.findUnique({
+          where: {
+            workspaceId_featureKey: {
+              workspaceId: existing.id,
+              featureKey: markerKey,
+            },
+          },
+        });
+        if (
+          marker?.value !== true ||
+          marker.source !== markerSource ||
+          (marker.expiresAt !== null && marker.expiresAt <= new Date())
+        )
+          throw new Error("Reviewer marker changed before cleanup");
         // Workspace/user relations (including issued OAuth tokens) cascade according
         // to the existing Prisma schema; do not delete any unrelated identity.
         await tx.workspace.delete({
-          where: { id: existing.id, reviewerDemo: true },
+          where: { id: existing.id, slug },
         });
         await tx.user.delete({ where: { id: member.userId } });
       },
