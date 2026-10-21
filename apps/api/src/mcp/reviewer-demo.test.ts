@@ -25,6 +25,10 @@ describe("isolated synthetic reviewer fixtures", () => {
     workspace.entitlements = [];
     await expect(
       isReviewerDemoWorkspace(database as never, "demo"),
+    ).rejects.toThrow();
+    workspace.slug = "ordinary";
+    await expect(
+      isReviewerDemoWorkspace(database as never, "demo"),
     ).resolves.toBe(false);
     workspace.entitlements = [
       { value: true, source: "reviewer_demo_bootstrap", expiresAt: null },

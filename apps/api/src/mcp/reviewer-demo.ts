@@ -667,7 +667,11 @@ export async function isReviewerDemoWorkspace(
     },
   });
   const marker = workspace?.entitlements[0];
-  if (!marker) return false;
+  if (!marker) {
+    if (workspace?.slug === "holypilot-anthropic-reviewer-demo")
+      throw new ForbiddenException("Demo workspace marker is unavailable.");
+    return false;
+  }
   if (
     workspace.slug !== "holypilot-anthropic-reviewer-demo" ||
     workspace.accessStatus !== "ACTIVE" ||
