@@ -1,6 +1,12 @@
 # HolyPilot Claude reviewer demo — release boundary
 
-Status: **offline implementation only**. No API deploy, reviewer identity or Directory submission has been executed from this branch.
+Status: **local disposable acceptance passed; production unchanged**. No API deploy, production reviewer identity or Directory submission has been executed from this branch.
+
+## Local disposable acceptance (2026-10-21)
+
+An isolated PostgreSQL 18 and Redis instance were used without starting the existing WSL2 TEST stack. All schema migrations were applied to the disposable database. The owner-only maintenance command passed `inspect → provision → repeat provision → inspect → remove → inspect`; the repeat created no duplicate, a conflicting reviewer email was rejected, and removal left the demo workspace absent. The reviewer logged into a local API as `VIEWER`, completed public OAuth registration, authorization and PKCE exchange with the read scope, and ran three public MCP use cases: account selection, five synthetic campaigns, and period comparison plus report. The synthetic results carried `realData=false` and `dataStatus=demo`.
+
+The local checks rejected another workspace in OAuth, a foreign account ID, a WRITE preview and an expired demo marker. Before removal, the demo workspace had zero provider accounts and zero provider connections. Focused database-backed OAuth and security tests passed. This is local integration evidence only; no Claude UI reviewer session or production demo identity is claimed.
 
 ## Design
 
@@ -25,7 +31,7 @@ After separate approval: merge only reviewed API changes into `main`; allow the 
 
 Run `apps/api/dist/scripts/reviewer-demo-maintenance.js inspect` with the existing production `DATABASE_URL` only after the approved API release. To provision, supply `REVIEWER_DEMO_OWNER_APPROVAL=OWNER_APPROVED_REVIEWER_DEMO`, `REVIEWER_DEMO_EMAIL`, and `REVIEWER_DEMO_PASSWORD_FILE` in a protected operator context, then run `provision` once. The password file must be readable only by the operator and removed from the runtime after secure handoff. Never paste the password into GitHub, logs, a ticket or this chat. Idempotent re-runs verify the same user, marker and entitlements.
 
-For removal, first run `inspect` in the protected context and record `reviewerUserId`; then supply the same approval, email and `REVIEWER_DEMO_EXPECT_USER_ID` and run `remove`. Removal refuses workspaces with provider accounts/connections or users with additional memberships. The operator should revoke Claude access after review and confirm cleanup. These commands are **prepared, not executed**.
+For removal, first run `inspect` in the protected context and record `reviewerUserId`; then supply the same approval, email and `REVIEWER_DEMO_EXPECT_USER_ID` and run `remove`. Removal refuses workspaces with provider accounts/connections or users with additional memberships. The operator should revoke Claude access after review and confirm cleanup. These commands have been exercised only on the disposable local database; production activation and removal remain pending approval.
 
 ## Stop points
 
