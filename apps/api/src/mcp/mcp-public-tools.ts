@@ -5,7 +5,6 @@ export const PUBLIC_READ_TOOLS = [
   "list_ad_accounts",
   "get_account_status",
   "get_account_summary",
-  "run_connection_diagnostics",
   "list_campaigns",
   "get_campaign",
   "get_campaign_statuses",
@@ -59,8 +58,6 @@ const publicReadDescriptions: Record<
     "Returns the selected account's stored connection status from the HolyPilot database (v2_database_provider_account). It does not call the provider or prove that OAuth is currently valid.",
   get_account_summary:
     "Reads a summary for one selected advertising account, with an optional date range. Provider data requires an authorized, available connection.",
-  run_connection_diagnostics:
-    "Checks the selected account's provider connection. This can refresh and persist an expiring OAuth credential in HolyPilot; it does not change advertising data.",
   list_campaigns:
     "Lists paginated campaigns and available metrics for one selected advertising account and optional date range. Google Ads manager accounts cannot return client campaign metrics directly.",
   get_campaign:
@@ -247,7 +244,6 @@ export function publicTools(
     if (!legacy && !isPublicWriteTool(name))
       throw new Error(`Public MCP tool ${name} is not implemented.`);
     const read = isPublicReadTool(name);
-    const diagnostics = name === "run_connection_diagnostics";
     const commit = name === "commit_confirmed_preview";
     return {
       name,
@@ -260,12 +256,12 @@ export function publicTools(
         : publicWriteSchema(name),
       annotations: {
         title: title(name),
-        readOnlyHint: read && !diagnostics,
-        destructiveHint: commit || diagnostics,
+        readOnlyHint: read,
+        destructiveHint: commit,
         openWorldHint: read
           ? !workspaceOnlyReads.has(name)
           : providerFacingWrites.has(name),
-        idempotentHint: read && !diagnostics,
+        idempotentHint: read,
       },
     };
   });

@@ -13,7 +13,6 @@ const advertisingProviders = providers.slice(0, 4);
 const accountReads = new Set([
   "get_account_status",
   "get_account_summary",
-  "run_connection_diagnostics",
   "list_campaigns",
   "get_campaign",
   "get_campaign_statuses",

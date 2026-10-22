@@ -106,6 +106,16 @@ describe("public MCP transport", () => {
     expect(
       publicList.result.tools.some((tool) => tool.name === "confirm_preview"),
     ).toBe(false);
+    expect(
+      legacyList.result.tools.some(
+        (tool) => tool.name === "run_connection_diagnostics",
+      ),
+    ).toBe(true);
+    expect(
+      publicList.result.tools.some(
+        (tool) => tool.name === "run_connection_diagnostics",
+      ),
+    ).toBe(false);
     const hidden = (await controller.postPublic(
       request("tools/call", "commit_preview"),
       reply() as never,
@@ -118,6 +128,15 @@ describe("public MCP transport", () => {
     );
     expect(read).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
+    const hiddenDiagnostics = (await controller.postPublic(
+      request("tools/call", "run_connection_diagnostics"),
+      reply() as never,
+    )) as { result: { isError: boolean; content: Array<{ text: string }> } };
+    expect(hiddenDiagnostics.result.isError).toBe(true);
+    expect(JSON.parse(hiddenDiagnostics.result.content[0]!.text).code).toBe(
+      "public_operation_not_available",
+    );
+    expect(read).not.toHaveBeenCalled();
     const hiddenConfirmation = (await controller.postPublic(
       request("tools/call", "confirm_preview"),
       reply() as never,
@@ -259,7 +278,6 @@ describe("public MCP transport", () => {
     for (const name of [
       "get_account_status",
       "list_campaigns",
-      "run_connection_diagnostics",
       "get_status_summary",
     ]) {
       const result = (await controller.postPublic(

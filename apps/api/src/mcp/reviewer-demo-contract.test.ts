@@ -91,9 +91,7 @@ describe("reviewer demo public READ contract", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
     try {
-      const safe = PUBLIC_READ_TOOLS.filter(
-        (name) => name !== "run_connection_diagnostics",
-      );
+      const safe = PUBLIC_READ_TOOLS;
       expect(safe).toHaveLength(41);
       for (const name of safe) {
         expect(args[name], `fixture for ${name}`).toBeDefined();

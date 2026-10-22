@@ -25,6 +25,12 @@ describe("public MCP tool registry", () => {
       ]),
     );
     expect(PUBLIC_WRITE_TOOLS).toHaveLength(4);
+    expect(PUBLIC_READ_TOOLS).toHaveLength(41);
+    expect(V1_COMPATIBLE_MCP_TOOLS).toContain("run_connection_diagnostics");
+    expect(isPublicTool("run_connection_diagnostics")).toBe(false);
+    expect(isPublicToolAvailable("run_connection_diagnostics", true)).toBe(
+      false,
+    );
     const listed = publicTools(descriptors);
     expect(listed.map((tool) => tool.name)).toEqual([...PUBLIC_READ_TOOLS]);
     expect(new Set(listed.map((tool) => tool.name)).size).toBe(
@@ -39,6 +45,7 @@ describe("public MCP tool registry", () => {
       "preview_meta_update_campaign",
       "list_operator_skills",
       "analyze_site",
+      "run_connection_diagnostics",
     ]) {
       expect(isPublicTool(hidden)).toBe(false);
       expect(listed.some((tool) => tool.name === hidden)).toBe(false);
@@ -86,10 +93,7 @@ describe("public MCP tool registry", () => {
         expect(typeof tool.annotations[key], `${tool.name}.${key}`).toBe(
           "boolean",
         );
-      if (
-        PUBLIC_READ_TOOLS.includes(tool.name as never) &&
-        tool.name !== "run_connection_diagnostics"
-      ) {
+      if (PUBLIC_READ_TOOLS.includes(tool.name as never)) {
         expect(tool.annotations).toMatchObject({
           readOnlyHint: true,
           destructiveHint: false,
@@ -108,17 +112,6 @@ describe("public MCP tool registry", () => {
         idempotentHint: false,
       });
     }
-    expect(byName.get("run_connection_diagnostics")?.annotations).toMatchObject(
-      {
-        readOnlyHint: false,
-        destructiveHint: true,
-        openWorldHint: true,
-        idempotentHint: false,
-      },
-    );
-    expect(byName.get("run_connection_diagnostics")?.description).toMatch(
-      /refresh and persist an expiring OAuth credential/,
-    );
     expect(byName.get("commit_confirmed_preview")?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,

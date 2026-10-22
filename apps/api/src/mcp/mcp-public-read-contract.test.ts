@@ -11,16 +11,15 @@ import { publicReadFailure } from "./mcp-public-read-errors.js";
 import { validatePublicReadArguments } from "./mcp-public-read-contract.js";
 
 const account = { provider: "GOOGLE_ADS", account_id: "1234567890" };
-const four = [
+const accountTools = [
   "get_account_status",
   "list_campaigns",
-  "run_connection_diagnostics",
   "get_status_summary",
 ];
 
 describe("public MCP READ contract", () => {
   const listed = publicTools(McpService.prototype.tools.call({} as McpService));
-  for (const name of four) {
+  for (const name of accountTools) {
     it(`${name} advertises and enforces explicit account fields`, () => {
       const schema = listed.find((tool) => tool.name === name)!.inputSchema;
       expect(schema).toMatchObject({

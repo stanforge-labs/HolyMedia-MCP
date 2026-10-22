@@ -449,6 +449,17 @@ export class McpService {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
       description: toolDescription(name),
+      ...(name === "run_connection_diagnostics"
+        ? {
+            annotations: {
+              title: "Run Connection Diagnostics",
+              readOnlyHint: false,
+              destructiveHint: true,
+              openWorldHint: true,
+              idempotentHint: false,
+            },
+          }
+        : {}),
       inputSchema: metaReadSchema(name) ??
         previewToolSchema(name) ??
         googleKeywordToolSchema(name) ??
@@ -2435,6 +2446,8 @@ export class McpService {
 }
 
 function toolDescription(name: string): string {
+  if (name === "run_connection_diagnostics")
+    return "Internal provider connection check for a selected authorized account. May refresh and persist an expiring OAuth credential; not read-only or idempotent. Does not change advertising data.";
   if (name === "google_ads_list_negatives")
     return "Read-only paginated Google Ads campaign, ad group and shared-list negative keywords and their campaign attachments. Pages may contain shared-list fragments; combine by shared_set_id. Never changes ads.";
   if (name === "google_ads_check_negative_conflicts")
