@@ -220,6 +220,21 @@ describe("MCP V1-compatible policy", () => {
         .find((tool) => tool.name === "google_analytics_run_report")
         ?.inputSchema,
     ).toMatchObject({ additionalProperties: false });
+    expect(
+      service
+        .tools()
+        .find((tool) => tool.name === "run_connection_diagnostics"),
+    ).toMatchObject({
+      description: expect.stringMatching(
+        /refresh and persist.*OAuth credential/,
+      ),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
+    });
   });
 
   it("registers a Google-only keyword read tool and preserves write=false", async () => {
