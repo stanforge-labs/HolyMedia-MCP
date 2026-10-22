@@ -111,10 +111,13 @@ describe("public MCP tool registry", () => {
     expect(byName.get("run_connection_diagnostics")?.annotations).toMatchObject(
       {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         openWorldHint: true,
         idempotentHint: false,
       },
+    );
+    expect(byName.get("run_connection_diagnostics")?.description).toMatch(
+      /refresh and persist an expiring OAuth credential/,
     );
     expect(byName.get("commit_confirmed_preview")?.annotations).toMatchObject({
       readOnlyHint: false,
@@ -128,5 +131,21 @@ describe("public MCP tool registry", () => {
     expect(
       byName.get("generate_monthly_ads_report")?.annotations.openWorldHint,
     ).toBe(true);
+  });
+
+  it("gives every public READ tool a narrow, non-generic directory description", () => {
+    const byName = new Map(
+      publicTools(descriptors).map((tool) => [tool.name, tool]),
+    );
+    for (const name of PUBLIC_READ_TOOLS) {
+      const tool = byName.get(name);
+      expect(tool?.title).toBeTruthy();
+      expect(tool?.inputSchema.type).toBe("object");
+      expect(tool?.description.length).toBeGreaterThan(45);
+      expect(tool?.description).not.toMatch(/compatibility tool/i);
+      expect(tool?.description).not.toMatch(
+        /ignore previous|system prompt|secret key/i,
+      );
+    }
   });
 });
