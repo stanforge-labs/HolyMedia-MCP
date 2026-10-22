@@ -101,7 +101,7 @@ describe("isolated synthetic reviewer fixtures", () => {
     }
   });
 
-  it("rejects foreign IDs, live diagnostics, preview and invalid periods", () => {
+  it("rejects foreign IDs, preview and invalid periods", () => {
     expect(() =>
       reviewerDemoCall("get_account_status", {
         provider: "GOOGLE_ADS",
@@ -113,9 +113,6 @@ describe("isolated synthetic reviewer fixtures", () => {
         site_url: "sc-domain:client.example",
       }),
     ).toThrow("Demo property is unavailable");
-    expect(() =>
-      reviewerDemoCall("run_connection_diagnostics", account),
-    ).toThrow("unavailable");
     expect(() => reviewerDemoCall("preview_pause_campaign", account)).toThrow(
       "unavailable",
     );

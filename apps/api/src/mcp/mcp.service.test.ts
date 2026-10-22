@@ -1266,4 +1266,69 @@ describe("isolated public reviewer demo", () => {
       ),
     ).rejects.toThrow("account-restricted grants");
   });
+
+  it("serves newly covered synthetic reads only after OAuth membership and without adapters", async () => {
+    const readCampaigns = vi.fn();
+    const googleAnalyticsRunReport = vi.fn();
+    const metaPermissions = vi.fn();
+    const service = serviceWithAccounts(
+      [],
+      {
+        readCampaigns,
+        googleAnalyticsRunReport,
+        metaPermissions,
+      },
+      {},
+      true,
+    );
+    const report = await service.call(oauth, "google_analytics_run_report", {
+      property_id: "999000003",
+      metrics: ["sessions"],
+    });
+    expect(report).toMatchObject({ realData: false, dataStatus: "demo" });
+    const conflict = await service.call(
+      oauth,
+      "google_ads_check_negative_conflicts",
+      {
+        account_id: "9990000001",
+        campaign_ids: ["9991000001"],
+        negatives: [{ text: "demo" }],
+      },
+    );
+    expect(conflict).toMatchObject({ realData: false, dataStatus: "demo" });
+    const permissions = await service.call(
+      oauth,
+      "get_meta_oauth_permissions",
+      {
+        account_id: "act_9990000002",
+      },
+    );
+    expect(permissions).toMatchObject({ realData: false, dataStatus: "demo" });
+    expect(readCampaigns).not.toHaveBeenCalled();
+    expect(googleAnalyticsRunReport).not.toHaveBeenCalled();
+    expect(metaPermissions).not.toHaveBeenCalled();
+    await expect(
+      service.call(
+        { ...oauth, accountIds: ["other-workspace-account"] },
+        "google_analytics_run_report",
+        {
+          property_id: "999000003",
+          metrics: ["sessions"],
+        },
+      ),
+    ).rejects.toThrow("account-restricted grants");
+    await expect(
+      service.call(oauth, "google_analytics_run_report", {
+        property_id: "987654321",
+        metrics: ["sessions"],
+      }),
+    ).rejects.toThrow("Demo account is unavailable");
+    await expect(
+      service.call(oauth, "preview_pause_campaign", {
+        provider: "GOOGLE_ADS",
+        account_id: "9990000001",
+        campaign_id: "9991000001",
+      }),
+    ).rejects.toThrow("unavailable");
+  });
 });
