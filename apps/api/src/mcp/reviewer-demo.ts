@@ -457,6 +457,7 @@ function ga4Report(
   dimensions: string[],
   metricNames: string[],
   realtime = false,
+  eventKind?: "all" | "key",
 ) {
   const account = selectAccount({ ...args, provider: "GOOGLE_ANALYTICS" }, [
     "GOOGLE_ANALYTICS",
@@ -488,7 +489,7 @@ function ga4Report(
     deviceCategory: "desktop",
     country: "Kazakhstan",
   };
-  const row = (day?: string) => ({
+  const row = (day?: string, dayIndex = 0) => ({
     dimensionValues: dimensions.map((name) => ({
       value:
         name === "date" && day
@@ -496,16 +497,63 @@ function ga4Report(
           : dimensionValues[name],
     })),
     metricValues: metricNames.map((name) => ({
-      value:
-        day && name !== "engagementRate"
-          ? String(Number(values[name]) / Math.max(days.length, 1))
-          : values[name],
+      value: (() => {
+        if (!day || name === "engagementRate") return values[name];
+        const count = days.length;
+        if (name === "totalRevenue") {
+          const cents = Math.round(Number(values[name]) * 100);
+          return (
+            (Math.floor(cents / count) + (dayIndex < cents % count ? 1 : 0)) /
+            100
+          ).toFixed(2);
+        }
+        const total = Number(values[name]);
+        return String(
+          Math.floor(total / count) + (dayIndex < total % count ? 1 : 0),
+        );
+      })(),
     })),
   });
-  const rows =
+  const dateRows =
     dimensions.includes("date") && dates
-      ? days.map((day) => row(day.day))
+      ? days.map((day, index) => row(day.day, index))
       : [row()];
+  const eventRow = (
+    eventName: string,
+    eventValues: Record<string, string>,
+  ) => ({
+    dimensionValues: [{ value: eventName }],
+    metricValues: metricNames.map((name) => ({ value: eventValues[name] })),
+  });
+  const keyEventCount = Number(values.keyEvents);
+  const pageViews = Number(values.screenPageViews);
+  const leadValues = {
+    ...values,
+    activeUsers: String(Math.min(Number(values.activeUsers), keyEventCount)),
+    eventCount: String(keyEventCount),
+  };
+  const rows = eventKind
+    ? eventKind === "key"
+      ? [eventRow("generate_lead", leadValues)]
+      : [
+          eventRow("page_view", {
+            ...values,
+            eventCount: String(pageViews),
+            keyEvents: "0",
+            totalRevenue: "0.00",
+          }),
+          eventRow("generate_lead", leadValues),
+          eventRow("scroll", {
+            ...values,
+            activeUsers: String(Math.round(Number(values.activeUsers) / 2)),
+            eventCount: String(
+              Number(values.eventCount) - pageViews - keyEventCount,
+            ),
+            keyEvents: "0",
+            totalRevenue: "0.00",
+          }),
+        ]
+    : dateRows;
   return {
     property: {
       property_id: account.account_id,
@@ -517,7 +565,14 @@ function ga4Report(
     dimensions,
     metrics: metricNames,
     rows: rows.slice(0, limit),
-    totals: [{ metricValues: row().metricValues }],
+    totals: [
+      {
+        metricValues:
+          eventKind === "key"
+            ? eventRow("generate_lead", leadValues).metricValues
+            : row().metricValues,
+      },
+    ],
     row_count: rows.length,
     metadata: { synthetic: true },
     quota: null,
@@ -949,7 +1004,7 @@ export function reviewerDemoCall(name: string, args: Args): unknown {
         : name === "google_ads_search_terms"
           ? [
               {
-                search_term: "northwind demo trainers",
+                search_term: "demo brand",
                 search_term_status: "ADDED",
                 triggered_keyword: "demo brand",
                 triggered_keyword_match_type: "EXACT",
@@ -1019,6 +1074,7 @@ export function reviewerDemoCall(name: string, args: Args): unknown {
         cost: number;
         clicks: number;
         conversions: number;
+        all_conversions: number;
         impressions: number;
       }>;
       return {
@@ -1033,14 +1089,21 @@ export function reviewerDemoCall(name: string, args: Args): unknown {
           .slice(0, limit)
           .map((item) => {
             const conversions = Math.round(item.conversions * periodFactor);
+            const allConversions = Math.max(
+              conversions,
+              Math.round(item.all_conversions * periodFactor),
+            );
             const cost = Number((item.cost * periodFactor).toFixed(2));
             return {
               ...item,
               cost,
               conversions,
+              all_conversions: allConversions,
               clicks: Math.round(item.clicks * periodFactor),
               impressions: Math.round(item.impressions * periodFactor),
-              cost_per_conversion: conversions ? cost / conversions : null,
+              cost_per_conversion: conversions
+                ? Number((cost / conversions).toFixed(2))
+                : null,
               spend: money(cost),
             };
           }),
@@ -1103,7 +1166,9 @@ export function reviewerDemoCall(name: string, args: Args): unknown {
               conversions,
               clicks: Math.round(item.clicks * periodFactor),
               impressions: Math.round(item.impressions * periodFactor),
-              cost_per_conversion: conversions ? cost / conversions : null,
+              cost_per_conversion: conversions
+                ? Number((cost / conversions).toFixed(2))
+                : null,
               spend: money(cost),
             };
           }),
@@ -1538,7 +1603,17 @@ export function reviewerDemoCall(name: string, args: Args): unknown {
         : preset!.metrics;
     if (!metricNames.length)
       throw new ForbiddenException("At least one demo metric is required.");
-    return ga4Report(args, dimensions, metricNames);
+    return ga4Report(
+      args,
+      dimensions,
+      metricNames,
+      false,
+      name === "google_analytics_events"
+        ? "all"
+        : name === "google_analytics_key_events"
+          ? "key"
+          : undefined,
+    );
   }
   if (name === "get_search_console_report") {
     const site = str(args.site_url);

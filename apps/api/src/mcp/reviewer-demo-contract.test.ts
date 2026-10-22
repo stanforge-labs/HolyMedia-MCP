@@ -255,4 +255,111 @@ describe("reviewer demo public READ contract", () => {
       }),
     ).toThrow("Unsupported demo metrics");
   });
+
+  it("keeps synthetic Google Ads keyword and exact-query metrics coherent", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+    try {
+      const keywords = reviewerDemoCall("google_ads_list_keywords", {
+        ...google,
+        ...since,
+        campaign_ids: ["9991000001"],
+      }) as {
+        items: Array<{
+          keyword: string;
+          match_type: string;
+          conversions: number;
+          all_conversions: number;
+          cost_per_conversion: number;
+        }>;
+      };
+      const keyword = keywords.items[0]!;
+      expect(keyword.all_conversions).toBeGreaterThanOrEqual(
+        keyword.conversions,
+      );
+      expect(Number(keyword.cost_per_conversion.toFixed(2))).toBe(
+        keyword.cost_per_conversion,
+      );
+      const terms = reviewerDemoCall("google_ads_search_terms", {
+        ...google,
+        ...since,
+        campaign_ids: ["9991000001"],
+      }) as {
+        items: Array<{
+          search_term: string;
+          triggered_keyword: string;
+          triggered_keyword_match_type: string;
+        }>;
+      };
+      expect(keyword.match_type).toBe("EXACT");
+      expect(terms.items[0]?.triggered_keyword_match_type).toBe("EXACT");
+      expect(terms.items[0]?.search_term).toBe(keyword.keyword);
+      expect(terms.items[0]?.triggered_keyword).toBe(keyword.keyword);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns integer daily GA4 counts and coherent event breakdowns", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+    try {
+      const daily = reviewerDemoCall("google_analytics_run_report", {
+        ...ga4,
+        ...dates,
+        dimensions: ["date"],
+        metrics: ["sessions"],
+      }) as {
+        rows: Array<{ metricValues: Array<{ value: string }> }>;
+        totals: Array<{ metricValues: Array<{ value: string }> }>;
+      };
+      const sessions = daily.rows.map((row) =>
+        Number(row.metricValues[0]?.value),
+      );
+      expect(sessions.every(Number.isInteger)).toBe(true);
+      expect(sessions.reduce((sum, value) => sum + value, 0)).toBe(
+        Number(daily.totals[0]?.metricValues[0]?.value),
+      );
+      const events = reviewerDemoCall("google_analytics_events", {
+        ...ga4,
+        ...dates,
+      }) as {
+        rows: Array<{
+          dimensionValues: Array<{ value: string }>;
+          metricValues: Array<{ value: string }>;
+        }>;
+        totals: Array<{ metricValues: Array<{ value: string }> }>;
+      };
+      const keyEvents = reviewerDemoCall("google_analytics_key_events", {
+        ...ga4,
+        ...dates,
+      }) as typeof events;
+      const overview = reviewerDemoCall("google_analytics_traffic_overview", {
+        ...ga4,
+        ...dates,
+      }) as {
+        totals: Array<{ metricValues: Array<{ value: string }> }>;
+      };
+      const pageView = events.rows.find(
+        (row) => row.dimensionValues[0]?.value === "page_view",
+      );
+      expect(pageView?.metricValues[0]?.value).toBe(
+        overview.totals[0]?.metricValues[6]?.value,
+      );
+      expect(
+        keyEvents.rows.map((row) => row.dimensionValues[0]?.value),
+      ).toEqual(["generate_lead"]);
+      expect(keyEvents.rows[0]?.metricValues[0]?.value).toBe(
+        keyEvents.rows[0]?.metricValues[2]?.value,
+      );
+      expect(
+        events.rows.reduce(
+          (sum, row) => sum + Number(row.metricValues[0]?.value),
+          0,
+        ),
+      ).toBe(Number(events.totals[0]?.metricValues[0]?.value));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
