@@ -45,7 +45,7 @@ The read allowlist includes `google_ads_list_keywords`,
 `google_ads_check_negative_conflicts`. Its test checks capabilities and names,
 not an old fixed tool count. `confirm_preview`, `commit_preview`, `commit_meta_app_review_preview` and
 `commit_meta_confirmed_write` are not public. The read registry includes the
-selected account, campaign, analytics, diagnostics and structured-report tools
+selected account, campaign, analytics and structured-report tools
 in `mcp-public-tools.ts`; arbitrary-site analysis and capability aliases are
 omitted. Public write descriptions explicitly say preview does not mutate a
 provider and commit needs separate HolyMedia browser approval.
@@ -55,8 +55,10 @@ provider and commit needs separate HolyMedia browser approval.
 Preview persists local preview/audit state: `readOnlyHint=false`,
 `destructiveHint=false`. Commit may mutate a Meta campaign:
 `readOnlyHint=false`, `destructiveHint=true`. `run_connection_diagnostics`
-may refresh credentials or update persistent health status, so it is not
-marked read-only. `generate_monthly_ads_report` builds structured data in
+is available only through the private/internal MCP surface because it may
+refresh and persist OAuth credentials. Public callers can read the stored
+account state with `get_account_status`, which does not prove live OAuth.
+`generate_monthly_ads_report` builds structured data in
 memory, not a persistent user report resource, and remains read-only. Other
 provider reads have no business mutation. Credential refresh, usage accounting
 and telemetry are operational effects distinct from business writes. Hints are
