@@ -40,43 +40,61 @@ export function googleAdsApiError(
   payload: unknown,
   response: Response,
 ): GoogleAdsApiError | undefined {
-  const outer = record(payload);
-  const error = record(outer.error);
-  if (!Object.keys(error).length) return undefined;
-  const details = Array.isArray(error.details) ? error.details : [];
-  const failures = details.filter(
-    (detail) =>
-      typeof record(detail)["@type"] === "string" &&
-      String(record(detail)["@type"]).includes("GoogleAdsFailure"),
-  );
-  const entries = failures.flatMap((failure) =>
-    Array.isArray(record(failure).errors)
-      ? (record(failure).errors as unknown[])
-      : [],
-  );
-  const fallbackCode =
-    safeCode(error.status) ?? safeCode(error.code) ?? "GOOGLE_ADS_ERROR";
-  const errors = entries.slice(0, 50).map((entry) => {
-    const value = record(entry);
-    const codeValues = Object.values(record(value.errorCode));
-    const code = codeValues.map(safeCode).find(Boolean) ?? fallbackCode;
-    const fieldPath = fieldPathFromLocation(value.location);
-    return {
-      error_code: code,
-      message: safeMessage(value.message) ?? "Google Ads rejected the request.",
-      ...(fieldPath ? { field_path: fieldPath } : {}),
-    };
-  });
-  if (!errors.length)
-    errors.push({
-      error_code: fallbackCode,
-      message: safeMessage(error.message) ?? "Google Ads rejected the request.",
-    });
-  const requestId = safeIdentifier(
-    failures.map((failure) => record(failure).requestId).find(Boolean) ??
-      error.requestId ??
-      response.headers.get("request-id"),
-  );
+  // REST searchStream wraps messages in a flat JSON array. Do not recursively
+  // unwrap arbitrary shapes or let an oversized response defeat bounded parsing.
+  const envelopes = Array.isArray(payload)
+    ? payload.length <= 50
+      ? payload
+      : []
+    : [payload];
+  const errors: GoogleAdsErrorDetail[] = [];
+  const requestIds: unknown[] = [];
+  for (const envelope of envelopes) {
+    const error = record(record(envelope).error);
+    if (!Object.keys(error).length) continue;
+    const details = Array.isArray(error.details)
+      ? error.details.slice(0, 50)
+      : [];
+    const failures = details.filter(
+      (detail) =>
+        typeof record(detail)["@type"] === "string" &&
+        String(record(detail)["@type"]).includes("GoogleAdsFailure"),
+    );
+    requestIds.push(
+      ...failures.map((failure) => record(failure).requestId),
+      error.requestId,
+    );
+    const fallbackCode =
+      safeCode(error.status) ?? safeCode(error.code) ?? "GOOGLE_ADS_ERROR";
+    const before = errors.length;
+    for (const failure of failures) {
+      const entries = record(failure).errors;
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries.slice(0, 50 - errors.length)) {
+        const value = record(entry);
+        const codeValues = Object.values(record(value.errorCode));
+        const code = codeValues.map(safeCode).find(Boolean) ?? fallbackCode;
+        const fieldPath = fieldPathFromLocation(value.location);
+        errors.push({
+          error_code: code,
+          message:
+            safeMessage(value.message) ?? "Google Ads rejected the request.",
+          ...(fieldPath ? { field_path: fieldPath } : {}),
+        });
+      }
+    }
+    if (errors.length === before && errors.length < 50)
+      errors.push({
+        error_code: fallbackCode,
+        message:
+          safeMessage(error.message) ?? "Google Ads rejected the request.",
+      });
+    if (errors.length === 50) break;
+  }
+  if (!errors.length) return undefined;
+  const requestId = [...requestIds, response.headers.get("request-id")]
+    .map(safeIdentifier)
+    .find(Boolean);
   return new GoogleAdsApiError(errors, requestId, response.status);
 }
 
@@ -113,6 +131,7 @@ function fieldPathFromLocation(location: unknown): string | undefined {
   const elements = record(location).fieldPathElements;
   if (!Array.isArray(elements)) return undefined;
   const path = elements
+    .slice(0, 50)
     .map((element) => {
       const value = record(element);
       const name = String(value.fieldName ?? "");

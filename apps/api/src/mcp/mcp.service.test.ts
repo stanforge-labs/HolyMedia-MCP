@@ -207,7 +207,7 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(161);
+    expect(service.tools()).toHaveLength(179);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
@@ -1280,6 +1280,26 @@ describe("isolated public reviewer demo", () => {
         {},
       ),
     ).rejects.toThrow("account-restricted grants");
+  });
+
+  it("keeps private Google previews unavailable to the synthetic reviewer", async () => {
+    const googleStage0 = vi.fn();
+    const createGoogleCampaign = vi.fn();
+    const service = serviceWithAccounts(
+      [],
+      { googleStage0 },
+      { createGoogleCampaign },
+      true,
+    );
+    await expect(
+      service.call(oauth, "preview_pause_campaign", {
+        provider: "GOOGLE_ADS",
+        account_id: "9990000001",
+        campaign_id: "9991000001",
+      }),
+    ).rejects.toThrow("unavailable in the isolated demo workspace");
+    expect(googleStage0).not.toHaveBeenCalled();
+    expect(createGoogleCampaign).not.toHaveBeenCalled();
   });
 
   it("serves newly covered synthetic reads only after OAuth membership and without adapters", async () => {

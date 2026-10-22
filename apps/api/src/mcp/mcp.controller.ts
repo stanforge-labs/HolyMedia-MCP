@@ -15,6 +15,7 @@ import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
 import { GoogleAdsApiError } from "../providers/google-ads.error.js";
+import { GoogleAdsWriteError } from "../providers/google-ads-write.js";
 import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
 import { PreviewError } from "./mcp-preview.error.js";
@@ -22,6 +23,13 @@ import { MetaReadError } from "../providers/meta-read.error.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
 import { oauthEndpoints } from "./oauth-endpoints.js";
 import { McpPublicWriteService } from "./mcp-public-write.service.js";
+import { safeMediaSummary } from "../providers/google-ads-media.js";
+import { safeGoogleTrackingSummary } from "../providers/google-ads-tracking-audit.js";
+import {
+  GOOGLE_WRITE_PROFILE,
+  googleWriteOpenApi,
+  googleWriteProfileName,
+} from "./google-write-client-contract.js";
 import {
   isPublicReadTool,
   isPublicTool,
@@ -45,6 +53,28 @@ export class McpController {
   private readonly endpoints = oauthEndpoints();
   private readonly publicWriteScopeEnabled =
     loadConfig().publicMcpWriteScopeEnabled;
+  private readonly restrictedTest = loadConfig().qrsTestRestrictedAuth;
+  private readonly qrsWriteEnabled =
+    loadConfig().qrsTestGoogleConfirmedWriteEnabled ||
+    loadConfig().qrsTestCloneConfirmedWriteEnabled;
+
+  private authorizationChallenge(
+    request: McpRequest,
+    reply: FastifyReply,
+    publicRoute: boolean,
+  ) {
+    const profile = (request.query as Record<string, unknown> | undefined)
+      ?.profile;
+    return mcpUnauthorized(
+      reply,
+      publicRoute,
+      this.endpoints,
+      !publicRoute &&
+        this.restrictedTest &&
+        this.qrsWriteEnabled &&
+        profile === GOOGLE_WRITE_PROFILE,
+    );
+  }
 
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
@@ -91,7 +121,7 @@ export class McpController {
         { authReason: "missing_invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute, this.endpoints);
+      return this.authorizationChallenge(request, reply, publicRoute);
     }
 
     // Server-to-client SSE is optional in Streamable HTTP. A valid MCP client
@@ -117,10 +147,53 @@ export class McpController {
     return this.handlePost(request, reply, true);
   }
 
+  @Get("mcp/openapi")
+  public async openapi(
+    @Req() request: McpRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const token = bearerToken(request.headers.authorization);
+    const principal = token ? await this.authenticate(token, false) : null;
+    if (!principal) return this.authorizationChallenge(request, reply, false);
+    if (
+      !principal.scopes.some((scope) =>
+        ["adforge:mcp", "adforge:mcp:read"].includes(scope),
+      )
+    )
+      throw new PreviewError("write_scope_required");
+    return googleWriteOpenApi(
+      this.mcp.googleWriteTools(),
+      new URL(loadConfig().publicBaseUrl).origin,
+    );
+  }
+
+  @Post("mcp/rest/:tool")
+  public async rest(
+    @Req() request: McpRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const tool = (request.params as { tool?: string }).tool ?? "";
+    const response = await this.handlePost(
+      request,
+      reply,
+      false,
+      {
+        jsonrpc: "2.0",
+        id: "rest",
+        method: "tools/call",
+        params: { name: tool, arguments: request.body },
+      },
+      GOOGLE_WRITE_PROFILE,
+    );
+    return response && "result" in response ? response.result : response;
+  }
+
   private async handlePost(
     request: McpRequest,
     reply: FastifyReply,
     publicRoute: boolean,
+    override?: JsonRpcRequest,
+    forcedProfile?: typeof GOOGLE_WRITE_PROFILE,
   ) {
     const rawAuthorization = request.headers.authorization;
     const authorization = Array.isArray(rawAuthorization)
@@ -132,7 +205,7 @@ export class McpController {
         { authReason: "missing_or_malformed_bearer" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute, this.endpoints);
+      return this.authorizationChallenge(request, reply, publicRoute);
     }
     const principal = token
       ? await this.authenticate(token, publicRoute)
@@ -142,11 +215,38 @@ export class McpController {
         { authReason: "invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      return mcpUnauthorized(reply, publicRoute, this.endpoints);
+      return this.authorizationChallenge(request, reply, publicRoute);
     }
 
-    const input = (request.body ?? {}) as JsonRpcRequest;
+    const input = override ?? ((request.body ?? {}) as JsonRpcRequest);
     const id = input.id ?? null;
+    let profile: typeof GOOGLE_WRITE_PROFILE | undefined;
+    try {
+      const selected = (request.query as Record<string, unknown> | undefined)
+        ?.profile;
+      if (publicRoute && selected !== undefined)
+        throw new ProviderError(
+          "invalid_request",
+          "Profile доступен только на private MCP.",
+        );
+      if (this.restrictedTest && publicRoute)
+        throw new ProviderError(
+          "invalid_request",
+          "Public MCP is unavailable in restricted TEST.",
+        );
+      profile =
+        forcedProfile ??
+        googleWriteProfileName(
+          this.restrictedTest ? (selected ?? GOOGLE_WRITE_PROFILE) : selected,
+        );
+    } catch {
+      reply.code(200);
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32602, message: "Invalid private MCP profile." },
+      };
+    }
     if (input.method === "notifications/initialized") {
       // Streamable HTTP notifications must not produce a JSON-RPC body. Codex
       // closes the transport when it receives Nest's default 201 JSON response.
@@ -185,7 +285,9 @@ export class McpController {
         result: {
           tools: publicRoute
             ? publicTools(this.mcp.tools(), this.publicWriteScopeEnabled)
-            : this.mcp.tools(),
+            : profile
+              ? this.mcp.googleWriteTools()
+              : this.mcp.tools(),
         },
       };
     }
@@ -211,8 +313,21 @@ export class McpController {
             params.arguments,
           );
         } else {
-          result = await this.mcp.call(principal, name, params.arguments);
+          result = profile
+            ? await this.mcp.callGoogleWriteProfile(
+                principal,
+                name,
+                params.arguments,
+              )
+            : await this.mcp.call(principal, name, params.arguments);
         }
+        if (
+          result &&
+          typeof result === "object" &&
+          "provider" in result &&
+          result.provider === "GOOGLE_ADS"
+        )
+          result = safeGoogleTrackingSummary(safeMediaSummary(result));
         await Promise.allSettled([
           this.audit.record({
             eventType: "mcp_tool_executed",
@@ -230,9 +345,56 @@ export class McpController {
         return {
           jsonrpc: "2.0",
           id,
-          result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+          result: {
+            content: [
+              // Keep the existing JSON text contract for older MCP clients
+              // that do not consume structuredContent (including tokens/rows).
+              {
+                type: "text",
+                text: JSON.stringify(result),
+              },
+              ...(result &&
+              typeof result === "object" &&
+              "provider" in result &&
+              result.provider === "GOOGLE_ADS" &&
+              "summary" in result &&
+              typeof result.summary === "string"
+                ? [{ type: "text", text: result.summary }]
+                : []),
+            ],
+            ...(result &&
+            typeof result === "object" &&
+            "provider" in result &&
+            result.provider === "GOOGLE_ADS" &&
+            "operation_count" in result
+              ? { structuredContent: result }
+              : {}),
+          },
         };
       } catch (error) {
+        if (this.restrictedTest && !publicRoute) {
+          await Promise.allSettled([
+            this.audit.record({
+              eventType: "mcp_test_tool_denied",
+              actorType: principal.kind === "oauth" ? "HUMAN" : "SERVICE",
+              ...(principal.kind === "oauth"
+                ? { actorUserId: principal.userId }
+                : {}),
+              workspaceId: principal.workspaceId,
+              targetType: "mcp_tool",
+              targetId: name.slice(0, 160),
+              requestId: request.id,
+              success: false,
+              metadata: {
+                tool: name.slice(0, 120),
+                reason:
+                  error instanceof HttpException
+                    ? "policy_denied"
+                    : "provider_or_internal_error",
+              },
+            }),
+          ]);
+        }
         if (publicRoute && isPublicTool(name) && !isPublicReadTool(name)) {
           await Promise.allSettled([
             this.audit.record({
@@ -366,6 +528,19 @@ export class McpController {
                         upstream_code: error.providerCode,
                       }
                     : {}),
+                  ...(!publicFailure && error instanceof GoogleAdsWriteError
+                    ? {
+                        code: error.writeCode,
+                        source: error.failures.length
+                          ? "GOOGLE_ADS"
+                          : "HOLYMEDIA",
+                        ...(error.fieldPath
+                          ? { field_path: error.fieldPath }
+                          : {}),
+                        provider: "GOOGLE_ADS",
+                        google_errors: error.failures,
+                      }
+                    : {}),
                 }),
               },
             ],
@@ -388,19 +563,7 @@ export class McpController {
       );
     const service = await this.tokens.authenticate(token);
     if (service) return service;
-    const oauth = await this.oauthTokens.authenticate(token);
-    // Preserve the existing /mcp principal shape and behavior. The new OAuth
-    // identity is used only on /mcp/public and never enables legacy writes.
-    return oauth
-      ? {
-          kind: "service" as const,
-          tokenId: oauth.tokenId,
-          serviceIdentityId: `oauth:${oauth.clientId}:${oauth.userId}`,
-          workspaceId: oauth.workspaceId,
-          scopes: oauth.scopes,
-          accountIds: oauth.accountIds,
-        }
-      : null;
+    return this.oauthTokens.authenticate(token, this.endpoints.legacyResource);
   }
 }
 
@@ -461,6 +624,7 @@ function mcpUnauthorized(
   reply: FastifyReply,
   publicRoute: boolean,
   endpoints: ReturnType<typeof oauthEndpoints>,
+  writeScopedTest = false,
 ) {
   return reply
     .code(401)
@@ -468,7 +632,7 @@ function mcpUnauthorized(
       "WWW-Authenticate",
       publicRoute
         ? `Bearer resource_metadata="${endpoints.publicResourceMetadata}", scope="adforge:mcp:read"`
-        : `Bearer resource_metadata="${endpoints.legacyResourceMetadata}", scope="adforge:mcp:read"`,
+        : `Bearer resource_metadata="${endpoints.legacyResourceMetadata}", scope="${writeScopedTest ? "adforge:mcp:read adforge:mcp:write" : "adforge:mcp:read"}"`,
     )
     .send({ statusCode: 401, message: "MCP authorization required." });
 }

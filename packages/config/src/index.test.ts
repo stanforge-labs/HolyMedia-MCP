@@ -127,6 +127,46 @@ describe("v2 configuration", () => {
     expect(config.publicMcpWriteScopeEnabled).toBe(false);
   });
 
+  it("keeps the existing localhost TEST profile read-only and rejects remote write gates", () => {
+    const local = {
+      NODE_ENV: "development",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_LOCAL_READONLY_AUTH: "true",
+      HOLYMEDIA_PUBLIC_BASE_URL: "http://127.0.0.1:23300",
+      CORS_ORIGINS: "http://127.0.0.1:23300",
+      PROVIDER_GOOGLE_REDIRECT_URI:
+        "http://127.0.0.1:24404/oauth/google/callback",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      V2_PREVIEW_ONLY: "true",
+    };
+    expect(loadConfig(local)).toMatchObject({
+      qrsTestRestrictedAuth: true,
+      qrsTestLocalReadonlyAuth: true,
+      providerGoogleAdsWriteEnabled: false,
+      qrsTestGoogleConfirmedWriteEnabled: false,
+    });
+    for (const flag of [
+      "PROVIDER_GOOGLE_ADS_WRITE_ENABLED",
+      "QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED",
+      "QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED",
+      "QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED",
+      "QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED",
+    ]) {
+      expect(() => loadConfig({ ...local, [flag]: "true" })).toThrow(
+        "Local restricted TEST requires loopback and all writes OFF.",
+      );
+    }
+    expect(() =>
+      loadConfig({
+        ...local,
+        QRS_TEST_LOCAL_READONLY_AUTH: "false",
+        PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      }),
+    ).toThrow(
+      "Restricted TEST MCP requires the exact TEST origin and account.",
+    );
+  });
+
   it("requires an independent explicit flag for public controlled writes", () => {
     expect(
       loadConfig({ NODE_ENV: "test" }).publicMcpControlledWriteEnabled,

@@ -16,6 +16,7 @@ import {
 } from "@nestjs/common";
 import type { ProviderId } from "@holymedia/contracts";
 import type { FastifyReply } from "fastify";
+import { loadConfig } from "@holymedia/config";
 import {
   CurrentPrincipal,
   RequirePermissions,
@@ -81,12 +82,17 @@ export class ProviderController {
     // OAuth providers use code. Keep both public callback shapes compatible.
     const authorizationCode =
       providerId === "TIKTOK_ADS" ? authCode || code : code;
-    const redirect = (outcome: "success" | "error", reason?: string) =>
-      reply
+    const redirect = (outcome: "success" | "error", reason?: string) => {
+      const path = `/dashboard/connections?oauth=${outcome}&provider=${encodeURIComponent(provider)}${reason ? `&oauth_reason=${encodeURIComponent(reason)}` : ""}`;
+      const config = loadConfig();
+      return reply
         .code(302)
         .redirect(
-          `/dashboard/connections?oauth=${outcome}&provider=${encodeURIComponent(provider)}${reason ? `&oauth_reason=${encodeURIComponent(reason)}` : ""}`,
+          config.qrsTestLocalReadonlyAuth
+            ? new URL(path, config.publicBaseUrl).toString()
+            : path,
         );
+    };
     if (oauthError)
       return redirect(
         "error",
