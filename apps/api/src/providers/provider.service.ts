@@ -14,6 +14,9 @@ import type {
 import type { Prisma } from "@holymedia/database";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import { AuditService } from "../audit/audit.service.js";
+import type { Stage1Plan, Stage1MutationResult } from "./google-ads-stage1.js";
+import type { GoogleAdsAdapter } from "./adapters/google.ads.js";
+import type { GoogleTrackingAuditReadAdapter } from "./google-ads-tracking-audit.js";
 import { SessionService } from "../auth/session.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { BillingService } from "../billing/billing.service.js";
@@ -33,6 +36,14 @@ import { ProviderMetricsService } from "./provider.metrics.js";
 import { MetaAdsAdapter } from "./adapters/meta.ads.js";
 import type { MetaInsightsRequest } from "./meta-insights.parameters.js";
 import { metaReadError } from "./meta-read.error.js";
+import {
+  assertGoogleWriteAccount,
+  GoogleAdsWriteError,
+  writeFailureFromError,
+  type GoogleKeywordIdentity,
+  type GoogleKeywordMutation,
+  type GoogleKeywordWriteAdapter,
+} from "./google-ads-write.js";
 import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
@@ -1118,6 +1129,217 @@ export class ProviderService {
       );
       throw error;
     }
+  }
+
+  private async googleKeywordContext(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    if (context.account.provider !== "GOOGLE_ADS")
+      throw new ProviderError(
+        "invalid_account",
+        "Требуется Google Ads аккаунт.",
+      );
+    assertGoogleWriteAccount(this.config, context.account.externalAccountId);
+    const adapter = context.adapter as unknown as GoogleKeywordWriteAdapter;
+    if (
+      typeof adapter.readKeywordStates !== "function" ||
+      typeof adapter.validateKeywordStatuses !== "function" ||
+      typeof adapter.commitKeywordStatuses !== "function"
+    )
+      throw new ProviderError(
+        "provider_not_configured",
+        "Google Ads keyword write adapter недоступен.",
+      );
+    return { ...context, adapter };
+  }
+  public async googleStage1(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action: "build" | "read" | "validate" | "commit" | "verify",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    const adapter = ctx.adapter as unknown as GoogleAdsAdapter;
+    if (typeof adapter.buildStage1 !== "function")
+      throw new GoogleAdsWriteError(
+        "google_stage1_unavailable",
+        "Google Stage 1 adapter недоступен.",
+      );
+    const plan = input as Stage1Plan;
+    try {
+      if (action === "build") return await adapter.buildStage1(ctx.read, input);
+      if (action === "read") return await adapter.readStage1(ctx.read, plan);
+      if (action === "verify")
+        return await adapter.verifyStage1(ctx.read, plan, results ?? []);
+      return await adapter.mutateStage1(ctx.read, plan, action === "validate");
+    } catch (error) {
+      if (error instanceof GoogleAdsWriteError) throw error;
+      const failure = writeFailureFromError(error);
+      throw new GoogleAdsWriteError(
+        "google_stage1_provider_failed",
+        failure.message,
+        [failure],
+      );
+    }
+  }
+  public async googleStage2(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action: "build" | "read" | "validate" | "commit" | "verify",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return (ctx.adapter as unknown as GoogleAdsAdapter).stage2(
+      ctx.read,
+      action,
+      input,
+      results,
+    );
+  }
+  public async googleExtended(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    version: 3 | 4 | 5,
+    action:
+      "build" | "read" | "validate" | "commit" | "verify" | "audience_search",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx =
+      action === "audience_search"
+        ? await this.readContext(workspaceId, connectionId, accountId)
+        : await this.googleKeywordContext(workspaceId, connectionId, accountId);
+    if (ctx.account.provider !== "GOOGLE_ADS")
+      throw new GoogleAdsWriteError(
+        "google_account_required",
+        "Требуется Google Ads аккаунт.",
+      );
+    return (ctx.adapter as unknown as GoogleAdsAdapter).extended(
+      ctx.read,
+      version,
+      action,
+      input,
+      results,
+    );
+  }
+  public async googleStage0(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action:
+      | "build"
+      | "clone"
+      | "resume"
+      | "pause"
+      | "read"
+      | "validate"
+      | "commit"
+      | "verify"
+      | "checklist",
+    input: unknown,
+    results?: Stage1MutationResult[],
+  ) {
+    const ctx =
+      action === "checklist"
+        ? await this.readContext(workspaceId, connectionId, accountId)
+        : await this.googleKeywordContext(workspaceId, connectionId, accountId);
+    if (ctx.account.provider !== "GOOGLE_ADS")
+      throw new GoogleAdsWriteError(
+        "google_account_required",
+        "Требуется Google Ads аккаунт.",
+      );
+    const adapter = ctx.adapter as unknown as GoogleAdsAdapter;
+    return adapter.stage0(ctx.read, action, input, results);
+  }
+  public async googleTrackingAudit(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    action: "specs" | "audit",
+    options: unknown,
+  ) {
+    const ctx = await this.readContext(workspaceId, connectionId, accountId);
+    if (ctx.account.provider !== "GOOGLE_ADS")
+      throw new ProviderError(
+        "invalid_account",
+        "Tracking audit требует Google Ads аккаунт.",
+      );
+    const adapter = ctx.adapter as unknown as GoogleTrackingAuditReadAdapter;
+    if (typeof adapter.trackingAudit !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Google tracking READ adapter недоступен.",
+      );
+    return adapter.trackingAudit(ctx.read, action, options);
+  }
+  public async readGoogleKeywordStates(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    items: GoogleKeywordIdentity[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    try {
+      return await ctx.adapter.readKeywordStates(ctx.read, items);
+    } catch (error) {
+      if (error instanceof GoogleAdsWriteError) throw error;
+      const failure = writeFailureFromError(error);
+      throw new GoogleAdsWriteError(
+        "google_keyword_read_failed",
+        failure.message,
+        [failure],
+      );
+    }
+  }
+  public async validateGoogleKeywordStatuses(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    items: GoogleKeywordMutation[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return ctx.adapter.validateKeywordStatuses(ctx.read, items);
+  }
+  public async commitGoogleKeywordStatuses(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    items: GoogleKeywordMutation[],
+  ) {
+    const ctx = await this.googleKeywordContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return ctx.adapter.commitKeywordStatuses(ctx.read, items);
   }
 
   public async mutateCampaign(

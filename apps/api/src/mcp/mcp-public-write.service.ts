@@ -11,6 +11,7 @@ import type { OAuthMcpPrincipal } from "./mcp-principal.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { oauthEndpoints } from "./oauth-endpoints.js";
 import { isReviewerDemoWorkspace } from "./reviewer-demo.js";
+import { McpPreviewService } from "./mcp-preview.service.js";
 
 export const PUBLIC_PREVIEW_TTL_MS = 10 * 60_000;
 
@@ -88,6 +89,7 @@ export class McpPublicWriteService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProviderService) private readonly providers: ProviderService,
+    @Inject(McpPreviewService) private readonly previews?: McpPreviewService,
   ) {}
 
   public async call(principal: OAuthMcpPrincipal, name: string, raw: unknown) {
@@ -201,6 +203,8 @@ export class McpPublicWriteService {
 
   /** GET is a pure view: a browser nonce alone never confirms anything. */
   public async approvalView(principal: HumanPrincipal, rawNonce: string) {
+    const google = await this.previews?.googleApprovalView(principal, rawNonce);
+    if (google) return google;
     const { preview, account } = await this.browserApprovalContext(
       principal,
       rawNonce,
@@ -232,6 +236,12 @@ export class McpPublicWriteService {
     rawNonce: string,
     decision: "approve" | "cancel",
   ) {
+    const google = await this.previews?.decideGoogleApproval(
+      principal,
+      rawNonce,
+      decision,
+    );
+    if (google) return google;
     const { preview } = await this.browserApprovalContext(principal, rawNonce);
     if (preview.confirmedAt)
       throw new PreviewError("preview_already_confirmed");

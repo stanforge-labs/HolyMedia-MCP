@@ -1,6 +1,8 @@
 import { ForbiddenException } from "@nestjs/common";
 
 const messages = {
+  google_preview_stale:
+    "Объект изменился после создания preview. Создайте новый preview.",
   invalid_preview_token:
     "Передайте preview_token из результата создания preview, а не ID или ключ доступа.",
   preview_not_found:

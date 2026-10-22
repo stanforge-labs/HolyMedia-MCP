@@ -45,6 +45,11 @@ const rawConfigSchema = z.object({
     .string()
     .regex(/^v?\d+$/)
     .default("v24"),
+  PROVIDER_GOOGLE_ADS_WRITE_ENABLED: booleanFromEnv.default(false),
+  PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: booleanFromEnv.default(false),
+  PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: booleanFromEnv.default(false),
+  PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: booleanFromEnv.default(false),
+  GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID: z.string().optional(),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI: z.string().url().optional(),
@@ -61,6 +66,78 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
+  QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
+  QRS_TEST_LOCAL_READONLY_AUTH: booleanFromEnv.default(false),
+  QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_PMAX_ALLOWED_ACTIONS: z.string().default(""),
+  QRS_TEST_PMAX_CAMPAIGN_NAME: z.string().min(1).max(255).optional(),
+  QRS_TEST_PMAX_GROUP_NAME: z.string().min(1).max(128).optional(),
+  QRS_TEST_PMAX_FINAL_URL: z.literal("https://mcp.holymedia.kz/").optional(),
+  QRS_TEST_PMAX_CONVERSION_ACTION_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_GEO_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_LANGUAGE_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_PARENT_CAMPAIGN_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_SEARCH_THEME: z.string().min(1).max(80).optional(),
+  QRS_TEST_PMAX_NEGATIVE_TEXT: z.string().min(1).max(80).optional(),
+  QRS_TEST_PMAX_AUDIENCE_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_BRAND_SHARED_SET_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_ASSET_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_CRITERION_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_PMAX_ASSET_FIELD_TYPE: z
+    .enum([
+      "HEADLINE",
+      "LONG_HEADLINE",
+      "DESCRIPTION",
+      "MARKETING_IMAGE",
+      "SQUARE_MARKETING_IMAGE",
+      "LOGO",
+      "BUSINESS_NAME",
+    ])
+    .optional(),
+  QRS_TEST_PMAX_REPLACEMENT_TEXT: z.string().min(1).max(90).optional(),
+  QRS_TEST_PMAX_REPLACEMENT_ASSET_ID: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
+  QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED:
+    booleanFromEnv.default(false),
+  QRS_TEST_CONVERSION_ACTION_NAME: z.string().min(1).max(100).optional(),
+  QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: z.string().optional(),
+  QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID: z.string().optional(),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
   PROVIDER_META_CLIENT_SECRET: z.string().optional(),
   PROVIDER_META_REDIRECT_URI: z.string().url().optional(),
@@ -182,6 +259,11 @@ export type AppConfig = {
   providerGoogleDeveloperToken: string | undefined;
   providerGoogleLoginCustomerId: string | undefined;
   providerGoogleApiVersion: string;
+  providerGoogleAdsWriteEnabled: boolean;
+  providerGoogleAdsStage2WriteEnabled: boolean;
+  providerGoogleAdsStage3WriteEnabled: boolean;
+  providerGoogleAdsStage4WriteEnabled: boolean;
+  googleAdsWriteAccountAllowlist: string[];
   providerGoogleSearchConsoleClientId: string | undefined;
   providerGoogleSearchConsoleClientSecret: string | undefined;
   providerGoogleSearchConsoleRedirectUri: string | undefined;
@@ -193,6 +275,42 @@ export type AppConfig = {
   providerGoogleLoginClientSecret: string | undefined;
   providerGoogleLoginRedirectUri: string | undefined;
   providerGoogleLoginScopes: string;
+  qrsTestRestrictedAuth: boolean;
+  qrsTestLocalReadonlyAuth: boolean;
+  qrsTestGoogleConfirmedWriteEnabled: boolean;
+  qrsTestCloneConfirmedWriteEnabled: boolean;
+  qrsTestCloneSourceCampaignId: string | undefined;
+  qrsTestPmaxConfirmedWriteEnabled: boolean;
+  qrsTestPmaxAllowedActions: string[];
+  qrsTestPmaxCampaignName: string | undefined;
+  qrsTestPmaxGroupName: string | undefined;
+  qrsTestPmaxFinalUrl: "https://mcp.holymedia.kz/" | undefined;
+  qrsTestPmaxConversionActionId: string | undefined;
+  qrsTestPmaxGeoId: string | undefined;
+  qrsTestPmaxLanguageId: string | undefined;
+  qrsTestPmaxParentCampaignId: string | undefined;
+  qrsTestPmaxParentAssetGroupId: string | undefined;
+  qrsTestPmaxSearchTheme: string | undefined;
+  qrsTestPmaxNegativeText: string | undefined;
+  qrsTestPmaxAudienceId: string | undefined;
+  qrsTestPmaxBrandSharedSetId: string | undefined;
+  qrsTestPmaxAssetId: string | undefined;
+  qrsTestPmaxCriterionId: string | undefined;
+  qrsTestPmaxAssetFieldType:
+    | "HEADLINE"
+    | "LONG_HEADLINE"
+    | "DESCRIPTION"
+    | "MARKETING_IMAGE"
+    | "SQUARE_MARKETING_IMAGE"
+    | "LOGO"
+    | "BUSINESS_NAME"
+    | undefined;
+  qrsTestPmaxReplacementText: string | undefined;
+  qrsTestPmaxReplacementAssetId: string | undefined;
+  qrsTestConversionActionConfirmedWriteEnabled: boolean;
+  qrsTestConversionActionName: string | undefined;
+  qrsTestGoogleOwnerBindingEmail: string | undefined;
+  qrsTestGoogleOwnerBindingUserId: string | undefined;
   providerMetaClientId: string | undefined;
   providerMetaClientSecret: string | undefined;
   providerMetaRedirectUri: string | undefined;
@@ -438,6 +556,266 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     value.HOLYMEDIA_PUBLIC_BASE_URL ?? corsOrigins[0]!,
     value.NODE_ENV,
   );
+  const googleAdsWriteAccountAllowlist = [
+    ...new Set(
+      value.GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST.split(",")
+        .map((v) => v.trim().replace(/-/g, ""))
+        .filter(Boolean),
+    ),
+  ];
+  if (googleAdsWriteAccountAllowlist.some((v) => !/^\d{10}$/.test(v)))
+    throw new Error(
+      "GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST must contain Google customer IDs.",
+    );
+
+  // Q/R/S is a single-account TEST environment. Its write allowlist alone is
+  // not a read boundary; reject unsafe startup configuration before MCP runs.
+  const localRestrictedReadOnly = value.QRS_TEST_LOCAL_READONLY_AUTH;
+  if (
+    localRestrictedReadOnly &&
+    (value.NODE_ENV !== "development" ||
+      !value.QRS_TEST_RESTRICTED_AUTH ||
+      publicBaseUrl !== "http://127.0.0.1:23300" ||
+      corsOrigins.length !== 1 ||
+      corsOrigins[0] !== "http://127.0.0.1:23300" ||
+      value.PROVIDER_GOOGLE_REDIRECT_URI !==
+        "http://127.0.0.1:24404/oauth/google/callback" ||
+      value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED)
+  )
+    throw new Error(
+      "Local restricted TEST requires loopback and all writes OFF.",
+    );
+  if (
+    value.QRS_TEST_RESTRICTED_AUTH &&
+    ((!localRestrictedReadOnly &&
+      publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error(
+      "Restricted TEST MCP requires the exact TEST origin and account.",
+    );
+
+  // This dedicated Google commit gate must never activate the V2 generic,
+  // Public MCP, or later-stage write surfaces. The base Google gate alone is
+  // insufficient for this deliberately separate Q/R/S acceptance runtime.
+  if (
+    value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error(
+      "Q/R/S Google confirmed write requires isolated TEST-only guards.",
+    );
+
+  // Clone acceptance is a separate, mutually exclusive TEST commit profile.
+  // Its source must be explicitly bound; neither generic V2 nor keyword writes
+  // may be enabled as an accidental side effect of this one-off permission.
+  if (
+    value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      !value.QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error(
+      "TEST Clone confirmed write requires one source and isolated TEST-only guards.",
+    );
+
+  const qrsPmaxActions = value.QRS_TEST_PMAX_ALLOWED_ACTIONS.split(",")
+    .map((action) => action.trim())
+    .filter(Boolean);
+  if (
+    value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+      !qrsPmaxActions.length ||
+      new Set(qrsPmaxActions).size !== qrsPmaxActions.length ||
+      qrsPmaxActions.some(
+        (action) =>
+          ![
+            "pmax_create",
+            "asset_group_update",
+            "pmax_search_theme_add",
+            "pmax_signal_remove",
+            "pmax_negative_add",
+            "pmax_brand_exclude",
+            "pmax_audience_signal_add",
+            "pmax_asset_attach",
+            "pmax_asset_detach",
+            "pmax_asset_replace",
+            "pmax_campaign_asset_detach",
+            "pmax_campaign_asset_replace",
+            "pmax_negative_remove",
+            "pmax_brand_remove",
+            "pmax_asset_group_create",
+          ].includes(action),
+      ) ||
+      (qrsPmaxActions.includes("pmax_create") &&
+        (!value.QRS_TEST_PMAX_CAMPAIGN_NAME?.trim() ||
+          !value.QRS_TEST_PMAX_FINAL_URL ||
+          !value.QRS_TEST_PMAX_CONVERSION_ACTION_ID ||
+          !value.QRS_TEST_PMAX_GEO_ID ||
+          !value.QRS_TEST_PMAX_LANGUAGE_ID)) ||
+      (qrsPmaxActions.includes("pmax_asset_group_create") &&
+        (!value.QRS_TEST_PMAX_GROUP_NAME?.trim() ||
+          !value.QRS_TEST_PMAX_FINAL_URL)) ||
+      (qrsPmaxActions.some((action) => action !== "pmax_create") &&
+        !value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID) ||
+      (qrsPmaxActions.some((action) =>
+        [
+          "asset_group_update",
+          "pmax_search_theme_add",
+          "pmax_signal_remove",
+          "pmax_audience_signal_add",
+          "pmax_asset_attach",
+          "pmax_asset_detach",
+          "pmax_asset_replace",
+        ].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_search_theme_add"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_SEARCH_THEME?.trim()) ||
+      (qrsPmaxActions.includes("pmax_signal_remove") &&
+        Boolean(value.QRS_TEST_PMAX_SEARCH_THEME?.trim()) ===
+          Boolean(value.QRS_TEST_PMAX_AUDIENCE_ID)) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_negative_add", "pmax_negative_remove"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_NEGATIVE_TEXT?.trim()) ||
+      (qrsPmaxActions.includes("pmax_audience_signal_add") &&
+        !value.QRS_TEST_PMAX_AUDIENCE_ID) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_brand_exclude", "pmax_brand_remove"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_BRAND_SHARED_SET_ID) ||
+      (qrsPmaxActions.some((action) =>
+        [
+          "pmax_asset_attach",
+          "pmax_asset_detach",
+          "pmax_asset_replace",
+          "pmax_campaign_asset_detach",
+          "pmax_campaign_asset_replace",
+        ].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_ASSET_ID) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_negative_remove", "pmax_brand_remove"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_CRITERION_ID) ||
+      (qrsPmaxActions.some((action) =>
+        [
+          "pmax_asset_attach",
+          "pmax_asset_detach",
+          "pmax_asset_replace",
+          "pmax_campaign_asset_detach",
+          "pmax_campaign_asset_replace",
+        ].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_ASSET_FIELD_TYPE) ||
+      (qrsPmaxActions.some((action) =>
+        ["pmax_asset_replace", "pmax_campaign_asset_replace"].includes(action),
+      ) &&
+        !value.QRS_TEST_PMAX_REPLACEMENT_TEXT &&
+        !value.QRS_TEST_PMAX_REPLACEMENT_ASSET_ID))
+  )
+    throw new Error(
+      "TEST PMax confirmed write requires exact isolated profiles and parent binding.",
+    );
+
+  if (
+    value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED &&
+    (!value.QRS_TEST_RESTRICTED_AUTH ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      publicBaseUrl !== "https://mcp-test.holymedia.kz" ||
+      value.PROVIDER_GOOGLE_API_VERSION.replace(/^v/, "") !== "24" ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+      !/^HM_MCP_TEST_SIGNUP_[A-Z0-9_]{8,60}$/.test(
+        value.QRS_TEST_CONVERSION_ACTION_NAME ?? "",
+      ))
+  )
+    throw new Error(
+      "TEST ConversionAction write requires one frozen first-party SIGNUP profile and isolated TEST-only guards.",
+    );
+
+  const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
+  const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
+  if (Boolean(bindingEmail) !== Boolean(bindingUserId))
+    throw new Error("TEST Google OWNER binding requires both identity fields.");
+  if (bindingEmail) {
+    if (
+      !value.QRS_TEST_RESTRICTED_AUTH ||
+      (!localRestrictedReadOnly &&
+        publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
+      bindingEmail !== bindingEmail.toLowerCase() ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bindingEmail) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        bindingUserId!,
+      )
+    )
+      throw new Error(
+        "TEST Google OWNER binding is not valid for this runtime.",
+      );
+  }
 
   return {
     environment: value.NODE_ENV,
@@ -457,6 +835,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleDeveloperToken: value.PROVIDER_GOOGLE_DEVELOPER_TOKEN,
     providerGoogleLoginCustomerId: value.PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID,
     providerGoogleApiVersion: value.PROVIDER_GOOGLE_API_VERSION,
+    providerGoogleAdsWriteEnabled: value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED,
+    providerGoogleAdsStage2WriteEnabled:
+      value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED,
+    providerGoogleAdsStage3WriteEnabled:
+      value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED,
+    providerGoogleAdsStage4WriteEnabled:
+      value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED,
+    googleAdsWriteAccountAllowlist,
     providerGoogleSearchConsoleClientId:
       value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID,
     providerGoogleSearchConsoleClientSecret:
@@ -474,6 +860,38 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginClientSecret: value.PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET,
     providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,
     providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
+    qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
+    qrsTestLocalReadonlyAuth: localRestrictedReadOnly,
+    qrsTestGoogleConfirmedWriteEnabled:
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED,
+    qrsTestCloneConfirmedWriteEnabled:
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED,
+    qrsTestCloneSourceCampaignId: value.QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID,
+    qrsTestPmaxConfirmedWriteEnabled:
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED,
+    qrsTestPmaxAllowedActions: qrsPmaxActions,
+    qrsTestPmaxCampaignName: value.QRS_TEST_PMAX_CAMPAIGN_NAME,
+    qrsTestPmaxGroupName: value.QRS_TEST_PMAX_GROUP_NAME,
+    qrsTestPmaxFinalUrl: value.QRS_TEST_PMAX_FINAL_URL,
+    qrsTestPmaxConversionActionId: value.QRS_TEST_PMAX_CONVERSION_ACTION_ID,
+    qrsTestPmaxGeoId: value.QRS_TEST_PMAX_GEO_ID,
+    qrsTestPmaxLanguageId: value.QRS_TEST_PMAX_LANGUAGE_ID,
+    qrsTestPmaxParentCampaignId: value.QRS_TEST_PMAX_PARENT_CAMPAIGN_ID,
+    qrsTestPmaxParentAssetGroupId: value.QRS_TEST_PMAX_PARENT_ASSET_GROUP_ID,
+    qrsTestPmaxSearchTheme: value.QRS_TEST_PMAX_SEARCH_THEME,
+    qrsTestPmaxNegativeText: value.QRS_TEST_PMAX_NEGATIVE_TEXT,
+    qrsTestPmaxAudienceId: value.QRS_TEST_PMAX_AUDIENCE_ID,
+    qrsTestPmaxBrandSharedSetId: value.QRS_TEST_PMAX_BRAND_SHARED_SET_ID,
+    qrsTestPmaxAssetId: value.QRS_TEST_PMAX_ASSET_ID,
+    qrsTestPmaxCriterionId: value.QRS_TEST_PMAX_CRITERION_ID,
+    qrsTestPmaxAssetFieldType: value.QRS_TEST_PMAX_ASSET_FIELD_TYPE,
+    qrsTestPmaxReplacementText: value.QRS_TEST_PMAX_REPLACEMENT_TEXT,
+    qrsTestPmaxReplacementAssetId: value.QRS_TEST_PMAX_REPLACEMENT_ASSET_ID,
+    qrsTestConversionActionConfirmedWriteEnabled:
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED,
+    qrsTestConversionActionName: value.QRS_TEST_CONVERSION_ACTION_NAME,
+    qrsTestGoogleOwnerBindingEmail: bindingEmail,
+    qrsTestGoogleOwnerBindingUserId: bindingUserId,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,
     providerMetaClientSecret: value.PROVIDER_META_CLIENT_SECRET,
     providerMetaRedirectUri: value.PROVIDER_META_REDIRECT_URI,
