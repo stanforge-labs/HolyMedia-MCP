@@ -167,6 +167,70 @@ describe("v2 configuration", () => {
     );
   });
 
+  it("enables localhost WRITE only with exact origin, callbacks, OWNER binding and exclusive gates", () => {
+    const local = {
+      NODE_ENV: "development",
+      API_PORT: "24404",
+      WEB_PORT: "23300",
+      QRS_TEST_RESTRICTED_AUTH: "true",
+      QRS_TEST_LOCAL_WRITE_ENABLED: "true",
+      HOLYMEDIA_PUBLIC_BASE_URL: "http://127.0.0.1:23300",
+      CORS_ORIGINS: "http://127.0.0.1:23300",
+      PROVIDER_GOOGLE_REDIRECT_URI:
+        "http://127.0.0.1:24404/oauth/google/callback",
+      PROVIDER_GOOGLE_LOGIN_REDIRECT_URI:
+        "http://127.0.0.1:24404/auth/google/callback",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "8590146099",
+      PROVIDER_GOOGLE_ADS_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED: "true",
+      PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED: "true",
+      QRS_TEST_LOCAL_WRITE_WORKSPACE_ID: "00000000-0000-4000-8000-000000000001",
+      QRS_TEST_LOCAL_WRITE_CONNECTION_ID:
+        "00000000-0000-4000-8000-000000000002",
+      QRS_TEST_LOCAL_WRITE_OAUTH_GRANT_ID:
+        "00000000-0000-4000-8000-000000000003",
+      QRS_TEST_LOCAL_WRITE_GRANT_NOT_BEFORE: "2026-10-23T00:00:00.000Z",
+      QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID:
+        "00000000-0000-4000-8000-000000000004",
+      QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: "owner@example.test",
+    };
+    expect(loadConfig(local)).toMatchObject({
+      qrsTestLocalWriteEnabled: true,
+      qrsTestLocalReadonlyAuth: false,
+      confirmedWriteEnabled: false,
+      publicMcpWriteScopeEnabled: false,
+      publicMcpControlledWriteEnabled: false,
+    });
+    for (const [key, value] of Object.entries({
+      NODE_ENV: "production",
+      HOLYMEDIA_PUBLIC_BASE_URL: "http://localhost:23300",
+      CORS_ORIGINS: "http://localhost:23300",
+      PROVIDER_GOOGLE_REDIRECT_URI:
+        "http://localhost:24404/oauth/google/callback",
+      PROVIDER_GOOGLE_LOGIN_REDIRECT_URI:
+        "http://localhost:24404/auth/google/callback",
+      GOOGLE_ADS_WRITE_ACCOUNT_ALLOWLIST: "5113594991",
+      QRS_TEST_LOCAL_READONLY_AUTH: "true",
+      QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: "true",
+      QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: "true",
+      QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED: "true",
+      QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED: "true",
+      V2_PREVIEW_ONLY: "false",
+      V2_CONFIRMED_WRITE_ENABLED: "true",
+      PUBLIC_MCP_WRITE_SCOPE_ENABLED: "true",
+      PUBLIC_MCP_CONTROLLED_WRITE_ENABLED: "true",
+      QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL: "",
+      QRS_TEST_LOCAL_WRITE_WORKSPACE_ID: "",
+      QRS_TEST_LOCAL_WRITE_OAUTH_GRANT_ID: "",
+    })) {
+      expect(() => loadConfig({ ...local, [key]: value }), key).toThrow();
+    }
+    expect(loadConfig({ NODE_ENV: "test" }).qrsTestLocalWriteEnabled).toBe(
+      false,
+    );
+  });
+
   it("requires an independent explicit flag for public controlled writes", () => {
     expect(
       loadConfig({ NODE_ENV: "test" }).publicMcpControlledWriteEnabled,

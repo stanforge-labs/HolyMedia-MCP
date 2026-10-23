@@ -57,7 +57,8 @@ export class OAuthAuthorizationService {
       !stringValue(input.scope) &&
       this.config.qrsTestRestrictedAuth &&
       (this.config.qrsTestGoogleConfirmedWriteEnabled ||
-        this.config.qrsTestCloneConfirmedWriteEnabled) &&
+        this.config.qrsTestCloneConfirmedWriteEnabled ||
+        this.config.qrsTestLocalWriteEnabled) &&
       this.config.providerGoogleAdsWriteEnabled
         ? `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`
         : metadata.scope;
@@ -711,6 +712,18 @@ export class OAuthAuthorizationService {
         "write_scope_required",
         "Для Google controlled-write требуется private OAuth grant со scopes read/write и включённый Google write gate.",
       );
+    const localWrite = this.config.qrsTestLocalWriteEnabled;
+    const grantNotBefore = Date.parse(
+      this.config.qrsTestLocalWriteGrantNotBefore ?? "",
+    );
+    if (
+      localWrite &&
+      (principal.workspaceId !== this.config.qrsTestLocalWriteWorkspaceId ||
+        principal.userId !== this.config.qrsTestGoogleOwnerBindingUserId ||
+        principal.grantId !== this.config.qrsTestLocalWriteOAuthGrantId ||
+        !Number.isFinite(grantNotBefore))
+    )
+      throw new PreviewError("confirmation_context_mismatch");
     const now = new Date();
     const ownership = {
       userId: principal.userId,
@@ -718,14 +731,19 @@ export class OAuthAuthorizationService {
       clientId: principal.clientId,
       resource: principal.resource,
     };
-    const [membership, grant, access] = await Promise.all([
+    const [membership, grant, access, grantOrigin] = await Promise.all([
       this.database.client.workspaceMembership.findFirst({
         where: {
           userId: principal.userId,
           workspaceId: principal.workspaceId,
-          role: { in: ["OWNER", "ADMIN", "MEMBER"] },
+          role: localWrite ? "OWNER" : { in: ["OWNER", "ADMIN", "MEMBER"] },
           workspace: { accessStatus: "ACTIVE" },
-          user: { status: "active" },
+          user: {
+            status: "active",
+            ...(localWrite
+              ? { email: this.config.qrsTestGoogleOwnerBindingEmail ?? "" }
+              : {}),
+          },
         },
         select: { id: true },
       }),
@@ -754,6 +772,13 @@ export class OAuthAuthorizationService {
             select: { scope: true },
           })
         : Promise.resolve(null),
+      localWrite
+        ? this.database.client.oAuthRefreshToken.findFirst({
+            where: { familyId: principal.grantId },
+            orderBy: { createdAt: "asc" },
+            select: { createdAt: true },
+          })
+        : Promise.resolve(null),
     ]);
     const permitted = (scope?: string) =>
       scope?.split(/\s+/).includes(MCP_READ_SCOPE) &&
@@ -763,6 +788,8 @@ export class OAuthAuthorizationService {
       !grant ||
       !permitted(grant.scope) ||
       !permitted(grant.client.scope) ||
+      (localWrite &&
+        (!grantOrigin || grantOrigin.createdAt.getTime() <= grantNotBefore)) ||
       (requireAccessToken && (!access || !permitted(access.scope)))
     )
       throw new PreviewError(

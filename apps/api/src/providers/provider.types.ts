@@ -94,6 +94,8 @@ export type ProviderReadContext = {
   accountId: string;
   currency?: string;
   loginCustomerId?: string;
+  /** TEST-only database recheck immediately before each Google validate/mutate request. */
+  assertWriteAllowed?: () => Promise<void>;
 };
 
 export function isProviderReadAdapter(

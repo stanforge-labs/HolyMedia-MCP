@@ -16,11 +16,16 @@ import { ApiExceptionFilter } from "./api-exception.filter.js";
 import { ReadinessService } from "./readiness.service.js";
 import { requestPath } from "./infrastructure/request-path.js";
 import { configureApiRouting } from "./configure-api-routing.js";
+import {
+  assertLocalWriteKernel,
+  localWriteRequestAllowed,
+} from "./providers/google-ads-local-write-profile.js";
 
 type RequestWithId = { requestId?: string };
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
+  assertLocalWriteKernel(config);
   const logger = createLogger("holymedia-mcp-v2-api", config.logLevel);
   const adapter = new FastifyAdapter({ bodyLimit: 3_145_728, logger: false });
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -38,6 +43,16 @@ async function bootstrap(): Promise<void> {
   });
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook("onRequest", async (request, reply) => {
+    const path = requestPath(request.url);
+    if (
+      !localWriteRequestAllowed(
+        config,
+        path,
+        request.headers.host,
+        request.headers.origin,
+      )
+    )
+      return reply.code(403).send({ error: "local_origin_denied" });
     const requestWithId = request as typeof request & RequestWithId;
     const incoming = request.headers["x-request-id"];
     const value = Array.isArray(incoming) ? incoming[0] : incoming;

@@ -68,6 +68,11 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
   QRS_TEST_RESTRICTED_AUTH: booleanFromEnv.default(false),
   QRS_TEST_LOCAL_READONLY_AUTH: booleanFromEnv.default(false),
+  QRS_TEST_LOCAL_WRITE_ENABLED: booleanFromEnv.default(false),
+  QRS_TEST_LOCAL_WRITE_WORKSPACE_ID: z.string().uuid().optional(),
+  QRS_TEST_LOCAL_WRITE_CONNECTION_ID: z.string().uuid().optional(),
+  QRS_TEST_LOCAL_WRITE_OAUTH_GRANT_ID: z.string().uuid().optional(),
+  QRS_TEST_LOCAL_WRITE_GRANT_NOT_BEFORE: z.string().datetime().optional(),
   QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   QRS_TEST_CLONE_SOURCE_CAMPAIGN_ID: z
@@ -277,6 +282,11 @@ export type AppConfig = {
   providerGoogleLoginScopes: string;
   qrsTestRestrictedAuth: boolean;
   qrsTestLocalReadonlyAuth: boolean;
+  qrsTestLocalWriteEnabled: boolean;
+  qrsTestLocalWriteWorkspaceId: string | undefined;
+  qrsTestLocalWriteConnectionId: string | undefined;
+  qrsTestLocalWriteOAuthGrantId: string | undefined;
+  qrsTestLocalWriteGrantNotBefore: string | undefined;
   qrsTestGoogleConfirmedWriteEnabled: boolean;
   qrsTestCloneConfirmedWriteEnabled: boolean;
   qrsTestCloneSourceCampaignId: string | undefined;
@@ -571,6 +581,39 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   // Q/R/S is a single-account TEST environment. Its write allowlist alone is
   // not a read boundary; reject unsafe startup configuration before MCP runs.
   const localRestrictedReadOnly = value.QRS_TEST_LOCAL_READONLY_AUTH;
+  const localWrite = value.QRS_TEST_LOCAL_WRITE_ENABLED;
+  if (
+    localWrite &&
+    (value.NODE_ENV !== "development" ||
+      !value.QRS_TEST_RESTRICTED_AUTH ||
+      localRestrictedReadOnly ||
+      publicBaseUrl !== "http://127.0.0.1:23300" ||
+      corsOrigins.length !== 1 ||
+      corsOrigins[0] !== "http://127.0.0.1:23300" ||
+      value.PROVIDER_GOOGLE_REDIRECT_URI !==
+        "http://127.0.0.1:24404/oauth/google/callback" ||
+      value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI !==
+        "http://127.0.0.1:24404/auth/google/callback" ||
+      !value.QRS_TEST_LOCAL_WRITE_WORKSPACE_ID ||
+      !value.QRS_TEST_LOCAL_WRITE_CONNECTION_ID ||
+      !value.QRS_TEST_LOCAL_WRITE_OAUTH_GRANT_ID ||
+      !value.QRS_TEST_LOCAL_WRITE_GRANT_NOT_BEFORE ||
+      !value.PROVIDER_GOOGLE_ADS_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_STAGE2_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_STAGE3_WRITE_ENABLED ||
+      !value.PROVIDER_GOOGLE_ADS_STAGE4_WRITE_ENABLED ||
+      !value.V2_PREVIEW_ONLY ||
+      value.V2_CONFIRMED_WRITE_ENABLED ||
+      value.PUBLIC_MCP_WRITE_SCOPE_ENABLED ||
+      value.PUBLIC_MCP_CONTROLLED_WRITE_ENABLED ||
+      value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CLONE_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_PMAX_CONFIRMED_WRITE_ENABLED ||
+      value.QRS_TEST_CONVERSION_ACTION_CONFIRMED_WRITE_ENABLED ||
+      googleAdsWriteAccountAllowlist.length !== 1 ||
+      googleAdsWriteAccountAllowlist[0] !== "8590146099")
+  )
+    throw new Error("Local Google WRITE requires exact isolated TEST guards.");
   if (
     localRestrictedReadOnly &&
     (value.NODE_ENV !== "development" ||
@@ -599,6 +642,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (
     value.QRS_TEST_RESTRICTED_AUTH &&
     ((!localRestrictedReadOnly &&
+      !localWrite &&
       publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
       googleAdsWriteAccountAllowlist.length !== 1 ||
       googleAdsWriteAccountAllowlist[0] !== "8590146099")
@@ -797,12 +841,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const bindingEmail = value.QRS_TEST_GOOGLE_OWNER_BINDING_EMAIL?.trim();
   const bindingUserId = value.QRS_TEST_GOOGLE_OWNER_BINDING_USER_ID?.trim();
+  if (localWrite && (!bindingEmail || !bindingUserId))
+    throw new Error("Local Google WRITE requires a bound OWNER identity.");
   if (Boolean(bindingEmail) !== Boolean(bindingUserId))
     throw new Error("TEST Google OWNER binding requires both identity fields.");
   if (bindingEmail) {
     if (
       !value.QRS_TEST_RESTRICTED_AUTH ||
       (!localRestrictedReadOnly &&
+        !localWrite &&
         publicBaseUrl !== "https://mcp-test.holymedia.kz") ||
       googleAdsWriteAccountAllowlist.length !== 1 ||
       googleAdsWriteAccountAllowlist[0] !== "8590146099" ||
@@ -862,6 +909,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
     qrsTestRestrictedAuth: value.QRS_TEST_RESTRICTED_AUTH,
     qrsTestLocalReadonlyAuth: localRestrictedReadOnly,
+    qrsTestLocalWriteEnabled: localWrite,
+    qrsTestLocalWriteWorkspaceId: value.QRS_TEST_LOCAL_WRITE_WORKSPACE_ID,
+    qrsTestLocalWriteConnectionId: value.QRS_TEST_LOCAL_WRITE_CONNECTION_ID,
+    qrsTestLocalWriteOAuthGrantId: value.QRS_TEST_LOCAL_WRITE_OAUTH_GRANT_ID,
+    qrsTestLocalWriteGrantNotBefore:
+      value.QRS_TEST_LOCAL_WRITE_GRANT_NOT_BEFORE,
     qrsTestGoogleConfirmedWriteEnabled:
       value.QRS_TEST_GOOGLE_CONFIRMED_WRITE_ENABLED,
     qrsTestCloneConfirmedWriteEnabled:
