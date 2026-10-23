@@ -16,11 +16,13 @@ import { ApiExceptionFilter } from "./api-exception.filter.js";
 import { ReadinessService } from "./readiness.service.js";
 import { requestPath } from "./infrastructure/request-path.js";
 import { configureApiRouting } from "./configure-api-routing.js";
+import { assertOidcStartupReady } from "./mcp/oidc-identity.js";
 
 type RequestWithId = { requestId?: string };
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
+  assertOidcStartupReady();
   const logger = createLogger("holymedia-mcp-v2-api", config.logLevel);
   const adapter = new FastifyAdapter({ bodyLimit: 3_145_728, logger: false });
   const app = await NestFactory.create<NestFastifyApplication>(

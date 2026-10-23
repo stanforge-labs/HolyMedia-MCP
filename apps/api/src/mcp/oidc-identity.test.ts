@@ -10,7 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OAuthMetadataController } from "../compat/oauth-metadata.controller.js";
-import { oidcJwks, signIdToken, verifiedEmailClaim } from "./oidc-identity.js";
+import {
+  assertOidcStartupReady,
+  oidcJwks,
+  signIdToken,
+  verifiedEmailClaim,
+} from "./oidc-identity.js";
 
 function key(kid: string) {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -25,6 +30,17 @@ function key(kid: string) {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("OpenID Connect identity", () => {
+  it("fails startup when an opted-in signing key is missing or unreadable", () => {
+    vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_FILE", "/missing/oidc-key.json");
+    vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_JSON", undefined);
+    vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", "missingkey");
+    expect(() => assertOidcStartupReady()).toThrow(
+      "OIDC signing keys are invalid.",
+    );
+    vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_FILE", undefined);
+    vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", undefined);
+    expect(() => assertOidcStartupReady()).not.toThrow();
+  });
   it("loads operator keys from a file without putting private material in Docker env", () => {
     const directory = mkdtempSync(join(tmpdir(), "holypilot-oidc-"));
     const filename = join(directory, "keys.json");

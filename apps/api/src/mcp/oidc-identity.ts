@@ -89,6 +89,18 @@ export function oidcActiveKey(): SigningKey | null {
   return active;
 }
 
+/** Fail startup when an operator opted into OIDC but its key is unusable. */
+export function assertOidcStartupReady(): void {
+  if (
+    process.env.HOLYMEDIA_OIDC_SIGNING_KEYS_FILE ||
+    process.env.HOLYMEDIA_OIDC_SIGNING_KEYS_JSON ||
+    process.env.HOLYMEDIA_OIDC_ACTIVE_KID
+  ) {
+    if (!oidcActiveKey())
+      throw new ServiceUnavailableException("OIDC is not configured.");
+  }
+}
+
 export function oidcJwks() {
   if (!oidcActiveKey())
     throw new ServiceUnavailableException("OIDC is not configured.");

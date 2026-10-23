@@ -58,6 +58,11 @@ services:
     init: true
     env_file:
       - /etc/holymedia-v2/app.env
+    volumes:
+      - type: bind
+        source: /etc/holymedia-v2/oidc/signing-keys.json
+        target: /run/holymedia/oidc/signing-keys.json
+        read_only: true
     command:
       [
         "sh",
