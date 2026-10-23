@@ -3,6 +3,7 @@
 ## B2.1 release readiness update (code-only)
 
 - The normal `main` push now skips service deployment for the exact OIDC migration 0034 change. A separate manual workflow has explicit `preflight → API → OIDC gate → Web` job dependencies and no Worker. This is offline-verified only; it is not installed or run on production.
+- A temporary `infra/openai-oidc-release-hold.txt` also holds later ordinary Web/API pushes while B3 is pending. Worker-only pushes remain normal. OWNER must approve removal in a reviewed follow-up commit only after B3 LIVE PASS.
 - OWNER must authorize a trusted VPS preflight and installation of the reviewed forced-command/readiness script, sudoers allowlist and API-only read-only key mount. Current SSH access remains unavailable. The exact digest, backup, migration, Nginx, grants and Public WRITE checklist is `B2_1_VPS_PREFLIGHT_CHECKLIST.md`.
 - OWNER must separately approve backup, additive migration, production signing-key custody and creation of a root-owned one-time release marker for the exact merged SHA. The marker is an explicit release approval, not a standing approval for normal deployments.
 - The native OpenAI Portal draft identity, Business Verification, generic-schema conflict and verified reviewer email remain external blockers. No Portal login or OAuth consent occurred in B2.1.

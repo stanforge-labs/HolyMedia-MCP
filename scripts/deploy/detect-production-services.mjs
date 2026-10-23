@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const oidcMigration =
   "packages/database/prisma/migrations/0034_openai_oidc_identity/migration.sql";
 
-export function detectProductionServices(paths) {
+export function detectProductionServices(paths, releaseHold = false) {
   // Release 0034 must use the explicit, operator-gated API -> Web workflow.
   // This is deliberately exact: other Prisma changes keep the normal policy.
   if (paths.includes(oidcMigration)) {
@@ -35,6 +35,11 @@ export function detectProductionServices(paths) {
     matches(/^(pnpm-lock\.yaml|pnpm-workspace\.yaml)$/)
   )
     services.push("web", "api", "worker");
+  // A later main commit must not deploy OIDC API/Web before B3 readiness.
+  // Unrelated Worker-only changes retain the ordinary path.
+  if (releaseHold && services.some((service) => service !== "worker")) {
+    return { openaiRelease: true, services: [] };
+  }
   return { openaiRelease: false, services };
 }
 
@@ -43,7 +48,10 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const paths = readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
-  const result = detectProductionServices(paths);
+  const hold = existsSync(
+    new URL("../../infra/openai-oidc-release-hold.txt", import.meta.url),
+  );
+  const result = detectProductionServices(paths, hold);
   process.stdout.write(`openai_release=${result.openaiRelease}\n`);
   process.stdout.write(`services=${JSON.stringify(result.services)}\n`);
 }

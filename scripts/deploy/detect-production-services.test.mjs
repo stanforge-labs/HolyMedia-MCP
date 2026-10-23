@@ -17,6 +17,24 @@ test("OIDC release merge cannot enter the ordinary deploy matrix", () => {
   );
 });
 
+test("pending release holds later Web/API pushes but preserves Worker-only", () => {
+  assert.deepEqual(detectProductionServices(["apps/web/app/page.tsx"], true), {
+    openaiRelease: true,
+    services: [],
+  });
+  assert.deepEqual(detectProductionServices(["apps/api/src/main.ts"], true), {
+    openaiRelease: true,
+    services: [],
+  });
+  assert.deepEqual(
+    detectProductionServices(["apps/worker/src/main.ts"], true),
+    {
+      openaiRelease: false,
+      services: ["worker"],
+    },
+  );
+});
+
 for (const [label, paths, expected] of [
   ["Web only", ["apps/web/app/page.tsx"], ["web"]],
   ["API only", ["apps/api/src/main.ts"], ["api"]],

@@ -1,0 +1,5 @@
+The OpenAI OIDC API/Web release is pending owner-approved B3 preflight.
+While this file exists on main, ordinary pushes cannot deploy API or Web.
+Remove it in a separate reviewed commit only after the one-time API -> Web
+workflow completes and production acceptance passes. Worker-only changes
+retain the standard deployment path.
