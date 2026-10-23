@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { McpController } from "./mcp.controller.js";
@@ -45,9 +45,22 @@ function fakeDatabase() {
     string,
     { id: string; name: string; accessStatus: string }
   >();
-  const users = new Map<string, { id: string; status: string }>();
+  const users = new Map<
+    string,
+    {
+      id: string;
+      status: string;
+      email: string;
+      emailVerifiedAt: Date | null;
+      emailVerifiedSource: string | null;
+    }
+  >();
 
   const client = {
+    user: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        users.get(where.id) ?? null,
+    },
     oAuthPublicClient: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         const row = {
@@ -338,7 +351,13 @@ async function fixture(clientScope = "adforge:mcp:read") {
   } as never);
   const userId = randomUUID();
   const workspaceId = randomUUID();
-  state.users.set(userId, { id: userId, status: "active" });
+  state.users.set(userId, {
+    id: userId,
+    status: "active",
+    email: "owner@example.test",
+    emailVerifiedAt: null,
+    emailVerifiedSource: null,
+  });
   state.workspaces.set(workspaceId, {
     id: workspaceId,
     name: "OAuth workspace",
@@ -424,12 +443,133 @@ describe("OAuth authorization foundation", () => {
     process.env.HOLYMEDIA_PUBLIC_BASE_URL = "https://prod.example.test";
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (previousWriteScopeFlag === undefined)
       delete process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED;
     else process.env.PUBLIC_MCP_WRITE_SCOPE_ENABLED = previousWriteScopeFlag;
     if (previousBaseUrl === undefined)
       delete process.env.HOLYMEDIA_PUBLIC_BASE_URL;
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  it("rejects code redemption after user deactivation or workspace access removal", async () => {
+    for (const revoked of ["user", "membership"] as const) {
+      const context = await fixture();
+      const issued = await issueCode(context);
+      if (revoked === "user") {
+        context.state.users.get(context.principal.userId)!.status = "inactive";
+      } else {
+        context.state.memberships.splice(0);
+      }
+      await expect(
+        context.oauth.exchangeAuthorizationCode({
+          grant_type: "authorization_code",
+          client_id: context.registered.client_id,
+          code: issued.code,
+          redirect_uri: "https://claude.example.test/callback",
+          resource: MCP_RESOURCE,
+          code_verifier: context.verifier,
+        }),
+      ).rejects.toThrow("OAuth authorization code is invalid.");
+    }
+  });
+
+  it("binds OIDC identity to the public resource and verified email provenance", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    vi.stubEnv(
+      "HOLYMEDIA_OIDC_SIGNING_KEYS_JSON",
+      JSON.stringify([
+        {
+          kid: "testkey01",
+          privateKeyPemBase64: Buffer.from(
+            privateKey.export({ type: "pkcs8", format: "pem" }),
+          ).toString("base64"),
+        },
+      ]),
+    );
+    vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", "testkey01");
+    const context = await fixture("adforge:mcp:read openid email");
+    const started = await context.oauth.beginAuthorization(
+      {
+        client_id: context.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        scope: "openid email adforge:mcp:read",
+        nonce: "reviewer-nonce",
+        resource: MCP_PUBLIC_RESOURCE,
+        code_challenge: pkce(context.verifier),
+        code_challenge_method: "S256",
+      },
+      context.principal,
+    );
+    const consent = await context.oauth.decideAuthorization(
+      started.transaction_id,
+      true,
+      context.principal,
+      context.workspaceId,
+      "adforge:mcp:read openid email",
+    );
+    const tokens = await context.oauth.exchangeAuthorizationCode({
+      grant_type: "authorization_code",
+      client_id: context.registered.client_id,
+      code: new URL(consent.url).searchParams.get("code"),
+      redirect_uri: "https://claude.example.test/callback",
+      resource: MCP_PUBLIC_RESOURCE,
+      code_verifier: context.verifier,
+    });
+    expect(tokens.scope).toBe("adforge:mcp:read openid email");
+    expect(tokens.id_token).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
+    const claims = JSON.parse(
+      Buffer.from(tokens.id_token!.split(".")[1]!, "base64url").toString(),
+    ) as Record<string, unknown>;
+    expect(claims).toMatchObject({
+      aud: context.registered.client_id,
+      nonce: "reviewer-nonce",
+      email: "owner@example.test",
+      email_verified: false,
+    });
+    await expect(
+      context.oauth.userinfo(tokens.access_token),
+    ).resolves.toMatchObject({
+      email_verified: false,
+    });
+    expect(
+      await context.oauth.authenticate(tokens.access_token, MCP_RESOURCE),
+    ).toBeNull();
+    const user = context.state.users.get(context.principal.userId)!;
+    user.emailVerifiedAt = new Date();
+    user.emailVerifiedSource = "email_link";
+    await expect(
+      context.oauth.userinfo(tokens.access_token),
+    ).resolves.toMatchObject({
+      email_verified: true,
+    });
+    await context.oauth.revoke({ token: tokens.access_token });
+    await expect(context.oauth.userinfo(tokens.access_token)).rejects.toThrow();
+  });
+
+  it("refuses identity scopes when signing is unavailable or resource is legacy", async () => {
+    vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_JSON", undefined);
+    vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", undefined);
+    const context = await fixture("adforge:mcp:read openid email");
+    const request = {
+      client_id: context.registered.client_id,
+      redirect_uri: "https://claude.example.test/callback",
+      response_type: "code",
+      scope: "adforge:mcp:read openid email",
+      resource: MCP_PUBLIC_RESOURCE,
+      code_challenge: pkce(context.verifier),
+      code_challenge_method: "S256",
+    };
+    await expect(
+      context.oauth.beginAuthorization(request, context.principal),
+    ).rejects.toThrow("OIDC is not configured.");
+    await expect(
+      context.oauth.beginAuthorization(
+        { ...request, resource: MCP_RESOURCE },
+        context.principal,
+      ),
+    ).rejects.toThrow("OAuth scope is invalid");
   });
 
   it("rejects public write authorization while the scope gate is off, even for a declared client", async () => {

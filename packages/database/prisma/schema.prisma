@@ -144,6 +144,7 @@ model User {
   passwordHash             String                          @map("password_hash") @db.VarChar(255)
   status                   String                          @default("active") @db.VarChar(32)
   emailVerifiedAt          DateTime?                       @map("email_verified_at")
+  emailVerifiedSource      String?                         @map("email_verified_source") @db.VarChar(32)
   avatarData               Bytes?                          @map("avatar_data")
   avatarMimeType           String?                         @map("avatar_mime_type") @db.VarChar(32)
   createdAt                DateTime                        @default(now()) @map("created_at")
@@ -468,6 +469,7 @@ model OAuthAuthorizationTransaction {
   clientId            String            @map("client_id") @db.Uuid
   redirectUri         String            @map("redirect_uri") @db.VarChar(2000)
   state               String?           @db.VarChar(1000)
+  nonce               String?           @db.VarChar(255)
   scope               String            @db.VarChar(120)
   resource            String            @db.VarChar(2000)
   codeChallenge       String            @map("code_challenge") @db.VarChar(200)
@@ -493,6 +495,7 @@ model OAuthAuthorizationCode {
   workspaceId         String            @map("workspace_id") @db.Uuid
   userId              String            @map("user_id") @db.Uuid
   redirectUri         String            @map("redirect_uri") @db.VarChar(2000)
+  nonce               String?           @db.VarChar(255)
   scope               String            @db.VarChar(120)
   resource            String            @db.VarChar(2000)
   codeChallenge       String            @map("code_challenge") @db.VarChar(200)

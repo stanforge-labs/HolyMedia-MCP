@@ -1,0 +1,234 @@
+name: OpenAI OIDC release (one-time)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Stage the API image only, or run the approved deployment
+        required: true
+        type: choice
+        options: [stage, deploy]
+      release_sha:
+        description: Exact merged main commit approved for the OIDC release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: production-services
+  cancel-in-progress: false
+
+jobs:
+  stage-api-image:
+    if: github.ref == 'refs/heads/main' && inputs.phase == 'stage'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact merged source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]]
+          test -f packages/database/prisma/migrations/0034_openai_oidc_identity/migration.sql
+          test -f infra/openai-oidc-release-hold.txt
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push API image for operator migration only
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile.v2
+          target: api-runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/stanforge-labs/holymedia-mcp-v2:api-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+  preflight:
+    if: github.ref == 'refs/heads/main' && inputs.phase == 'deploy'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: verify
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]]
+          test -f packages/database/prisma/migrations/0034_openai_oidc_identity/migration.sql
+          test -f infra/openai-oidc-release-hold.txt
+          node --test scripts/deploy/openai-release-readiness.test.mjs
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+      - name: Verify operator approval, backup, migration and signing key on VPS
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.PROD_DEPLOY_HOST_KEY }}
+          RELEASE_SHA: ${{ steps.verify.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_HOST_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/production_deploy
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/production_deploy ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/production_deploy' EXIT
+          ssh -i ~/.ssh/production_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            holymedia-deploy@77.240.38.131 "openai-preflight $RELEASE_SHA"
+
+  api:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Verify API
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --dir packages/database run prisma:generate
+          pnpm exec turbo run build --filter=@holymedia/api...
+          pnpm --filter @holymedia/api lint
+          pnpm --filter @holymedia/api test
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile.v2
+          target: api-runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/stanforge-labs/holymedia-mcp-v2:api-${{ needs.preflight.outputs.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.preflight.outputs.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Deploy API exact digest
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.PROD_DEPLOY_HOST_KEY }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_HOST_KEY" && test -n "$DIGEST"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/production_deploy
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/production_deploy ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/production_deploy' EXIT
+          ssh -i ~/.ssh/production_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            holymedia-deploy@77.240.38.131 \
+            "deploy api ghcr.io/stanforge-labs/holymedia-mcp-v2@$DIGEST $RELEASE_SHA"
+
+  oidc-gate:
+    needs: [preflight, api]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deployed API and public OIDC before Web
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.PROD_DEPLOY_HOST_KEY }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_HOST_KEY"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/production_deploy
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/production_deploy ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/production_deploy' EXIT
+          ssh -i ~/.ssh/production_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            holymedia-deploy@77.240.38.131 "openai-oidc-gate $RELEASE_SHA"
+
+  web:
+    needs: [preflight, oidc-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Verify Web
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm exec turbo run build --filter=@holymedia/web...
+          pnpm --filter @holymedia/web lint
+          pnpm --filter @holymedia/web test
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile.v2
+          target: production-web-runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/stanforge-labs/holymedia-mcp-v2:web-${{ needs.preflight.outputs.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.preflight.outputs.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://mcp.holymedia.kz
+            NEXT_PUBLIC_PUBLIC_BASE_URL=https://mcp.holymedia.kz
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+      - name: Deploy Web exact digest
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.PROD_DEPLOY_HOST_KEY }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$DEPLOY_HOST_KEY" && test -n "$DIGEST"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/production_deploy
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/production_deploy ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/production_deploy' EXIT
+          ssh -i ~/.ssh/production_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            holymedia-deploy@77.240.38.131 \
+            "deploy web ghcr.io/stanforge-labs/holymedia-mcp-v2@$DIGEST $RELEASE_SHA"

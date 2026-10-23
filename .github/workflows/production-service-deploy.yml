@@ -17,10 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.detect.outputs.services }}
+      openai_release: ${{ steps.detect.outputs.openai_release }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
       - id: detect
         shell: bash
         env:
@@ -29,17 +33,12 @@ jobs:
           set -euo pipefail
           if [[ $BEFORE =~ ^0+$ ]]; then BEFORE=$(git rev-parse HEAD^); fi
           git diff --name-only "$BEFORE" "$GITHUB_SHA" > /tmp/changed-paths
-          services=()
-          if grep -Eq '^(apps/web/|packages/contracts/|infra/Dockerfile.v2$|package.json$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(web); fi
-          if grep -Eq '^(apps/api/|packages/(config|contracts|database|observability|site-audit)/|infra/(Dockerfile.v2|api-runtime.pnpm-workspace.yaml)$|package.json$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(api); fi
-          if grep -Eq '^(apps/worker/|packages/(config|contracts|database|observability|site-audit)/|infra/(Dockerfile.v2|worker-runtime.pnpm-workspace.yaml)$|package.json$|turbo.json$|tsconfig.base.json$)' /tmp/changed-paths; then services+=(worker); fi
-          # A shared lockfile/override change alone can affect any service; rebuild all unless a scoped source/manifest change identifies the target.
-          if grep -Eq '^(pnpm-lock.yaml|pnpm-workspace.yaml)$' /tmp/changed-paths && [[ ${#services[@]} -eq 0 ]]; then services=(web api worker); fi
-          printf 'services=%s\n' "$(printf '%s\n' "${services[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')" >> "$GITHUB_OUTPUT"
+          node --test scripts/deploy/detect-production-services.test.mjs
+          node scripts/deploy/detect-production-services.mjs < /tmp/changed-paths >> "$GITHUB_OUTPUT"
 
   build-and-deploy:
     needs: changes
-    if: needs.changes.outputs.services != '[]'
+    if: needs.changes.outputs.openai_release != 'true' && needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:

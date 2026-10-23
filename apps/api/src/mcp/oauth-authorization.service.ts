@@ -14,6 +14,11 @@ import {
   registrationMetadata,
 } from "./oauth-client-metadata.service.js";
 import { oauthEndpoints } from "./oauth-endpoints.js";
+import {
+  oidcActiveKey,
+  signIdToken,
+  verifiedEmailClaim,
+} from "./oidc-identity.js";
 
 export const MCP_READ_SCOPE = "adforge:mcp:read";
 export const MCP_WRITE_SCOPE = "adforge:mcp:write";
@@ -108,6 +113,13 @@ export class OAuthAuthorizationService {
       resource,
       this.endpoints.publicResource,
     );
+    if (scope.split(" ").includes("openid") && !oidcActiveKey()) {
+      throw new BadRequestException("OIDC is not configured.");
+    }
+    const nonce = stringValue(input.nonce);
+    if (nonce && (!scope.split(" ").includes("openid") || nonce.length > 255)) {
+      throw new BadRequestException("OAuth nonce is invalid.");
+    }
     this.assertWriteScopeEnabled(scope);
     const clientScopes = new Set(client.scope.split(/\s+/).filter(Boolean));
     if (scope.split(" ").some((item) => !clientScopes.has(item))) {
@@ -126,6 +138,7 @@ export class OAuthAuthorizationService {
           clientId: client.id,
           redirectUri,
           state: stringValue(input.state) || null,
+          nonce: nonce || null,
           scope,
           resource,
           codeChallenge,
@@ -317,6 +330,7 @@ export class OAuthAuthorizationService {
           workspaceId: selectedWorkspaceId,
           userId: principal.userId,
           redirectUri: transaction.redirectUri,
+          nonce: transaction.nonce,
           scope: grantedScope,
           resource: transaction.resource,
           codeChallenge: transaction.codeChallenge,
@@ -367,12 +381,33 @@ export class OAuthAuthorizationService {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
     this.assertWriteScopeEnabled(code.scope);
+    // Consent is not enough if access was removed before the code is redeemed.
+    const currentUser = await this.database.client.user.findUnique({
+      where: { id: code.userId },
+      select: { status: true },
+    });
+    if (currentUser?.status !== "active") {
+      throw new UnauthorizedException("OAuth authorization code is invalid.");
+    }
+    try {
+      await this.requireWorkspaceMembership(code.userId, code.workspaceId);
+    } catch {
+      throw new UnauthorizedException("OAuth authorization code is invalid.");
+    }
 
     const familyId = randomUUID();
     const rawToken = `hm_oauth_${randomBytes(32).toString("base64url")}`;
     const rawRefreshToken = `hm_refresh_${randomBytes(32).toString("base64url")}`;
     const expiresAt = new Date(Date.now() + ACCESS_TOKEN_TTL_MS);
     const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+    const idToken = code.scope.split(" ").includes("openid")
+      ? await this.idTokenFor({
+          userId: code.userId,
+          clientId,
+          scope: code.scope,
+          nonce: code.nonce,
+        })
+      : null;
     await this.database.client.$transaction(async (database) => {
       const consumed = await database.oAuthAuthorizationCode.updateMany({
         where: { id: code.id, usedAt: null, expiresAt: { gt: new Date() } },
@@ -414,7 +449,61 @@ export class OAuthAuthorizationService {
       expires_in: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
       scope: code.scope,
       refresh_token: rawRefreshToken,
+      ...(idToken ? { id_token: idToken } : {}),
     };
+  }
+
+  public async userinfo(rawToken: string) {
+    const principal = await this.authenticate(
+      rawToken,
+      this.endpoints.publicResource,
+    );
+    if (!principal || !principal.scopes.includes("openid")) {
+      throw new UnauthorizedException("OIDC access token is invalid.");
+    }
+    const user = await this.database.client.user.findUnique({
+      where: { id: principal.userId },
+      select: {
+        id: true,
+        email: true,
+        emailVerifiedAt: true,
+        emailVerifiedSource: true,
+      },
+    });
+    if (!user) throw new UnauthorizedException("OIDC user is unavailable.");
+    return {
+      sub: user.id,
+      ...(principal.scopes.includes("email")
+        ? { email: user.email, email_verified: verifiedEmailClaim(user) }
+        : {}),
+    };
+  }
+
+  private async idTokenFor(input: {
+    userId: string;
+    clientId: string;
+    scope: string;
+    nonce?: string | null;
+  }): Promise<string> {
+    const user = await this.database.client.user.findUnique({
+      where: { id: input.userId },
+      select: {
+        id: true,
+        email: true,
+        emailVerifiedAt: true,
+        emailVerifiedSource: true,
+      },
+    });
+    if (!user) throw new UnauthorizedException("OIDC user is unavailable.");
+    return signIdToken({
+      issuer: this.endpoints.issuer,
+      subject: user.id,
+      audience: input.clientId,
+      ...(input.nonce ? { nonce: input.nonce } : {}),
+      ...(input.scope.split(" ").includes("email")
+        ? { email: user.email, emailVerified: verifiedEmailClaim(user) }
+        : {}),
+    });
   }
 
   public async exchangeToken(input: Record<string, unknown>) {
@@ -652,14 +741,20 @@ export class OAuthAuthorizationService {
   }
 
   private approvedScope(requested: string, approved?: string): string {
+    const requestedScopes = new Set(requested.split(" "));
+    const identity = ["openid", "email"].filter((scope) =>
+      requestedScopes.has(scope),
+    );
+    const readOnly = [MCP_READ_SCOPE, ...identity].join(" ");
+    const readWrite = [MCP_READ_SCOPE, MCP_WRITE_SCOPE, ...identity].join(" ");
     if (
-      requested === MCP_READ_SCOPE &&
-      (!approved || approved === MCP_READ_SCOPE)
+      !requestedScopes.has(MCP_WRITE_SCOPE) &&
+      (!approved || approved === readOnly)
     )
-      return MCP_READ_SCOPE;
-    if (requested === `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`) {
-      if (approved === MCP_READ_SCOPE) return MCP_READ_SCOPE;
-      if (approved === requested) return requested;
+      return readOnly;
+    if (requestedScopes.has(MCP_WRITE_SCOPE)) {
+      if (approved === readOnly) return readOnly;
+      if (approved === readWrite) return readWrite;
     }
     throw new BadRequestException("Explicit OAuth scope consent is required.");
   }
@@ -761,13 +856,21 @@ function normalizeScope(
     return MCP_READ_SCOPE;
   }
   const scopes = new Set(value.split(/\s+/).filter(Boolean));
-  if (
-    resource === publicResource &&
-    scopes.size === 2 &&
-    scopes.has(MCP_READ_SCOPE) &&
-    scopes.has(MCP_WRITE_SCOPE)
-  ) {
-    return `${MCP_READ_SCOPE} ${MCP_WRITE_SCOPE}`;
+  if (resource === publicResource && scopes.has(MCP_READ_SCOPE)) {
+    const allowed = new Set([
+      MCP_READ_SCOPE,
+      MCP_WRITE_SCOPE,
+      "openid",
+      "email",
+    ]);
+    if (
+      [...scopes].every((scope) => allowed.has(scope)) &&
+      (!scopes.has("email") || scopes.has("openid"))
+    ) {
+      return [MCP_READ_SCOPE, MCP_WRITE_SCOPE, "openid", "email"]
+        .filter((scope) => scopes.has(scope))
+        .join(" ");
+    }
   }
   throw new BadRequestException(
     "OAuth scope is invalid for this MCP resource.",

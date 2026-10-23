@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
   HttpCode,
   HttpStatus,
@@ -197,6 +198,38 @@ export class LegacyMcpOAuthController {
     return this.oauth.revoke(body);
   }
 
+  @Get("oauth/userinfo")
+  @Header("Cache-Control", "no-store")
+  public async userinfoGet(
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Headers("authorization") authorization?: string,
+  ) {
+    return this.userinfoWithChallenge(reply, authorization);
+  }
+
+  @Post("oauth/userinfo")
+  @Header("Cache-Control", "no-store")
+  public async userinfoPost(
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Headers("authorization") authorization?: string,
+  ) {
+    return this.userinfoWithChallenge(reply, authorization);
+  }
+
+  private async userinfoWithChallenge(
+    reply: FastifyReply,
+    authorization?: string,
+  ) {
+    try {
+      return await this.oauth.userinfo(bearerToken(authorization));
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        reply.header("WWW-Authenticate", 'Bearer realm="HolyPilot"');
+      }
+      throw error;
+    }
+  }
+
   private async optionalPrincipal(
     request: RequestWithAuth,
   ): Promise<HumanPrincipal | null> {
@@ -206,4 +239,10 @@ export class LegacyMcpOAuthController {
       ? { kind: "human", userId: session.userId, sessionId: session.id }
       : null;
   }
+}
+
+function bearerToken(authorization?: string): string {
+  const match = /^Bearer ([^\s]+)$/i.exec(authorization ?? "");
+  if (!match) throw new UnauthorizedException("Bearer token is required.");
+  return match[1]!;
 }

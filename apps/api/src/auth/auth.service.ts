@@ -224,6 +224,7 @@ export class AuthService {
             name,
             passwordHash,
             emailVerifiedAt: new Date(),
+            emailVerifiedSource: "google_verified",
           },
         });
         const workspace = await tx.workspace.create({
@@ -244,10 +245,13 @@ export class AuthService {
       user = result.user;
     } else if (user.status !== "active") {
       throw new UnauthorizedException("Account is not active.");
-    } else if (!user.emailVerifiedAt) {
+    } else if (!user.emailVerifiedAt || !user.emailVerifiedSource) {
       user = await this.database.client.user.update({
         where: { id: user.id },
-        data: { emailVerifiedAt: new Date() },
+        data: {
+          emailVerifiedAt: new Date(),
+          emailVerifiedSource: "google_verified",
+        },
       });
     }
 
@@ -376,7 +380,10 @@ export class AuthService {
     await this.database.client.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: verification.userId },
-        data: { emailVerifiedAt: new Date() },
+        data: {
+          emailVerifiedAt: new Date(),
+          emailVerifiedSource: "email_link",
+        },
       });
       await tx.emailVerification.update({
         where: { id: verification.id },

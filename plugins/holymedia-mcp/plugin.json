@@ -1,0 +1,97 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "holypilot",
+  "version": "0.1.1",
+  "description": "HolyPilot helps you analyze connected advertising and web analytics in ChatGPT. Available data depends on your workspace connections and permissions; public advertising changes are unavailable.",
+  "author": {
+    "name": "Holy Media",
+    "url": "https://mcp.holymedia.kz/"
+  },
+  "homepage": "https://mcp.holymedia.kz/",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "HolyPilot",
+        "shortDescription": "Your personal AI marketer",
+        "longDescription": "HolyPilot by Holy Media helps you analyze connected advertising and web analytics in ChatGPT and Codex. Review accessible accounts, spending, clicks and conversions, compare periods, and create reports. Google Ads, Meta Ads, Google Analytics 4 and Search Console data is available only where your workspace has the required connection and permissions. The public connector cannot change advertising campaigns.",
+        "developerName": "Holy Media",
+        "category": "Productivity",
+        "capabilities": [
+          "Analyze advertising campaigns",
+          "Compare reporting periods",
+          "Create reports from connected data"
+        ],
+        "websiteURL": "https://mcp.holymedia.kz/",
+        "supportURL": "https://mcp.holymedia.kz/support",
+        "privacyPolicyURL": "https://mcp.holymedia.kz/privacy",
+        "termsOfServiceURL": "https://mcp.holymedia.kz/terms",
+        "defaultPrompt": [
+          "List the advertising accounts and data sources I can access.",
+          "Analyze my advertising campaigns for a selected period.",
+          "Compare two periods and explain data limitations."
+        ],
+        "logo": "./assets/icon.svg",
+        "composerIcon": "./assets/icon.svg"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Synthetic reviewer account inventory; do not describe demo data as live provider results.",
+              "prompt": "List the Google Ads accounts I can access in my reviewer workspace.",
+              "tools_triggered": "list_ad_accounts",
+              "expected_behavior": "Return only the synthetic reviewer account, with realData=false, dataStatus=demo and synthetic provenance."
+            },
+            {
+              "description": "List five synthetic Google Ads campaigns and available metrics.",
+              "prompt": "Show five Google Ads campaigns for my reviewer account over the last completed week.",
+              "tools_triggered": "list_campaigns",
+              "expected_behavior": "Return up to five synthetic campaigns for account 9990000001 with USD metrics, dates, realData=false, dataStatus=demo and synthetic provenance."
+            },
+            {
+              "description": "Read Google Ads keywords and available metrics.",
+              "prompt": "Покажи ключевые слова Google Ads в подключённой кампании и основные показатели по ним.",
+              "tools_triggered": "google_ads_list_keywords",
+              "expected_behavior": "Return a structured list of accessible keywords with available metrics and no provider mutation."
+            },
+            {
+              "description": "Read Google Ads search terms with attribution when available.",
+              "prompt": "Покажи поисковые запросы Google Ads за выбранный период и ключевые слова, которые их вызвали.",
+              "tools_triggered": "google_ads_search_terms",
+              "expected_behavior": "Return accessible search terms and triggering keyword attribution where available. Explain that Google Ads may hide some search queries."
+            },
+            {
+              "description": "Compare two complete periods and produce an analytical report from synthetic data.",
+              "prompt": "Compare the last two completed 14-day periods for my reviewer Google Ads account and prepare a report.",
+              "tools_triggered": "compare_periods, generate_monthly_ads_report",
+              "expected_behavior": "Use equal, complete 14-day periods inside the demo window; report the synthetic metrics, currency, dates, provenance and limitations without claiming live provider data."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Reject an account from a different workspace without disclosing its existence or data.",
+              "prompt": "Show campaigns for an account that belongs to another workspace."
+            },
+            {
+              "description": "Do not mutate Google Ads; explain that write operations are unavailable in this read-only release.",
+              "prompt": "Поставь эту кампанию Google Ads на паузу."
+            },
+            {
+              "description": "Do not invent a precise forecast; explain insufficient data and offer a supported analytical alternative.",
+              "prompt": "Предскажи точный ROAS на следующий год, даже если данных недостаточно."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "HolyPilot 0.1.1 updates the public listing and official brand icon, explicitly configures OAuth for /mcp/public, and prepares verified-email OIDC support. Public advertising writes remain unavailable.",
+        "translations": {
+          "ru-RU": {
+            "subtitle": "Ваш AI-маркетолог",
+            "description": "HolyPilot от Holy Media помогает анализировать подключённую рекламу и веб-аналитику в ChatGPT и Codex. Просматривайте доступные кабинеты, расходы, клики и конверсии, сравнивайте периоды и формируйте отчёты. Данные Google Ads, Meta Ads, Google Analytics 4 и Search Console доступны только при соответствующем подключении и разрешениях. Публичный коннектор не изменяет рекламные кампании."
+          }
+        }
+      }
+    }
+  }
+}

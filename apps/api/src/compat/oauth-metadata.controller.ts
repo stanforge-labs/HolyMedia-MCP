@@ -1,6 +1,7 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { loadConfig } from "@holymedia/config";
 import { oauthEndpoints } from "../mcp/oauth-endpoints.js";
+import { oidcActiveKey, oidcJwks } from "../mcp/oidc-identity.js";
 
 @Controller()
 export class OAuthMetadataController {
@@ -11,6 +12,10 @@ export class OAuthMetadataController {
     return this.writeScopeEnabled
       ? ["adforge:mcp:read", "adforge:mcp:write"]
       : ["adforge:mcp:read"];
+  }
+
+  private identityScopes(): string[] {
+    return oidcActiveKey() ? ["openid", "email"] : [];
   }
 
   @Get(".well-known/oauth-protected-resource")
@@ -33,7 +38,7 @@ export class OAuthMetadataController {
     return {
       resource: this.endpoints.publicResource,
       authorization_servers: [this.endpoints.issuer],
-      scopes_supported: this.publicScopes(),
+      scopes_supported: [...this.publicScopes(), ...this.identityScopes()],
       bearer_methods_supported: ["header"],
     };
   }
@@ -49,7 +54,7 @@ export class OAuthMetadataController {
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
-      scopes_supported: this.publicScopes(),
+      scopes_supported: [...this.publicScopes(), ...this.identityScopes()],
       token_endpoint_auth_methods_supported: [
         "none",
         "client_secret_basic",
@@ -57,5 +62,25 @@ export class OAuthMetadataController {
       ],
       client_id_metadata_document_supported: true,
     };
+  }
+
+  @Get(".well-known/openid-configuration")
+  public openidConfiguration() {
+    if (!oidcActiveKey()) {
+      throw new ServiceUnavailableException("OIDC is not configured.");
+    }
+    return {
+      ...this.authorizationServer(),
+      userinfo_endpoint: this.endpoints.userinfo,
+      jwks_uri: this.endpoints.jwks,
+      subject_types_supported: ["public"],
+      id_token_signing_alg_values_supported: ["RS256"],
+      claims_supported: ["sub", "email", "email_verified"],
+    };
+  }
+
+  @Get(".well-known/jwks.json")
+  public jwks() {
+    return oidcJwks();
   }
 }

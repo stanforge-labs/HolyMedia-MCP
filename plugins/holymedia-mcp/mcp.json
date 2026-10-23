@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "holymedia": {
+      "type": "streamable-http",
+      "url": "https://mcp.holymedia.kz/mcp/public",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": { "mode": "cimd" },
+            "authorizationServerBase": "https://mcp.holymedia.kz",
+            "authorizationUrl": "https://mcp.holymedia.kz/oauth/authorize",
+            "tokenUrl": "https://mcp.holymedia.kz/oauth/token",
+            "registrationUrl": "https://mcp.holymedia.kz/oauth/register",
+            "resource": "https://mcp.holymedia.kz/mcp/public",
+            "baseScopes": ["adforge:mcp:read", "openid", "email"],
+            "oidcEnabled": true,
+            "oidcConfigurationUrl": "https://mcp.holymedia.kz/.well-known/openid-configuration",
+            "oidcUserinfoEndpoint": "https://mcp.holymedia.kz/oauth/userinfo"
+          }
+        }
+      }
+    }
+  }
+}

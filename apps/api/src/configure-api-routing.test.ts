@@ -154,6 +154,28 @@ describe("production-prefix HTTP routing", () => {
     expect(token.statusCode).toBe(201);
     expect(token.json().token_type).toBe("Bearer");
   });
+
+  it("keeps UserInfo token protected and OIDC discovery unavailable without keys", async () => {
+    const fastify = app.getHttpAdapter().getInstance();
+    const userinfo = await fastify.inject({
+      method: "GET",
+      url: "/oauth/userinfo",
+    });
+    expect(userinfo.statusCode).toBe(401);
+    expect(userinfo.headers["www-authenticate"]).toBe(
+      'Bearer realm="HolyPilot"',
+    );
+    const discovery = await fastify.inject({
+      method: "GET",
+      url: "/.well-known/openid-configuration",
+    });
+    expect(discovery.statusCode).toBe(503);
+    const prefixed = await fastify.inject({
+      method: "GET",
+      url: "/api/v1/.well-known/openid-configuration",
+    });
+    expect(prefixed.statusCode).toBe(404);
+  });
 });
 
 describe("local root OAuth and MCP HTTP routing", () => {

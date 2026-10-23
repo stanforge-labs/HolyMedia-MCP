@@ -159,6 +159,15 @@ describe("OAuth client metadata documents", () => {
     expect(() =>
       registrationMetadata({ ...base, scope: "adforge:mcp:write" }),
     ).toThrow();
+    expect(
+      registrationMetadata({
+        ...base,
+        scope: "email openid adforge:mcp:read",
+      }).scope,
+    ).toBe("adforge:mcp:read openid email");
+    expect(() =>
+      registrationMetadata({ ...base, scope: "adforge:mcp:read email" }),
+    ).toThrow();
   });
 });
 
@@ -184,7 +193,7 @@ describe("OAuth client metadata network boundary", () => {
     const service = new OAuthClientMetadataService({
       client: {
         oAuthPublicClient: {
-          findFirst: vi.fn().mockResolvedValue(null),
+          findUnique: vi.fn().mockResolvedValue(null),
           upsert,
         },
       },
@@ -201,5 +210,28 @@ describe("OAuth client metadata network boundary", () => {
       }),
     );
     expect(upsert).toHaveBeenCalledOnce();
+  });
+
+  it("never reactivates a revoked CIMD client by resolving its metadata URL", async () => {
+    const clientId = "https://client.example.test/.well-known/client.json";
+    safeGetMock.mockClear();
+    const upsert = vi.fn();
+    const service = new OAuthClientMetadataService({
+      client: {
+        oAuthPublicClient: {
+          findUnique: vi.fn().mockResolvedValue({
+            clientId,
+            registrationSource: "cimd",
+            status: "revoked",
+            revokedAt: new Date(),
+          }),
+          upsert,
+        },
+      },
+    } as never);
+
+    expect(await service.resolve(clientId)).toBeNull();
+    expect(safeGetMock).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 });

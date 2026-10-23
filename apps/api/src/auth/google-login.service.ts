@@ -169,7 +169,7 @@ export class GoogleLoginService {
           ? profile.email.trim().toLowerCase()
           : "";
       const name = typeof profile.name === "string" ? profile.name.trim() : "";
-      if (!email.includes("@") || profile.email_verified === false) {
+      if (!email.includes("@") || profile.email_verified !== true) {
         throw new Error("invalid_profile");
       }
       return { email, name: name || email };

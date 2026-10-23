@@ -36,9 +36,13 @@ export class OAuthClientMetadataService {
 
   public async resolve(clientId: string) {
     if (!isClientMetadataUrl(clientId)) return null;
-    const existing = await this.database.client.oAuthPublicClient.findFirst({
-      where: { clientId, status: "active", revokedAt: null },
+    const existing = await this.database.client.oAuthPublicClient.findUnique({
+      where: { clientId },
     });
+    // A revoked CIMD identity must not be revived by fetching its URL again.
+    if (existing && (existing.status !== "active" || existing.revokedAt)) {
+      return null;
+    }
     if (
       existing?.registrationSource === "cimd" &&
       existing.metadataExpiresAt &&
@@ -119,8 +123,6 @@ export class OAuthClientMetadataService {
         metadataEtag: fetched.etag,
         metadataFetchedAt: new Date(),
         metadataExpiresAt: fetched.expiresAt,
-        revokedAt: null,
-        status: "active",
       },
     });
   }
@@ -360,12 +362,20 @@ function normalizeScope(value: string): string {
     return "adforge:mcp:read";
   }
   const scopes = new Set(value.split(/\s+/).filter(Boolean));
+  const allowed = new Set([
+    "adforge:mcp:read",
+    "adforge:mcp:write",
+    "openid",
+    "email",
+  ]);
   if (
-    scopes.size === 2 &&
     scopes.has("adforge:mcp:read") &&
-    scopes.has("adforge:mcp:write")
+    [...scopes].every((scope) => allowed.has(scope)) &&
+    (!scopes.has("email") || scopes.has("openid"))
   ) {
-    return "adforge:mcp:read adforge:mcp:write";
+    return ["adforge:mcp:read", "adforge:mcp:write", "openid", "email"]
+      .filter((scope) => scopes.has(scope))
+      .join(" ");
   }
   throw new BadRequestException("OAuth client scope is invalid.");
 }
