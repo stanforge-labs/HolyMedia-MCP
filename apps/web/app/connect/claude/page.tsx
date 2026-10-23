@@ -36,6 +36,10 @@ function copyFor(clientName: string) {
       chooseCompany: `К какой компании подключить ${clientName}?`,
       canTitle: `${clientName} сможет`,
       writeTitle: "Отдельное разрешение на изменение",
+      identityConsent:
+        "Также вы передаёте этому AI-клиенту идентификатор аккаунта.",
+      emailConsent:
+        "AI-клиент также запрашивает ваш email и его подтверждённый статус. Неподтверждённый адрес помечается как неподтверждённый.",
       writeChoice: "Разрешить подтверждённые мной изменения",
       writeConsent:
         "Разрешить HolyMedia MCP выполнять подтверждённые вами изменения в подключённых рекламных аккаунтах. Каждое изменение требует отдельного просмотра и подтверждения.",
@@ -68,6 +72,10 @@ function copyFor(clientName: string) {
       chooseCompany: `Which company should ${clientName} connect to?`,
       canTitle: `${clientName} can`,
       writeTitle: "Separate permission to make changes",
+      identityConsent:
+        "You also share your account identifier with this AI client.",
+      emailConsent:
+        "The AI client also requests your email and its verification status. An unverified address is marked unverified.",
       writeChoice: "Allow changes I separately approve",
       writeConsent:
         "Allow HolyMedia MCP to make changes you confirm in connected advertising accounts. Each change requires its own preview and confirmation.",
@@ -124,6 +132,9 @@ export default function ClaudeConsentPage() {
   );
   const writeRequested =
     context?.scope.split(/\s+/).includes("adforge:mcp:write") ?? false;
+  const identityScopes = ["openid", "email"].filter((scope) =>
+    context?.scope.split(/\s+/).includes(scope),
+  );
 
   useEffect(() => {
     document.title = `${t.title} — HolyMedia MCP`;
@@ -191,8 +202,12 @@ export default function ClaudeConsentPage() {
           decision,
           approved_scope:
             writeRequested && allowWrite
-              ? "adforge:mcp:read adforge:mcp:write"
-              : "adforge:mcp:read",
+              ? [
+                  "adforge:mcp:read",
+                  "adforge:mcp:write",
+                  ...identityScopes,
+                ].join(" ")
+              : ["adforge:mcp:read", ...identityScopes].join(" "),
         }),
       });
       if (!response.ok) throw new Error("consent_failed");
@@ -270,6 +285,13 @@ export default function ClaudeConsentPage() {
                 </ul>
               </section>
             </div>
+
+            {identityScopes.length > 0 && (
+              <p className="oauth-consent-lead">{t.identityConsent}</p>
+            )}
+            {identityScopes.includes("email") && (
+              <p className="oauth-consent-lead">{t.emailConsent}</p>
+            )}
 
             {writeRequested && (
               <section className="oauth-write-permission">

@@ -360,12 +360,20 @@ function normalizeScope(value: string): string {
     return "adforge:mcp:read";
   }
   const scopes = new Set(value.split(/\s+/).filter(Boolean));
+  const allowed = new Set([
+    "adforge:mcp:read",
+    "adforge:mcp:write",
+    "openid",
+    "email",
+  ]);
   if (
-    scopes.size === 2 &&
     scopes.has("adforge:mcp:read") &&
-    scopes.has("adforge:mcp:write")
+    [...scopes].every((scope) => allowed.has(scope)) &&
+    (!scopes.has("email") || scopes.has("openid"))
   ) {
-    return "adforge:mcp:read adforge:mcp:write";
+    return ["adforge:mcp:read", "adforge:mcp:write", "openid", "email"]
+      .filter((scope) => scopes.has(scope))
+      .join(" ");
   }
   throw new BadRequestException("OAuth client scope is invalid.");
 }

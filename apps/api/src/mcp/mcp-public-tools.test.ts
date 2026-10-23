@@ -82,6 +82,14 @@ describe("public MCP tool registry", () => {
 
   it("requires all annotations and classifies actual side effects", () => {
     for (const tool of publicTools(descriptors, true)) {
+      expect(tool.securitySchemes).toEqual([
+        {
+          type: "oauth2",
+          scopes: PUBLIC_READ_TOOLS.includes(tool.name as never)
+            ? ["adforge:mcp:read"]
+            : ["adforge:mcp:read", "adforge:mcp:write"],
+        },
+      ]);
       expect(tool.title).toBeTruthy();
       expect(tool.annotations.title).toBeTruthy();
       for (const key of [

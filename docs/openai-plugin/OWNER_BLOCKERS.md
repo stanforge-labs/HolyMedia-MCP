@@ -1,0 +1,12 @@
+# External blockers and OWNER decisions
+
+1. **Production OIDC is absent.** As checked on 23 October 2026, public `/.well-known/openid-configuration` returned 404. OWNER must separately approve additive migration `0034_openai_oidc_identity`, coordinated Web/API rollout and protected RS256 signing-key provisioning. This PR does none of those operations.
+2. **Canonical schema conflict.** The current OpenAI packaging guide instructs `mcpServers.<server>.extensions["com.openai"].auth`, while the published Agent Plugins 1.0.0 `mcp.schema.json` rejects `extensions` on a server. Local Ajv validation therefore fails for `mcp.json`. Obtain native OpenAI Portal validation or explicit OpenAI guidance; do not omit OAuth authentication to silence the validator.
+3. **Identity provenance.** Historic `emailVerifiedAt` rows have no verifiable method. Code reports them as unverified until the user completes a real email verification or verified Google login. The reviewer email may therefore return `email_verified=false` until that flow is completed.
+4. **Privacy retention.** Public policy is reachable but does not give concrete retention timelines. OWNER/legal must confirm actual periods and update the policy before OpenAI review.
+5. **Provider rights and product classification.** OWNER must document official API access/authorization and explain that HolyPilot contributes account-scoped comparisons and reports beyond proxying Google/Meta APIs. OpenAI's unofficial third-party connector rule is a real review risk.
+6. **Brand identity and package version.** OWNER must confirm HolyPilot star distribution rights and whether the v0.1.0 draft identifier was ever installed. If immutable installs exist, use a 0.2.0 migration instead of a silent name change.
+7. **Portal identity and reviewer.** Business/individual verification, Apps Management Write role, secure reviewer credentials, no-MFA reviewer login, a reviewer-accessible video walkthrough, Portal Validate/Connect/Scan Tools and actual submission are unverified and require owner action/approval.
+8. **Translated listing display.** The package imports a Russian `ru-RU` subtitle and description, but current OpenAI documentation says translations do not yet change Directory listing text. The English base copy is the visible fallback; verify presentation in the Portal before submission.
+
+No blocker is cleared by a mock test, CI result or ZIP checksum alone.

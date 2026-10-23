@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
   HttpCode,
   HttpStatus,
@@ -197,6 +198,18 @@ export class LegacyMcpOAuthController {
     return this.oauth.revoke(body);
   }
 
+  @Get("oauth/userinfo")
+  @Header("Cache-Control", "no-store")
+  public userinfoGet(@Headers("authorization") authorization?: string) {
+    return this.oauth.userinfo(bearerToken(authorization));
+  }
+
+  @Post("oauth/userinfo")
+  @Header("Cache-Control", "no-store")
+  public userinfoPost(@Headers("authorization") authorization?: string) {
+    return this.oauth.userinfo(bearerToken(authorization));
+  }
+
   private async optionalPrincipal(
     request: RequestWithAuth,
   ): Promise<HumanPrincipal | null> {
@@ -206,4 +219,10 @@ export class LegacyMcpOAuthController {
       ? { kind: "human", userId: session.userId, sessionId: session.id }
       : null;
   }
+}
+
+function bearerToken(authorization?: string): string {
+  const match = /^Bearer ([^\s]+)$/i.exec(authorization ?? "");
+  if (!match) throw new UnauthorizedException("Bearer token is required.");
+  return match[1]!;
 }

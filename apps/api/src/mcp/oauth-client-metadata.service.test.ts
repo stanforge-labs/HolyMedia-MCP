@@ -159,6 +159,15 @@ describe("OAuth client metadata documents", () => {
     expect(() =>
       registrationMetadata({ ...base, scope: "adforge:mcp:write" }),
     ).toThrow();
+    expect(
+      registrationMetadata({
+        ...base,
+        scope: "email openid adforge:mcp:read",
+      }).scope,
+    ).toBe("adforge:mcp:read openid email");
+    expect(() =>
+      registrationMetadata({ ...base, scope: "adforge:mcp:read email" }),
+    ).toThrow();
   });
 });
 

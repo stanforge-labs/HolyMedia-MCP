@@ -254,6 +254,14 @@ export function publicTools(
       inputSchema: read
         ? (publicReadInputSchema(name) ?? legacy!.inputSchema)
         : publicWriteSchema(name),
+      securitySchemes: [
+        {
+          type: "oauth2" as const,
+          scopes: read
+            ? ["adforge:mcp:read"]
+            : ["adforge:mcp:read", "adforge:mcp:write"],
+        },
+      ],
       annotations: {
         title: title(name),
         readOnlyHint: read,
