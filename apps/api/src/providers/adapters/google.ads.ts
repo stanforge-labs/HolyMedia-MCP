@@ -83,6 +83,7 @@ import {
   type GoogleKeywordMutation,
   type GoogleKeywordWriteAdapter,
 } from "../google-ads-write.js";
+import { assertLocalStage4Action } from "../google-ads-local-write-profile.js";
 import {
   decodeGoogleCursor,
   encodeGoogleCursor,
@@ -160,6 +161,15 @@ export class GoogleAdsAdapter
       ),
       config.providerGoogleAdsWriteEnabled,
     );
+  }
+
+  private async assertLocalWriteAllowed(context: ProviderReadContext) {
+    if (this.config.qrsTestLocalWriteEnabled && !context.assertWriteAllowed)
+      throw new GoogleAdsWriteError(
+        "google_local_write_binding_denied",
+        "Local TEST Google WRITE binding is missing.",
+      );
+    await context.assertWriteAllowed?.();
   }
 
   public authorizationUrl(context: OAuthStartContext): string {
@@ -640,6 +650,7 @@ export class GoogleAdsAdapter
     if (
       !validateOnly &&
       !isolatedClone &&
+      !this.config.qrsTestLocalWriteEnabled &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
@@ -659,6 +670,7 @@ export class GoogleAdsAdapter
         "Clone source изменился после preview; Google mutation не отправлена.",
       );
     try {
+      await this.assertLocalWriteAllowed(context);
       const response = await providerJson<unknown>(
         `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/googleAds:mutate`,
         {
@@ -740,6 +752,7 @@ export class GoogleAdsAdapter
     const validateOnly = action === "validate";
     if (
       !validateOnly &&
+      !this.config.qrsTestLocalWriteEnabled &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
@@ -761,6 +774,7 @@ export class GoogleAdsAdapter
         .map((operation, index) => ({ operation, index }))
         .filter((x) => x.operation.kind === kind);
       try {
+        await this.assertLocalWriteAllowed(context);
         const response = await providerJson<unknown>(
           `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/${kind}:mutate`,
           {
@@ -822,6 +836,7 @@ export class GoogleAdsAdapter
     input: unknown,
     results: Stage1MutationResult[] = [],
   ) {
+    if (version === 4) assertLocalStage4Action(this.config, input);
     if (!context.credentials.scopes.includes(GOOGLE_SCOPE))
       throw new GoogleAdsWriteError(
         "google_scope_required",
@@ -881,6 +896,7 @@ export class GoogleAdsAdapter
       !validateOnly &&
       !isolatedPmax &&
       !isolatedConversion &&
+      !this.config.qrsTestLocalWriteEnabled &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
@@ -899,6 +915,7 @@ export class GoogleAdsAdapter
       );
     const custom = plan.operations.every((o) => o.kind === "customAudiences");
     try {
+      await this.assertLocalWriteAllowed(context);
       const response = await providerJson<unknown>(
         `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/${custom ? "customAudiences" : "googleAds"}:mutate`,
         {
@@ -991,6 +1008,7 @@ export class GoogleAdsAdapter
       );
     if (
       !validateOnly &&
+      !this.config.qrsTestLocalWriteEnabled &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
@@ -998,6 +1016,7 @@ export class GoogleAdsAdapter
         "Подтверждённая запись выключена на сервере.",
       );
     try {
+      await this.assertLocalWriteAllowed(context);
       const response = await providerJson<unknown>(
         `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/${plan.operations[0]!.kind}:mutate`,
         {
@@ -1042,6 +1061,7 @@ export class GoogleAdsAdapter
   ) {
     if (
       !qrsKeywordStatusWriteAllowed(this.config) &&
+      !this.config.qrsTestLocalWriteEnabled &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(
@@ -1093,6 +1113,7 @@ export class GoogleAdsAdapter
         "Разрешены только ENABLED и PAUSED, без других mutation-полей.",
       );
     try {
+      await this.assertLocalWriteAllowed(context);
       const result = await providerJson<unknown>(
         `${this.apiBase()}/customers/${assertCustomerId(context.accountId)}/adGroupCriteria:mutate`,
         {

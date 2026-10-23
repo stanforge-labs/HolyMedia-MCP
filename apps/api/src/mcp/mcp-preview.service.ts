@@ -32,6 +32,10 @@ import type {
 } from "./mcp-principal.js";
 import type { ServiceTokenPrincipal as LegacyServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
+import {
+  assertLocalGoogleWriteContext,
+  assertLocalStage4Action,
+} from "../providers/google-ads-local-write-profile.js";
 import { ProviderService } from "../providers/provider.service.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import {
@@ -911,6 +915,24 @@ export class McpPreviewService {
     principal: ServiceTokenPrincipal,
     accountId: string,
   ) {
+    if (this.config.qrsTestLocalWriteEnabled) {
+      if (principal.kind !== "oauth" || !this.oauth)
+        throw new PreviewError("confirmation_context_mismatch");
+      const account = await this.database.client.providerAccount.findFirst({
+        where: { id: accountId, workspaceId: principal.workspaceId },
+        select: { connectionId: true },
+      });
+      if (!account) throw new PreviewError("confirmation_context_mismatch");
+      await this.oauth.assertGoogleWritePrincipal(principal);
+      await assertLocalGoogleWriteContext(
+        this.config,
+        this.database,
+        principal.workspaceId,
+        account.connectionId,
+        accountId,
+      );
+      return { ownerUserId: principal.userId, tokenPrefix: undefined };
+    }
     if (principal.kind === "oauth") {
       if (!this.oauth) throw new PreviewError("confirmation_context_mismatch");
       return this.oauth
@@ -1144,6 +1166,7 @@ export class McpPreviewService {
     );
     if (!changed.length && !rejections.length)
       throw new PreviewError("preview_no_change");
+    await this.assertControlledPrincipal(principal, account.id);
     const validation = changed.length
       ? await this.providers.validateGoogleKeywordStatuses(
           principal.workspaceId,
@@ -1448,6 +1471,7 @@ export class McpPreviewService {
       customerId(account.externalAccountId) !== customerId(accountId)
     )
       throw new PreviewError("confirmation_context_mismatch");
+    if (version === 4) assertLocalStage4Action(this.config, intent);
     const isolatedPmax =
       version === 4 &&
       qrsPmaxIntentAllowed(this.config, account.externalAccountId, intent);
@@ -1493,6 +1517,7 @@ export class McpPreviewService {
     plan: GoogleWritePlan,
     rollbackOf: string | null = null,
   ) {
+    await this.assertControlledPrincipal(principal, account.id);
     const results = (await this.googlePlanCall(
       plan,
       principal.workspaceId,
@@ -1664,6 +1689,7 @@ export class McpPreviewService {
       assertStage2Plan(plan, account.externalAccountId);
     }
     if (plan.version >= 3) {
+      if (plan.version === 4) assertLocalStage4Action(this.config, plan);
       if (!(
         plan.version === 4 &&
         (qrsPmaxWriteAllowed(this.config, plan) ||
@@ -2462,6 +2488,14 @@ export class McpPreviewService {
       if (account.provider !== "GOOGLE_ADS")
         throw new PreviewError("approval_not_found");
       assertGoogleWriteAccount(this.config, account.externalAccountId);
+      if (this.config.qrsTestLocalWriteEnabled)
+        await assertLocalGoogleWriteContext(
+          this.config,
+          this.database,
+          preview.workspaceId,
+          account.connectionId,
+          account.id,
+        );
       return { preview, account, principal };
     }
     if (!preview.serviceTokenId || !preview.serviceToken)
@@ -2702,6 +2736,7 @@ export class McpPreviewService {
       !qrsCloneWrite &&
       !qrsPmaxWrite &&
       !qrsConversionWrite &&
+      !this.config.qrsTestLocalWriteEnabled &&
       (this.config.previewOnly || !this.config.confirmedWriteEnabled)
     )
       throw new GoogleAdsWriteError(

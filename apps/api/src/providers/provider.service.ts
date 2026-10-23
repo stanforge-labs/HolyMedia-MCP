@@ -44,6 +44,7 @@ import {
   type GoogleKeywordMutation,
   type GoogleKeywordWriteAdapter,
 } from "./google-ads-write.js";
+import { assertLocalGoogleWriteContext } from "./google-ads-local-write-profile.js";
 import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
@@ -1136,6 +1137,13 @@ export class ProviderService {
     connectionId: string,
     accountId: string,
   ) {
+    await assertLocalGoogleWriteContext(
+      this.config,
+      this.database,
+      workspaceId,
+      connectionId,
+      accountId,
+    );
     const context = await this.readContext(
       workspaceId,
       connectionId,
@@ -1157,7 +1165,25 @@ export class ProviderService {
         "provider_not_configured",
         "Google Ads keyword write adapter недоступен.",
       );
-    return { ...context, adapter };
+    return {
+      ...context,
+      adapter,
+      read: {
+        ...context.read,
+        ...(this.config.qrsTestLocalWriteEnabled
+          ? {
+              assertWriteAllowed: () =>
+                assertLocalGoogleWriteContext(
+                  this.config,
+                  this.database,
+                  workspaceId,
+                  connectionId,
+                  accountId,
+                ),
+            }
+          : {}),
+      },
+    };
   }
   public async googleStage1(
     workspaceId: string,
