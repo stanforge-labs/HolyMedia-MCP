@@ -15,6 +15,10 @@ async function login(page: Page) {
 }
 
 async function expectNoAxeViolations(page: Page, context: string) {
+  const loader = page.locator(".app-loader");
+  await expect(loader).toHaveAttribute("data-loader-visible", "false");
+  await expect(loader).toHaveCSS("visibility", "hidden");
+  await expect(loader).toHaveCSS("opacity", "0");
   const results = await new AxeBuilder({ page }).analyze();
   expect(
     results.violations,
