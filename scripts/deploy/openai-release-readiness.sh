@@ -70,6 +70,18 @@ active_kid=$(sed -n 's/^HOLYMEDIA_OIDC_ACTIVE_KID=//p' "$app_env")
 [[ $active_kid =~ ^[A-Za-z0-9_-]{8,64}$ ]] || fail 'active key ID missing'
 jq -e --arg kid "$active_kid" 'type == "array" and any(.[]; .kid == $kid and (.privateKeyPemBase64 | type == "string"))' "$key" >/dev/null || fail 'active private key unavailable'
 
+# Both public WRITE switches must be absent (their default is false) or
+# explicitly false. Check the file and the already-running API container so a
+# stale container cannot pass on the strength of a changed file alone.
+for flag in PUBLIC_MCP_WRITE_SCOPE_ENABLED PUBLIC_MCP_CONTROLLED_WRITE_ENABLED; do
+  count=$(grep -c "^${flag}=" "$app_env" || true)
+  [[ $count -le 1 ]] || fail 'ambiguous public WRITE configuration'
+  if [[ $count -eq 1 ]]; then
+    value=$(sed -n "s/^${flag}=//p" "$app_env")
+    [[ ${value,,} == false ]] || fail 'public WRITE configuration is not OFF'
+  fi
+done
+
 export V2_API_IMAGE="$current_api" V2_WEB_IMAGE="$current_web" V2_WORKER_IMAGE="$current_worker"
 docker compose --env-file "$compose_env" -f "$base" -f "$override" config --format json |
   jq -e --arg source "$key" --arg target "$key_target" \
@@ -89,6 +101,14 @@ for service in api web worker; do
   [[ $(docker inspect -f '{{.Image}}' "$cid") == $(docker image inspect -f '{{.Id}}' "$expected") ]] || fail 'running image differs from immutable state'
 done
 
+api_cid=$(docker compose --env-file "$compose_env" -f "$base" -f "$override" ps -q api)
+docker exec -u node "$api_cid" node -e '
+  for (const name of ["PUBLIC_MCP_WRITE_SCOPE_ENABLED", "PUBLIC_MCP_CONTROLLED_WRITE_ENABLED"]) {
+    const value = process.env[name];
+    if (value !== undefined && value.trim().toLowerCase() !== "false") process.exit(1);
+  }
+' >/dev/null || fail 'running API public WRITE is not OFF'
+
 if [[ $mode == openai-preflight ]]; then
   # The additive migration must have been applied deliberately after backup;
   # do not let the API container's startup prisma:deploy be the first attempt.
@@ -100,7 +120,6 @@ if [[ $mode == openai-preflight ]]; then
 fi
 
 [[ $current_api != "$previous_api" ]] || fail 'candidate API not deployed'
-api_cid=$(docker compose --env-file "$compose_env" -f "$base" -f "$override" ps -q api)
 [[ $(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$api_cid") == "$revision" ]] || fail 'candidate API revision mismatch'
 [[ $(docker inspect -f '{{.Config.User}}' "$api_cid") == node ]] || fail 'API is not running as node'
 docker exec -u node "$api_cid" node -e 'require("node:fs").readFileSync(process.env.HOLYMEDIA_OIDC_SIGNING_KEYS_FILE)' >/dev/null || fail 'runtime cannot read mounted key'
@@ -109,8 +128,12 @@ base_url=https://mcp.holymedia.kz
 curl -fsS --max-time 8 "$base_url/health" >/dev/null || fail 'API health route failed'
 curl -fsS --max-time 8 "$base_url/ready" >/dev/null || fail 'API readiness route failed'
 curl -fsS --max-time 8 "$base_url/.well-known/openid-configuration" |
-  jq -e --arg issuer "$base_url" '.issuer == $issuer and (.jwks_uri | type == "string") and (.userinfo_endpoint | type == "string")' >/dev/null || fail 'OIDC discovery failed'
+  jq -e --arg issuer "$base_url" \
+    '.issuer == $issuer and .authorization_endpoint == ($issuer + "/oauth/authorize") and .token_endpoint == ($issuer + "/oauth/token") and .userinfo_endpoint == ($issuer + "/oauth/userinfo") and .jwks_uri == ($issuer + "/.well-known/jwks.json") and (.scopes_supported | index("adforge:mcp:write") | not)' >/dev/null || fail 'OIDC discovery or route targets failed'
 curl -fsS --max-time 8 "$base_url/.well-known/jwks.json" |
   jq -e --arg kid "$active_kid" '.keys | any(.[]; .kid == $kid and .kty == "RSA" and (has("d") | not))' >/dev/null || fail 'public JWKS failed'
+[[ $(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$base_url/oauth/userinfo") == 401 ]] || fail 'UserInfo auth route failed'
+curl -fsS --max-time 8 "$base_url/.well-known/oauth-protected-resource/mcp/public" |
+  jq -e --arg resource "$base_url/mcp/public" '.resource == $resource and (.scopes_supported | index("adforge:mcp:write") | not)' >/dev/null || fail 'public MCP resource metadata failed'
 [[ $(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$base_url/mcp/public") == 401 ]] || fail 'public MCP auth boundary failed'
 echo 'OPENAI_OIDC_GATE_PASS'

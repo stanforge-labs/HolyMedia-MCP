@@ -75,6 +75,7 @@ jobs:
           [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]]
           test -f packages/database/prisma/migrations/0034_openai_oidc_identity/migration.sql
           test -f infra/openai-oidc-release-hold.txt
+          node --test scripts/deploy/openai-release-readiness.test.mjs
           echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
       - name: Verify operator approval, backup, migration and signing key on VPS
         env:
