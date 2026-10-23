@@ -200,14 +200,34 @@ export class LegacyMcpOAuthController {
 
   @Get("oauth/userinfo")
   @Header("Cache-Control", "no-store")
-  public userinfoGet(@Headers("authorization") authorization?: string) {
-    return this.oauth.userinfo(bearerToken(authorization));
+  public async userinfoGet(
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Headers("authorization") authorization?: string,
+  ) {
+    return this.userinfoWithChallenge(reply, authorization);
   }
 
   @Post("oauth/userinfo")
   @Header("Cache-Control", "no-store")
-  public userinfoPost(@Headers("authorization") authorization?: string) {
-    return this.oauth.userinfo(bearerToken(authorization));
+  public async userinfoPost(
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Headers("authorization") authorization?: string,
+  ) {
+    return this.userinfoWithChallenge(reply, authorization);
+  }
+
+  private async userinfoWithChallenge(
+    reply: FastifyReply,
+    authorization?: string,
+  ) {
+    try {
+      return await this.oauth.userinfo(bearerToken(authorization));
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        reply.header("WWW-Authenticate", 'Bearer realm="HolyPilot"');
+      }
+      throw error;
+    }
   }
 
   private async optionalPrincipal(

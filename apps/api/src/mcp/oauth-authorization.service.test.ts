@@ -452,6 +452,28 @@ describe("OAuth authorization foundation", () => {
     else process.env.HOLYMEDIA_PUBLIC_BASE_URL = previousBaseUrl;
   });
 
+  it("rejects code redemption after user deactivation or workspace access removal", async () => {
+    for (const revoked of ["user", "membership"] as const) {
+      const context = await fixture();
+      const issued = await issueCode(context);
+      if (revoked === "user") {
+        context.state.users.get(context.principal.userId)!.status = "inactive";
+      } else {
+        context.state.memberships.splice(0);
+      }
+      await expect(
+        context.oauth.exchangeAuthorizationCode({
+          grant_type: "authorization_code",
+          client_id: context.registered.client_id,
+          code: issued.code,
+          redirect_uri: "https://claude.example.test/callback",
+          resource: MCP_RESOURCE,
+          code_verifier: context.verifier,
+        }),
+      ).rejects.toThrow("OAuth authorization code is invalid.");
+    }
+  });
+
   it("binds OIDC identity to the public resource and verified email provenance", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     vi.stubEnv(

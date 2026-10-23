@@ -1,0 +1,40 @@
+# B1 offline security and acceptance record
+
+Scope: Draft PR #10 only. No production change, OpenAI Portal action, provider credentials, or PPC TEST database use.
+
+## Security findings and fixes
+
+| Severity    | Finding and failure path                                                                                                                                                                                  | Fix                                                                                                                                                  | Verification                                                           |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| HIGH        | A revoked CIMD client could be fetched again by URL; the metadata upsert reset `status` and `revokedAt`, re-enabling that client.                                                                         | Look up the identity regardless of status, reject revoked/inactive records before network fetch, and never reset revocation during metadata refresh. | `oauth-client-metadata.service.test.ts` revoked-client regression.     |
+| MEDIUM      | An authorization code could be redeemed after the user was disabled or its workspace membership removed. The later MCP access-token check blocked tool use, but an OIDC ID token could already be issued. | Recheck active user and workspace membership before ID-token creation and token issuance.                                                            | `oauth-authorization.service.test.ts` deactivation/removal regression. |
+| LOW         | UserInfo returned HTTP 401 without a bearer challenge.                                                                                                                                                    | Add `WWW-Authenticate: Bearer realm="HolyPilot"` for unauthorized GET/POST UserInfo requests.                                                        | `configure-api-routing.test.ts`.                                       |
+| Operational | Inline RSA private keys in Docker environment are exposed through `docker inspect` to Docker administrators and to process-environment readers.                                                           | Support an absolute, file-mounted key document; reject conflicting inline and file sources. Prefer a protected read-only mount in rollout.           | `oidc-identity.test.ts` file-mode and conflicting-source regression.   |
+
+The reviewed code preserves S256 PKCE, exact client/redirect/resource checks, one-time code and refresh-token rotation, active workspace checks, and separate `/mcp` versus `/mcp/public` audiences. The new OIDC scopes remain public-resource-only and do not grant advertising WRITE. `id_token_hint` is ignored: it cannot authenticate a user or widen scopes; reauthorization requires the normal login and consent flow. This is a documented usability limit, not a security bypass.
+
+## Remaining technical risks and evidence boundary
+
+- OpenAI documents optional RFC 9207 issuer identification (`authorization_response_iss_parameter_supported` and `iss` in callbacks). This PR does not advertise it; ChatGPT must use its callback-specific CIMD identity rather than assuming stable-client mode. Stable-client support needs a separate change covering both the legacy and public authorization responders.
+- The published Agent Plugins 1.0.0 `mcp.schema.json` has `additionalProperties: false` for HTTP servers, while the current OpenAI packaging guide requires server-level `extensions["com.openai"].auth`. The portable plugin schema passes; generic MCP schema validation remains blocked until OpenAI Portal Validate or official guidance. Removing OAuth metadata is not a valid fix.
+- HTTP behavior in the disposable environment and reviewer scenario results are recorded below. Unit tests and disposable HTTP calls are not a production or OpenAI Connect PASS.
+
+## Reviewer fixture and tool behavior
+
+The production reviewer bootstrap has a trusted `reviewer_demo` entitlement marker and creates a VIEWER in its own workspace. It does not create provider connections or credentials. Its historical `emailVerifiedAt` has no source, so OIDC intentionally reports `email_verified=false` until a lawful verification flow occurs. The local fixture may be used with a disposable database and synthetic password only. Its positive and negative examples are not evidence of live provider access.
+
+For 41 public tools, `tools/list` must show only READ descriptors when the public WRITE flag is false. `securitySchemes` and `annotations` are inspected against the runtime inventory. Input schema presence does not imply an `outputSchema`; several tools do not declare one. Account-scoped reads can produce operational side effects such as access-token last-use timestamps, audit/usage records, or provider OAuth refresh when a real connection is used. These are not advertised as side-effect-free. The synthetic reviewer path must not invoke providers.
+
+## Disposable HTTP acceptance — 23 October 2026
+
+The isolated Compose project `holypilot_openai_b1` used fresh named PostgreSQL/Redis volumes and loopback ports 25445/26380/24445/23345. Only the API/Web images built from this branch were used; no PPC TEST volume or provider credential was mounted. A temporary 2048-bit RSA test key was file-mounted. The API bypassed automatic migrations, then Prisma applied migrations through 0033 and separately 0034. PostgreSQL reported `0034_openai_oidc_identity` as the final applied migration.
+
+`outputs/openai-plugin/b1-http-results.json` records 64 successful checks without tokens, passwords, cookies or client data. The checks used real HTTP against the disposable API/Web and cover:
+
+- VIEWER login/session without MFA, OIDC discovery and public-only JWKS, DCR registration, hosted ChatGPT CIMD metadata resolution, Authorization Code + S256 PKCE, explicit consent, exact callback, initial link and reconnect.
+- ID-token RS256 signature against JWKS, exact issuer/client audience/nonce, one-hour expiry, UserInfo with truthful `email_verified=false` for the unproven reviewer email.
+- Refresh rotation, used refresh-token replay rejection and family revocation, explicit revocation, expiration rejection after expiring one **disposable** access-token row, and both directions of public/legacy resource separation.
+- `tools/list` exactly 41 READ descriptors, their input schemas/OAuth security schemes/read-only annotations and the absence of public WRITE/diagnostics.
+- The five positive reviewer cases at the HTTP tool layer: account inventory, exactly five nonzero USD campaigns, keywords, search terms, and comparison plus report. Six corresponding MCP calls returned synthetic provenance. A foreign account ID and a public WRITE call were denied. The negative “invent a precise forecast” case is model behavior and remains untested until OpenAI Connect; no forecast tool is advertised.
+
+This is a synthetic fixture check, not LIVE Google/Meta/GA4/Search Console access. The code review of the remaining 41 tools found no tool that is advertised as WRITE on the default public surface. However, some READ calls can refresh provider OAuth credentials in a real connected workspace and all authenticated calls update local last-use/usage state; these operational effects must be disclosed in review. Output schemas are not universal, so schema coverage is **input/descriptor PASS, output-schema PARTIAL**. Lawful verified-email acquisition through actual delivery or verified Google Login was not available in the disposable environment and remains BLOCKED for end-to-end HTTP proof.

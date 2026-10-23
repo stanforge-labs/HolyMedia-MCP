@@ -381,6 +381,19 @@ export class OAuthAuthorizationService {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
     this.assertWriteScopeEnabled(code.scope);
+    // Consent is not enough if access was removed before the code is redeemed.
+    const currentUser = await this.database.client.user.findUnique({
+      where: { id: code.userId },
+      select: { status: true },
+    });
+    if (currentUser?.status !== "active") {
+      throw new UnauthorizedException("OAuth authorization code is invalid.");
+    }
+    try {
+      await this.requireWorkspaceMembership(code.userId, code.workspaceId);
+    } catch {
+      throw new UnauthorizedException("OAuth authorization code is invalid.");
+    }
 
     const familyId = randomUUID();
     const rawToken = `hm_oauth_${randomBytes(32).toString("base64url")}`;

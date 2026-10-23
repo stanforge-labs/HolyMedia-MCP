@@ -4,13 +4,36 @@ import {
   createSign,
   type KeyObject,
 } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { ServiceUnavailableException } from "@nestjs/common";
 
 type SigningKey = { kid: string; privateKey: KeyObject; publicKey: KeyObject };
 
 /** Keys are operator supplied, never generated at process startup or committed. */
 function signingKeys(): SigningKey[] {
-  const encoded = process.env.HOLYMEDIA_OIDC_SIGNING_KEYS_JSON;
+  const keyFile = process.env.HOLYMEDIA_OIDC_SIGNING_KEYS_FILE;
+  const inlineKeys = process.env.HOLYMEDIA_OIDC_SIGNING_KEYS_JSON;
+  if (keyFile && inlineKeys) {
+    throw new ServiceUnavailableException("OIDC signing keys are invalid.");
+  }
+  let encoded = inlineKeys;
+  if (keyFile) {
+    try {
+      if (!isAbsolute(keyFile)) throw new Error("relative_path");
+      const metadata = statSync(keyFile);
+      if (
+        !metadata.isFile() ||
+        metadata.size > 65_536 ||
+        (process.platform !== "win32" && (metadata.mode & 0o077) !== 0)
+      ) {
+        throw new Error("invalid_file");
+      }
+      encoded = readFileSync(keyFile, "utf8");
+    } catch {
+      throw new ServiceUnavailableException("OIDC signing keys are invalid.");
+    }
+  }
   if (!encoded) return [];
   let rows: unknown;
   try {

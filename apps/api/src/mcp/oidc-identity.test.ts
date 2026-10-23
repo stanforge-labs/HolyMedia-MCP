@@ -1,4 +1,13 @@
 import { createVerify, generateKeyPairSync } from "node:crypto";
+import {
+  chmodSync,
+  mkdtempSync,
+  rmdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OAuthMetadataController } from "../compat/oauth-metadata.controller.js";
 import { oidcJwks, signIdToken, verifiedEmailClaim } from "./oidc-identity.js";
@@ -16,6 +25,28 @@ function key(kid: string) {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("OpenID Connect identity", () => {
+  it("loads operator keys from a file without putting private material in Docker env", () => {
+    const directory = mkdtempSync(join(tmpdir(), "holypilot-oidc-"));
+    const filename = join(directory, "keys.json");
+    const signingKey = key("filekey01");
+    try {
+      writeFileSync(filename, JSON.stringify([signingKey]), { mode: 0o600 });
+      vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_JSON", undefined);
+      vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_FILE", filename);
+      vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", signingKey.kid);
+      expect(oidcJwks().keys.map((item) => item.kid)).toEqual([signingKey.kid]);
+      if (process.platform !== "win32") {
+        chmodSync(filename, 0o644);
+        expect(() => oidcJwks()).toThrow("OIDC signing keys are invalid.");
+        chmodSync(filename, 0o600);
+      }
+      vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_JSON", "[]");
+      expect(() => oidcJwks()).toThrow("OIDC signing keys are invalid.");
+    } finally {
+      unlinkSync(filename);
+      rmdirSync(directory);
+    }
+  });
   it("does not advertise OIDC without operator signing keys", () => {
     vi.stubEnv("HOLYMEDIA_OIDC_SIGNING_KEYS_JSON", undefined);
     vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", undefined);
@@ -83,6 +114,46 @@ describe("OpenID Connect identity", () => {
           Buffer.from(signature!, "base64url"),
         ),
     ).toBe(true);
+  });
+
+  it("retains the previous verification key during active-key rotation", () => {
+    const previous = key("rotation01");
+    const current = key("rotation02");
+    vi.stubEnv(
+      "HOLYMEDIA_OIDC_SIGNING_KEYS_JSON",
+      JSON.stringify([previous, current]),
+    );
+    vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", previous.kid);
+    const oldToken = signIdToken({
+      issuer: "https://oidc.example.test",
+      subject: "user-123",
+      audience: "client-123",
+    });
+    vi.stubEnv("HOLYMEDIA_OIDC_ACTIVE_KID", current.kid);
+    const rotated = oidcJwks();
+    expect(rotated.keys.map((item) => item.kid)).toEqual([
+      previous.kid,
+      current.kid,
+    ]);
+    const [header, payload, signature] = oldToken.split(".");
+    expect(
+      createVerify("RSA-SHA256")
+        .update(`${header}.${payload}`)
+        .end()
+        .verify(
+          Buffer.from(previous.privateKeyPemBase64, "base64"),
+          Buffer.from(signature!, "base64url"),
+        ),
+    ).toBe(true);
+    const newToken = signIdToken({
+      issuer: "https://oidc.example.test",
+      subject: "user-123",
+      audience: "client-123",
+    });
+    expect(
+      JSON.parse(Buffer.from(newToken.split(".")[0]!, "base64url").toString())
+        .kid,
+    ).toBe(current.kid);
   });
 
   it("reports verified email only with a recorded verification source", () => {

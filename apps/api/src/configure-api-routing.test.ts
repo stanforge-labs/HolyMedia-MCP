@@ -162,6 +162,9 @@ describe("production-prefix HTTP routing", () => {
       url: "/oauth/userinfo",
     });
     expect(userinfo.statusCode).toBe(401);
+    expect(userinfo.headers["www-authenticate"]).toBe(
+      'Bearer realm="HolyPilot"',
+    );
     const discovery = await fastify.inject({
       method: "GET",
       url: "/.well-known/openid-configuration",
